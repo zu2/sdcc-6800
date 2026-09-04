@@ -739,6 +739,7 @@ AC_DO_PORT(ds400,    ds390,  DS400,    [Excludes the DS400 port])
 AC_DO_PORT(pic14,    pic14,  PIC14,    [Excludes the PIC14 port])
 AC_DO_PORT(pic16,    pic16,  PIC16,    [Excludes the PIC16 port])
 AC_DO_PORT(hc08,     hc08,   HC08,     [Excludes the HC08 port])
+AC_DO_PORT(mc6800,   mc6800, MC6800,   [Excludes the MC6800 port])
 AC_DO_PORT(s08,      hc08,   S08,      [Excludes the S08 port])
 AC_DO_PORT(stm8,     stm8,   STM8,     [Excludes the STM8 port])
 AC_DO_PORT(pdk13,    pdk,    PDK13,    [Excludes the PDK13 port])
@@ -813,6 +814,13 @@ if test $OPT_DISABLE_HC08 = 0 || test $OPT_DISABLE_S08 = 0; then
   test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_FILES([device/lib/hc08/Makefile
                                                        device/lib/s08/Makefile
                                                        device/lib/s08-stack-auto/Makefile])
+fi
+
+if test $OPT_DISABLE_MC6800 = 0; then
+  AC_CONFIG_FILES([src/mc6800/Makefile
+                   sdas/as6800/Makefile])
+  test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_FILES([device/lib/mc6800/Makefile
+                                                       device/lib/mc6800-stack-auto/Makefile])
 fi
 
 if test $OPT_DISABLE_MOS6502 = 0 || test $OPT_DISABLE_MOS65C02 = 0; then
