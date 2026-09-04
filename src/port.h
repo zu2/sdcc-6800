@@ -29,6 +29,7 @@ enum target {
   TARGET_ID_R800,
   TARGET_ID_HC08,
   TARGET_ID_S08,
+  TARGET_ID_MC6800,
   TARGET_ID_STM8,
   TARGET_ID_PDK13,
   TARGET_ID_PDK14,
@@ -63,6 +64,7 @@ enum target {
 #define TARGET_IS_R800     (port->id == TARGET_ID_R800)
 #define TARGET_IS_HC08     (port->id == TARGET_ID_HC08)
 #define TARGET_IS_S08      (port->id == TARGET_ID_S08)
+#define TARGET_IS_MC6800   (port->id == TARGET_ID_MC6800)
 #define TARGET_IS_STM8     (port->id == TARGET_ID_STM8)
 #define TARGET_IS_PDK13    (port->id == TARGET_ID_PDK13)
 #define TARGET_IS_PDK14    (port->id == TARGET_ID_PDK14)
@@ -511,6 +513,9 @@ extern PORT s08_port;
 #endif
 #if !OPT_DISABLE_STM8
 extern PORT stm8_port;
+#endif
+#if !OPT_DISABLE_MC6800
+extern PORT mc6800_port;
 #endif
 #if !OPT_DISABLE_PDK13
 extern PORT pdk13_port;
