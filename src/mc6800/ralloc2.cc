@@ -36,7 +36,8 @@ extern "C"
 
 #define REG_A 0
 #define REG_B 1
-#define REG_X 2
+#define REG_XL 2
+#define REG_XH 3
 
 template <class I_t>
 static void add_operand_conflicts_in_node(const cfg_node &n, I_t &I)
@@ -178,13 +179,13 @@ static bool XAinst_ok(const assignment &a, unsigned short int i, const G_t &G, c
 
   bool unused_A = (ia.registers[REG_A][1] < 0);
   bool unused_B = (ia.registers[REG_B][1] < 0);
-  bool unused_X = (ia.registers[REG_X][1] < 0);
+  bool unused_X = (ia.registers[REG_XL][1] < 0);
 
   if(unused_X && unused_A && unused_B)
     return(true);
 
 #if 0
-  std::cout << "XAinst_ok: at (" << i << ", " << ic->key << ")\nX = (" << ia.registers[REG_X][0] << ", " << ia.registers[REG_X][1] << "), A = (" << ia.registers[REG_A][0] << ", " << ia.registers[REG_A][1] << ")inst " << i << ", " << ic->key << "\n";
+  std::cout << "XAinst_ok: at (" << i << ", " << ic->key << ")\nX = (" << ia.registers[REG_XL][0] << ", " << ia.registers[REG_XL][1] << "), A = (" << ia.registers[REG_A][0] << ", " << ia.registers[REG_A][1] << ")inst " << i << ", " << ic->key << "\n";
 #endif
 
   const operand *left = IC_LEFT(ic);
@@ -193,15 +194,15 @@ static bool XAinst_ok(const assignment &a, unsigned short int i, const G_t &G, c
 
   bool result_in_A = operand_in_reg(result, REG_A, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
   bool result_in_B = operand_in_reg(result, REG_B, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
-  bool result_in_X = operand_in_reg(result, REG_X, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
+  bool result_in_X = operand_in_reg(result, REG_XL, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
   bool left_in_A = operand_in_reg(result, REG_A, ia, i, G);
-  bool left_in_X = operand_in_reg(result, REG_X, ia, i, G);
+  bool left_in_X = operand_in_reg(result, REG_XL, ia, i, G);
 
   const cfg_dying_t &dying = G[i].dying;
 
   bool dying_A = result_in_A || dying.find(ia.registers[REG_A][1]) != dying.end() || dying.find(ia.registers[REG_A][0]) != dying.end();
   bool dying_B = result_in_B || dying.find(ia.registers[REG_B][1]) != dying.end() || dying.find(ia.registers[REG_B][0]) != dying.end();
-  bool dying_X = result_in_X || dying.find(ia.registers[REG_X][1]) != dying.end() || dying.find(ia.registers[REG_X][0]) != dying.end();
+  bool dying_X = result_in_X || dying.find(ia.registers[REG_XL][1]) != dying.end() || dying.find(ia.registers[REG_XL][0]) != dying.end();
 
   bool result_only_XA = (result_in_X || unused_X || dying_X) && (result_in_A || unused_A || dying_A);
 
@@ -271,7 +272,7 @@ static bool AXinst_ok(const assignment &a, unsigned short int i, const G_t &G, c
     return(true);
 
   bool unused_A = (ia.registers[REG_A][1] < 0);
-  bool unused_X = (ia.registers[REG_X][1] < 0);
+  bool unused_X = (ia.registers[REG_XL][1] < 0);
 
   if (unused_A || unused_X)
     return(true);
@@ -281,11 +282,11 @@ static bool AXinst_ok(const assignment &a, unsigned short int i, const G_t &G, c
   const operand *result = IC_RESULT(ic);
 
   bool result_in_A = operand_in_reg(result, REG_A, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
-  bool result_in_X = operand_in_reg(result, REG_X, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
+  bool result_in_X = operand_in_reg(result, REG_XL, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
   bool left_in_A = operand_in_reg(result, REG_A, ia, i, G);
-  bool left_in_X = operand_in_reg(result, REG_X, ia, i, G);
+  bool left_in_X = operand_in_reg(result, REG_XL, ia, i, G);
   bool right_in_A = operand_in_reg(result, REG_A, ia, i, G);
-  bool right_in_X = operand_in_reg(result, REG_X, ia, i, G);
+  bool right_in_X = operand_in_reg(result, REG_XL, ia, i, G);
 
   bool result_is_ax = operand_is_ax (result, a, i, G, I);
   bool left_is_ax = operand_is_ax (left, a, i, G, I);
@@ -295,6 +296,38 @@ static bool AXinst_ok(const assignment &a, unsigned short int i, const G_t &G, c
     return(true);
 
   return(false);
+}
+
+template <class G_t, class I_t>
+static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
+{
+  const i_assignment_t &ia = a.i_assignment;
+
+  bool unused_XL = (ia.registers[REG_XL][1] < 0);
+  bool unused_XH = (ia.registers[REG_XH][1] < 0);
+
+  if(unused_XL && unused_XH)
+    return(true);
+
+  if(unused_XL ^ unused_XH)
+    return(false);
+  if(!unused_XL && I[ia.registers[REG_XL][1]].size != 2 || !unused_XH && I[ia.registers[REG_XH][1]].size != 2 ||
+    ia.registers[REG_XL][0] >= 0 && I[ia.registers[REG_XL][0]].size != 2 || ia.registers[REG_XH][0] >= 0 && I[ia.registers[REG_XH][0]].size != 2)
+    return(false);
+  if(ia.registers[REG_XL][1] >= 0 && (ia.registers[REG_XH][1] <= 0 || I[ia.registers[REG_XL][1]].v != I[ia.registers[REG_XH][1]].v))
+    return(false);
+  if(ia.registers[REG_XH][1] >= 0 && (ia.registers[REG_XL][1] <= 0 || I[ia.registers[REG_XH][1]].v != I[ia.registers[REG_XL][1]].v))
+    return(false);
+  if(ia.registers[REG_XL][0] >= 0 && (ia.registers[REG_XH][0] <= 0 || I[ia.registers[REG_XL][0]].v != I[ia.registers[REG_XH][0]].v))
+    return(false);
+  if(ia.registers[REG_XH][0] >= 0 && (ia.registers[REG_XL][0] <= 0 || I[ia.registers[REG_XH][0]].v != I[ia.registers[REG_XL][0]].v))
+    return(false);
+  if(I[ia.registers[REG_XL][1]].byte != 0 || I[ia.registers[REG_XH][1]].byte != 1)
+    return(false);
+  if(ia.registers[REG_XL][0] >= 0 && I[ia.registers[REG_XL][0]].byte != 0 || ia.registers[REG_XH][0] >= 0 && I[ia.registers[REG_XH][0]].byte != 1)
+    return(false);
+
+  return(true);
 }
 
 template <class G_t, class I_t>
@@ -385,13 +418,13 @@ static bool operand_sane(const operand *o, const assignment &a, unsigned short i
     {
       const reg_t l = a.global[oi->second];
       const reg_t h = a.global[oi2->second];
-      if(l == REG_X && h == REG_A)
+      if(l == REG_XL && h == REG_A)
         return(false);
-      if(l == REG_X && h == REG_B)
+      if(l == REG_XL && h == REG_B)
         return(false);
-      if(h == REG_X && l == REG_A)
+      if(h == REG_XL && l == REG_A)
         return(false);
-      if(h == REG_X && l == REG_B)
+      if(h == REG_XL && l == REG_B)
         return(false);
     }
   
@@ -451,6 +484,9 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
     return(std::numeric_limits<float>::infinity());
 
   if(!AXinst_ok(a, i, G, I))
+    return(std::numeric_limits<float>::infinity());
+
+  if(!Xinst_ok(a, i, G, I))
     return(std::numeric_limits<float>::infinity());
 
   switch(ic->op)
@@ -517,6 +553,12 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
 template <class G_t, class I_t>
 static bool assignment_hopeless(const assignment &a, unsigned short int i, const G_t &G, const I_t &I, const var_t lastvar)
 {
+  const i_assignment_t &ia = a.i_assignment;
+
+  if((ia.registers[REG_XL][1] >= 0 || ia.registers[REG_XH][1] >= 0) &&
+      !Xinst_ok(a, i, G, I))
+    return(true);
+
   return(false);
 }
 

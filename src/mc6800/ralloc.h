@@ -31,6 +31,8 @@ enum
   {
     A_IDX,
     B_IDX,
+    XL_IDX,
+    XH_IDX,
     X_IDX,
     D_IDX,
     CND_IDX,
@@ -47,8 +49,10 @@ enum
 /* the usual register pair ordering. */
 #define MC6800MASK_A 0x01
 #define MC6800MASK_B 0x02
-#define MC6800MASK_X 0x04
+#define MC6800MASK_XL 0x04
 #define MC6800MASK_REV 0x08
+#define MC6800MASK_XH 0x10
+#define MC6800MASK_X (MC6800MASK_XL | MC6800MASK_XH)
 #define MC6800MASK_D (MC6800MASK_REV | MC6800MASK_A | MC6800MASK_B)
     
 /* definition for the registers */
@@ -70,6 +74,8 @@ reg_info;
 extern reg_info regsmc6800[];
 extern reg_info *mc6800_reg_a;
 extern reg_info *mc6800_reg_b;
+extern reg_info *mc6800_reg_xl;
+extern reg_info *mc6800_reg_xh;
 extern reg_info *mc6800_reg_x;
 extern reg_info *mc6800_reg_d;
 extern reg_info *mc6800_reg_sp;

@@ -65,16 +65,20 @@ reg_info regsmc6800[] =
 
   {REG_GPR, A_IDX,   "a",  MC6800MASK_A,  NULL, 0, 1},
   {REG_GPR, B_IDX,   "b",  MC6800MASK_B,  NULL, 0, 1},
+  {REG_PTR, XL_IDX,  "xl", MC6800MASK_XL, NULL, 0, 1},
+  {REG_PTR, XH_IDX,  "xh", MC6800MASK_XH, NULL, 0, 1},
   {REG_PTR, X_IDX,   "x",  MC6800MASK_X,  NULL, 0, 1},
   {REG_GPR, D_IDX,   "d",  MC6800MASK_D,  NULL, 0, 1},
 
   {REG_CND, CND_IDX, "C",  0, NULL, 0, 1},
   {0,       SP_IDX,  "sp", 0, NULL, 0, 1},
 };
-int mc6800_nRegs = 6;
+int mc6800_nRegs = 8;
 
 reg_info *mc6800_reg_a;
 reg_info *mc6800_reg_b;
+reg_info *mc6800_reg_xl;
+reg_info *mc6800_reg_xh;
 reg_info *mc6800_reg_x;
 reg_info *mc6800_reg_d;
 reg_info *mc6800_reg_sp;
@@ -124,7 +128,17 @@ mc6800_freeReg (reg_info * reg)
         if (mc6800_reg_a->isFree)
           mc6800_reg_d->isFree = 1;
         break;
+      case XL_IDX:
+        if (mc6800_reg_xh->isFree)
+          mc6800_reg_x->isFree = 1;
+        break;
+      case XH_IDX:
+        if (mc6800_reg_xl->isFree)
+          mc6800_reg_x->isFree = 1;
+        break;
       case X_IDX:
+        mc6800_reg_xl->isFree = 1;
+        mc6800_reg_xh->isFree = 1;
         break;
       case D_IDX:
         mc6800_reg_a->isFree = 1;
@@ -154,7 +168,19 @@ mc6800_useReg (reg_info * reg)
         mc6800_reg_d->aop = NULL;
         mc6800_reg_d->isFree = 0;
         break;
+      case XL_IDX:
+        mc6800_reg_x->aop = NULL;
+        mc6800_reg_x->isFree = 0;
+        break;
+      case XH_IDX:
+        mc6800_reg_x->aop = NULL;
+        mc6800_reg_x->isFree = 0;
+        break;
       case X_IDX:
+        mc6800_reg_xl->aop = NULL;
+        mc6800_reg_xl->isFree = 0;
+        mc6800_reg_xh->aop = NULL;
+        mc6800_reg_xh->isFree = 0;
         break;
       case D_IDX:
         mc6800_reg_a->aop = NULL;
@@ -189,9 +215,25 @@ mc6800_dirtyReg (reg_info * reg, bool freereg)
 	mc6800_reg_b->aop = NULL;
 	mc6800_reg_b->isLitConst = 0;
         break;
+      case XL_IDX:
+        mc6800_reg_x->aop = NULL;
+        mc6800_reg_x->isLitConst = 0;
+        mc6800_reg_xl->aop = NULL;
+        mc6800_reg_xl->isLitConst = 0;
+        break;
+      case XH_IDX:
+        mc6800_reg_x->aop = NULL;
+        mc6800_reg_x->isLitConst = 0;
+        mc6800_reg_xh->aop = NULL;
+        mc6800_reg_xh->isLitConst = 0;
+        break;
       case X_IDX:
 	mc6800_reg_x->aop = NULL;
 	mc6800_reg_x->isLitConst = 0;
+        mc6800_reg_xl->aop = NULL;
+        mc6800_reg_xl->isLitConst = 0;
+        mc6800_reg_xh->aop = NULL;
+        mc6800_reg_xh->isLitConst = 0;
         break;
       case D_IDX:
         mc6800_reg_d->aop = NULL;
@@ -1486,13 +1528,15 @@ mc6800_ralloc (ebbIndex * ebbi)
   setToNull ((void *) &_G.regAssigned);
   setToNull ((void *) &_G.totRegAssigned);
   mc6800_ptrRegReq = _G.stackExtend = _G.dataExtend = 0;
-  mc6800_nRegs = 6;
+  mc6800_nRegs = 8;
   mc6800_reg_a = mc6800_regWithIdx(A_IDX);
   mc6800_reg_b = mc6800_regWithIdx(B_IDX);
+  mc6800_reg_xl = mc6800_regWithIdx(XL_IDX);
+  mc6800_reg_xh = mc6800_regWithIdx(XH_IDX);
   mc6800_reg_x = mc6800_regWithIdx(X_IDX);
   mc6800_reg_d = mc6800_regWithIdx(D_IDX);
   mc6800_reg_sp = mc6800_regWithIdx(SP_IDX);
-  mc6800_nRegs = 4;
+  mc6800_nRegs = 6;
 
   /* change assignments this will remove some
      live ranges reducing some register pressure */
