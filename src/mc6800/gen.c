@@ -4084,7 +4084,7 @@ genRet (iCode * ic)
     }
   else
     {
-      /* Take care when swapping a and x */
+      /* Take care when swapping a and b */
       if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && size > 1 && AOP (IC_LEFT (ic))->aopu.aop_reg[0]->rIdx == A_IDX)
         {
           delayed_x = true;
@@ -10587,7 +10587,7 @@ genmc6800iCode (iCode *ic)
     else if (ic->op == RECEIVE)
       {
         mc6800_useReg (mc6800_reg_a);
-        mc6800_useReg (mc6800_reg_b); // TODO: x really is free if function only receives 1 byte
+        mc6800_useReg (mc6800_reg_b);
       }
     else
       {
