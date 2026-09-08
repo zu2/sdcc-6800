@@ -1775,7 +1775,7 @@ tsxUseful(iCode *ic)
         break;
       else
         {
-          if (operandConflictsWithHX (IC_RESULT (ic)))
+          if (operandConflictsWithX (IC_RESULT (ic)))
             break;
           if (operandOnStack (IC_LEFT (ic)))
             uses += operandSize (IC_LEFT (ic));
@@ -1806,7 +1806,6 @@ aopForSym (iCode * ic, symbol * sym, bool result)
 
   printf("in aopForSym for symbol %s\n", sym->name);
 
-#if 0
   space = SPEC_OCLS (sym->etype);
 
   /* if already has one */
@@ -1833,35 +1832,30 @@ aopForSym (iCode * ic, symbol * sym, bool result)
       aop->size = getSize (sym->type);
       aop->aopu.aop_stk = sym->stack;
 
-      if (!regalloc_dry_run && mc6800_reg_hx->isFree && mc6800_reg_hx->aop != &tsxaop)
+      if (!regalloc_dry_run && mc6800_reg_x->isFree && mc6800_reg_x->aop != &tsxaop)
         {
-          if (!mc6800_reg_h->isDead || !mc6800_reg_x->isDead)
+          if (!mc6800_reg_x->isDead)
             return aop;
-          if (ic->op == IFX && operandConflictsWithHX (IC_COND (ic)))
+          if (ic->op == IFX && operandConflictsWithX (IC_COND (ic)))
             return aop;
-          else if (ic->op == JUMPTABLE && operandConflictsWithHX (IC_JTCOND (ic)))
+          else if (ic->op == JUMPTABLE && operandConflictsWithX (IC_JTCOND (ic)))
             return aop;
           else
             {
-              /* If this is a pointer gen/set, then hx is definitely in use */
               if (POINTER_SET (ic) || POINTER_GET (ic))
                 return aop;
               if (ic->op == ADDRESS_OF)
                 return aop;
-              if (operandConflictsWithHX (IC_LEFT (ic)))
+              if (operandConflictsWithX (IC_LEFT (ic)))
                 return aop;
-              if (operandConflictsWithHX (IC_RIGHT (ic)))
+              if (operandConflictsWithX (IC_RIGHT (ic)))
                 return aop;
             }
-          /* It's safe to use tsx here. tsx costs 1 byte and 2 cycles but */
-          /* can save us 1 byte and 1 cycle for each time we can use x    */
-          /* instead of sp. For a single use, we break even on bytes, but */
-          /* lose a cycle. Make sure there are at least two uses.         */
           if (!tsxUseful (ic))
             return aop;
           emitcode ("tsx", "");
-          mc6800_dirtyReg (mc6800_reg_hx, false);
-          mc6800_reg_hx->aop = &tsxaop;
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          mc6800_reg_x->aop = &tsxaop;
           _G.tsxStackPushes = _G.stackPushes;
         }
       return aop;
@@ -1875,7 +1869,7 @@ aopForSym (iCode * ic, symbol * sym, bool result)
       aop->size = getSize (sym->type);
       return aop;
     }
-#endif
+
   /* default to far space */
   sym->aop = aop = newAsmop (AOP_EXT);
   aop->aopu.aop_dir = sym->rname;
@@ -2521,16 +2515,15 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
         return aopLiteral (aop->aopu.aop_lit, loffset);
 
     case AOP_SOF:
-      if (!regalloc_dry_run && mc6800_reg_d->aop == &tsxaop)
-        {
-          xofs = _G.stackOfs + _G.tsxStackPushes + aop->aopu.aop_stk + offset;
-          if (xofs)
-            sprintf (s, "%d,x", xofs);
-          else
-            sprintf (s, ",x");
-        }
+      if (!regalloc_dry_run && mc6800_reg_x->aop != &tsxaop)
+        werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "AOP_SOF without tsx");
+      xofs = _G.stackOfs + _G.tsxStackPushes + aop->aopu.aop_stk + offset;
+      if (xofs < 0 || xofs > 255)
+        werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "stack offset out of range");
+      if (xofs)
+        sprintf (s, "%d,x", xofs);
       else
-        sprintf (s, "%d,s", _G.stackOfs + _G.stackPushes + aop->aopu.aop_stk + offset + 1);
+        sprintf (s, ",x");
       rs = Safe_calloc (1, strlen (s) + 1);
       strcpy (rs, s);
       return rs;
