@@ -819,6 +819,8 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
       D (emitcode (";     storeRegToAop", "case X_IDX %s %s %d",__func__,__FILE__,__LINE__));
       D (emitcode (";     storeRegToAop", "aop->type==AOP_REG? %d",aop->type == AOP_REG));
       D (emitcode (";     storeRegToAop", "loffset %d, app->size %d",loffset,aop->size));
+      if ((aop->type == AOP_REG) && IS_AOP_X (aop))
+        break;
       if ((aop->type == AOP_REG) && (loffset < aop->size))
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
@@ -1033,9 +1035,9 @@ storeConstToAop (int c, asmop * aop, int loffset)
       storeRegToAop (mc6800_reg_a, aop, loffset);
       return;
     }
-  if (mc6800_reg_x->isLitConst && mc6800_reg_x->litConst == c)
+  if (mc6800_reg_b->isLitConst && mc6800_reg_b->litConst == c)
     {
-      storeRegToAop (mc6800_reg_x, aop, loffset);
+      storeRegToAop (mc6800_reg_b, aop, loffset);
       return;
     }
 
@@ -1071,11 +1073,11 @@ storeConstToAop (int c, asmop * aop, int loffset)
           storeRegToAop (mc6800_reg_a, aop, loffset);
           mc6800_freeReg (mc6800_reg_a);
         }
-      else if (mc6800_reg_x->isFree)
+      else if (mc6800_reg_b->isFree)
         {
-          loadRegFromConst (mc6800_reg_x, c);
-          storeRegToAop (mc6800_reg_x, aop, loffset);
-          mc6800_freeReg (mc6800_reg_x);
+          loadRegFromConst (mc6800_reg_b, c);
+          storeRegToAop (mc6800_reg_b, aop, loffset);
+          mc6800_freeReg (mc6800_reg_b);
         }
       else
         {
@@ -1296,8 +1298,8 @@ transferAopAop (asmop *srcaop, int srcofs, asmop *dstaop, int dstofs)
     {
       if (mc6800_reg_a->isFree)
         reg = mc6800_reg_a;
-      else if (mc6800_reg_x->isFree)
-        reg = mc6800_reg_x;
+      else if (mc6800_reg_b->isFree)
+        reg = mc6800_reg_b;
       else
         {
           pushReg (mc6800_reg_a, true);
@@ -1392,6 +1394,13 @@ rmwWithReg (char *rmwop, reg_info * reg)
       regalloc_dry_run_cost++;
       mc6800_dirtyReg (mc6800_reg_a, false);
     }
+  else if (reg->rIdx == B_IDX)
+    {
+      sprintf (rmwaop, "%sb", rmwop);
+      emitcode (rmwaop, "");
+      regalloc_dry_run_cost++;
+      mc6800_dirtyReg (mc6800_reg_b, false);
+    }
   else if (reg->rIdx == X_IDX)
     {
       sprintf (rmwaop, "%sx", rmwop);
@@ -1430,8 +1439,8 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
   /*   use A if it's free,  */
   /*   otherwise use X if it's free */
   /*   otherwise use A (and preserve original value via the stack) */
-  if (!mc6800_reg_a->isFree && mc6800_reg_x->isFree)
-    reg = mc6800_reg_x;
+  if (!mc6800_reg_a->isFree && mc6800_reg_b->isFree)
+    reg = mc6800_reg_b;
   else
     reg = mc6800_reg_a;
 
@@ -1693,7 +1702,7 @@ operandConflictsWithX (operand *op)
       if (!sym->isspilt)
         {
           for(i = 0; i < sym->nRegs; i++)
-            if (sym->regs[i] == mc6800_reg_x)
+            if (sym->regs[i] == mc6800_reg_xl || sym->regs[i] == mc6800_reg_xh)
               return true;
         }
     }
@@ -2224,7 +2233,7 @@ aopOp (operand *op, iCode * ic, bool result)
   aop->size = sym->nRegs;
   for (i = 0; i < sym->nRegs; i++)
     {
-       wassert (sym->regs[i] >= regsmc6800 && sym->regs[i] < regsmc6800 + 3);
+       wassert (sym->regs[i] >= regsmc6800 && sym->regs[i] < regsmc6800 + 4);
        wassertl (sym->regs[i], "Symbol in register, but no register assigned.");
        aop->aopu.aop_reg[i] = sym->regs[i];
        aop->regmask |= sym->regs[i]->mask;
@@ -2638,9 +2647,9 @@ asmopToBool (asmop *aop, bool resultInA)
         }
       break;
     case AOP_EXT:
-      if (!resultInA && (size == 1) && !IS_AOP_A (aop) && !mc6800_reg_a->isFree && mc6800_reg_x->isFree)
+      if (!resultInA && (size == 1) && !IS_AOP_A (aop) && !mc6800_reg_a->isFree && mc6800_reg_b->isFree)
         {
-          loadRegFromAop (mc6800_reg_x, aop, 0);
+          loadRegFromAop (mc6800_reg_b, aop, 0);
           break;
         }
       if (resultInA)
