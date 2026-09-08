@@ -3324,9 +3324,9 @@ assignResultValue (operand * oper)
   bool delayed_x = false;
   while (size--)
     {
-      if (!offset && AOP_TYPE (oper) == AOP_REG && AOP_SIZE (oper) > 1 && AOP (oper)->aopu.aop_reg[0]->rIdx == X_IDX)
+      if (!offset && AOP_TYPE (oper) == AOP_REG && AOP_SIZE (oper) > 1 && AOP (oper)->aopu.aop_reg[0]->rIdx == A_IDX)
         {
-          pushReg (mc6800_reg_a, true);
+          pushReg (mc6800_reg_b, true);
           delayed_x = true;
         }
       else
@@ -3336,7 +3336,7 @@ assignResultValue (operand * oper)
       offset++;
     }
   if (delayed_x)
-    pullReg (mc6800_reg_x);
+    pullReg (mc6800_reg_a);
 }
 
 /*-----------------------------------------------------------------*/
@@ -4085,10 +4085,10 @@ genRet (iCode * ic)
   else
     {
       /* Take care when swapping a and x */
-      if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && size > 1 && AOP (IC_LEFT (ic))->aopu.aop_reg[0]->rIdx == X_IDX)
+      if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && size > 1 && AOP (IC_LEFT (ic))->aopu.aop_reg[0]->rIdx == A_IDX)
         {
           delayed_x = true;
-          pushReg (mc6800_reg_x, true);
+          pushReg (mc6800_reg_a, true);
         }
 
       offset = size - 1;
@@ -4100,7 +4100,7 @@ genRet (iCode * ic)
         }
 
       if (delayed_x)
-        pullReg (mc6800_reg_a);
+        pullReg (mc6800_reg_b);
     }
 
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
@@ -10587,7 +10587,7 @@ genmc6800iCode (iCode *ic)
     else if (ic->op == RECEIVE)
       {
         mc6800_useReg (mc6800_reg_a);
-        mc6800_useReg (mc6800_reg_x); // TODO: x really is free if function only receives 1 byte
+        mc6800_useReg (mc6800_reg_b); // TODO: x really is free if function only receives 1 byte
       }
     else
       {
@@ -10823,10 +10823,10 @@ init_aop_pass(void)
 
   mc6800_aop_pass[0] = newAsmop (AOP_REG);
   mc6800_aop_pass[0]->size = 1;
-  mc6800_aop_pass[0]->aopu.aop_reg[0] = mc6800_reg_a;
+  mc6800_aop_pass[0]->aopu.aop_reg[0] = mc6800_reg_b;
   mc6800_aop_pass[1] = newAsmop (AOP_REG);
   mc6800_aop_pass[1]->size = 1;
-  mc6800_aop_pass[1]->aopu.aop_reg[0] = mc6800_reg_x;
+  mc6800_aop_pass[1]->aopu.aop_reg[0] = mc6800_reg_a;
   mc6800_aop_pass[2] = newAsmop (AOP_DIR);
   mc6800_aop_pass[2]->size = 1;
   mc6800_aop_pass[2]->aopu.aop_dir = "___SDCC_mc6800_ret2";
