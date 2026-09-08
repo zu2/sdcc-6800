@@ -696,6 +696,63 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
       break;
     }
 #endif
+  switch (regidx)
+    {
+    case A_IDX:
+      if (aop->type == AOP_REG)
+        {
+          if (loffset < aop->size)
+            transferRegReg (aop->aopu.aop_reg[loffset], reg, false);
+          else
+            loadRegFromConst (reg, 0);
+        }
+      else if (aop->type == AOP_LIT)
+        loadRegFromConst (reg, byteOfVal (aop->aopu.aop_lit, loffset));
+      else
+        {
+          emitcode ("ldaa", "%s", aopAdrStr (aop, loffset, false));
+          regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 : 3);
+          mc6800_dirtyReg (reg, false);
+        }
+      break;
+    case B_IDX:
+      if (aop->type == AOP_REG)
+        {
+          if (loffset < aop->size)
+            transferRegReg (aop->aopu.aop_reg[loffset], reg, false);
+          else
+            loadRegFromConst (reg, 0);
+        }
+      else if (aop->type == AOP_LIT)
+        loadRegFromConst (reg, byteOfVal (aop->aopu.aop_lit, loffset));
+      else
+        {
+          emitcode ("ldab", "%s", aopAdrStr (aop, loffset, false));
+          regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 : 3);
+          mc6800_dirtyReg (reg, false);
+        }
+      break;
+    case X_IDX:
+      if (IS_AOP_X (aop))
+        break;
+      if (aop->type == AOP_LIT)
+        {
+          loadRegFromConst (reg, byteOfVal (aop->aopu.aop_lit, loffset + 1) << 8
+                                 | byteOfVal (aop->aopu.aop_lit, loffset));
+          break;
+        }
+      wassertl (aop->type != AOP_REG, "cannot load x from a register");
+      emitcode ("ldx", "%s", aopAdrStr (aop, loffset, true));
+      regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 : 3);
+      mc6800_dirtyReg (reg, false);
+      break;
+    case D_IDX:
+      if (IS_AOP_D (aop))
+        break;
+      loadRegFromAop (mc6800_reg_b, aop, loffset);
+      loadRegFromAop (mc6800_reg_a, aop, loffset + 1);
+      break;
+    }
   mc6800_useReg (reg);
 }
 
