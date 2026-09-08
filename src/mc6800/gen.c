@@ -456,6 +456,7 @@ adjustStack (int n)
         emitcode ("ins","");
       }
       regalloc_dry_run_cost++;
+      _G.stackPushes -= n;
       updateCFA ();
     }
   else if (n<0)
@@ -464,6 +465,7 @@ adjustStack (int n)
         emitcode ("des","");
       }
       regalloc_dry_run_cost++;
+      _G.stackPushes -= n;
       updateCFA ();
     }
 }
@@ -3824,7 +3826,6 @@ genFunction (iCode * ic)
 
 
   D (emitcode (";     genFunction", ""));
-#if 0
   _G.nRegsSaved = 0;
   _G.stackPushes = 0;
   /* create the function header */
@@ -3851,11 +3852,6 @@ genFunction (iCode * ic)
 
   /* if this is an interrupt service routine then
      save h  */
-  if (IFFUNC_ISISR (sym->type))
-    {
-      if (!inExcludeList ("h"))
-        pushReg (mc6800_reg_h, false);
-    }
 
   /* For some cases it is worthwhile to perform a RECEIVE iCode */
   /* before setting up the stack frame completely. */
@@ -3915,9 +3911,11 @@ genFunction (iCode * ic)
           pushReg (mc6800_reg_a, false);
           pushReg (mc6800_reg_a, false);
           emitcode ("tpa", "");
-          emitcode ("sta", "2,s");
+          emitcode ("tsx", "");
+          emitcode ("staa", "1,x");
           emitcode ("sei", "");
           regalloc_dry_run_cost += 5;
+          mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
         }
       else
@@ -3930,7 +3928,6 @@ genFunction (iCode * ic)
           regalloc_dry_run_cost++;
         }
     }
-#endif
 }
 
 /*-----------------------------------------------------------------*/
@@ -3942,7 +3939,6 @@ genEndFunction (iCode * ic)
   symbol *sym = OP_SYMBOL (IC_LEFT (ic));
 
   D (emitcode (";     genReceive", ""));
-#if 0
   if (IFFUNC_ISNAKED (sym->type))
     {
       emitcode (";", "naked function: no epilogue.");
@@ -3957,9 +3953,11 @@ genEndFunction (iCode * ic)
         {
           /* Function has return value, so make sure A is preserved */
           pushReg (mc6800_reg_a, false);
-          emitcode ("lda", "2,s");
+          emitcode ("tsx", "");
+          emitcode ("ldaa", "1,x");
           emitcode ("tap", "");
           regalloc_dry_run_cost += 4;
+          mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
           pullNull (1);
         }
@@ -3989,11 +3987,6 @@ genEndFunction (iCode * ic)
 
   if (IFFUNC_ISISR (sym->type))
     {
-
-      if (!inExcludeList ("h"))
-        pullReg (mc6800_reg_h);
-
-
       /* if debug then send end of function */
       if (options.debug && currFunc && !regalloc_dry_run)
         {
@@ -4005,22 +3998,6 @@ genEndFunction (iCode * ic)
     }
   else
     {
-      if (IFFUNC_CALLEESAVES (sym->type))
-        {
-          int i;
-
-          /* if any registers used */
-          if (sym->regsUsed)
-            {
-              /* save the registers used */
-              for (i = sym->regsUsed->size; i >= 0; i--)
-                {
-                  if (bitVectBitValue (sym->regsUsed, i) || (mc6800_ptrRegReq &&i == X_IDX))
-                    emitcode ("pop", "%s", mc6800_regWithIdx (i)->name); /* Todo: Cost. Can't find this instruction in manual! */
-                }
-            }
-        }
-
       /* if debug then send end of function */
       if (options.debug && currFunc && !regalloc_dry_run)
         {
@@ -4030,7 +4007,6 @@ genEndFunction (iCode * ic)
       emitcode ("rts", "");
       regalloc_dry_run_cost++;
     }
-#endif
 }
 
 /*-----------------------------------------------------------------*/
