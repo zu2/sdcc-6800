@@ -193,6 +193,7 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
         {
         case B_IDX:            /* B to A */
           emitcode ("tba", "");
+          regalloc_dry_run_cost++;
           break;
         default:
           error = 1;
@@ -203,6 +204,7 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
         {
         case A_IDX:            /* A to B */
           emitcode ("tab", "");
+          regalloc_dry_run_cost++;
           break;
         default:
           error = 1;
@@ -4247,7 +4249,7 @@ genPlus8 (iCode *ic)
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
   bool maskedtopbyte = (topbytemask != 0xff);
 
-  if (mc6800_reg_b->isFree)
+  if (mc6800_reg_b->isFree && !IS_AOP_A (result))
     {
       reg = mc6800_reg_b;
       add = "addb";
