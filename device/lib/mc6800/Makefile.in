@@ -87,6 +87,11 @@ else
   endif
 endif
 
+%.rel: %.s
+	test $(srcdir) = . || cp $< .
+	-$(AS) $(ASFLAGS) $(notdir $<)
+	test $(srcdir) = . || rm $(notdir $<)
+
 %.rel: %.c
 	$(CC) $(CFLAGS) ${EXTRA_CFLAGS} -c $<
 

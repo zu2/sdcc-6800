@@ -68,7 +68,8 @@ static struct
 }
 _G;
 
-static asmop *mc6800_aop_pass[8];
+static asmop *mc6800_aop_pass[2];
+static asmop *mc6800_aop_ret[8];
 static asmop tsxaop;
 
 extern int mc6800_ptrRegReq;
@@ -3375,6 +3376,7 @@ assignResultValue (operand * oper)
   int size = AOP_SIZE (oper);
   int offset = 0;
   bool delayed_x = false;
+  asmop **retaop = (size > 2) ? mc6800_aop_ret : mc6800_aop_pass;
   while (size--)
     {
       if (!offset && AOP_TYPE (oper) == AOP_REG && AOP_SIZE (oper) > 1 && AOP (oper)->aopu.aop_reg[0]->rIdx == A_IDX)
@@ -3383,9 +3385,9 @@ assignResultValue (operand * oper)
           delayed_x = true;
         }
       else
-        transferAopAop (mc6800_aop_pass[offset], 0, AOP (oper), offset);
-      if (mc6800_aop_pass[offset]->type == AOP_REG)
-        mc6800_freeReg (mc6800_aop_pass[offset]->aopu.aop_reg[0]);
+        transferAopAop (retaop[offset], 0, AOP (oper), offset);
+      if (retaop[offset]->type == AOP_REG)
+        mc6800_freeReg (retaop[offset]->aopu.aop_reg[0]);
       offset++;
     }
   if (delayed_x)
@@ -4103,6 +4105,8 @@ genRet (iCode * ic)
       goto jumpret;
     }
 
+  asmop **retaop = (size > 2) ? mc6800_aop_ret : mc6800_aop_pass;
+
   if (AOP_TYPE (IC_LEFT (ic)) == AOP_LIT)
     {
       /* If returning a literal, we can load the bytes of the return value */
@@ -4111,7 +4115,7 @@ genRet (iCode * ic)
       offset = 0;
       while (size--)
         {
-          transferAopAop (AOP (IC_LEFT (ic)), offset, mc6800_aop_pass[offset], 0);
+          transferAopAop (AOP (IC_LEFT (ic)), offset, retaop[offset], 0);
           offset++;
         }
     }
@@ -4128,7 +4132,7 @@ genRet (iCode * ic)
       while (size--)
         {
           if (!(delayed_x && !offset))
-            transferAopAop (AOP (IC_LEFT (ic)), offset, mc6800_aop_pass[offset], 0);
+            transferAopAop (AOP (IC_LEFT (ic)), offset, retaop[offset], 0);
           offset--;
         }
 
@@ -10860,24 +10864,24 @@ init_aop_pass(void)
   mc6800_aop_pass[1] = newAsmop (AOP_REG);
   mc6800_aop_pass[1]->size = 1;
   mc6800_aop_pass[1]->aopu.aop_reg[0] = mc6800_reg_a;
-  mc6800_aop_pass[2] = newAsmop (AOP_DIR);
-  mc6800_aop_pass[2]->size = 1;
-  mc6800_aop_pass[2]->aopu.aop_dir = "___SDCC_mc6800_ret2";
-  mc6800_aop_pass[3] = newAsmop (AOP_DIR);
-  mc6800_aop_pass[3]->size = 1;
-  mc6800_aop_pass[3]->aopu.aop_dir = "___SDCC_mc6800_ret3";
-  mc6800_aop_pass[4] = newAsmop (AOP_DIR);
-  mc6800_aop_pass[4]->size = 1;
-  mc6800_aop_pass[4]->aopu.aop_dir = "___SDCC_mc6800_ret4";
-  mc6800_aop_pass[5] = newAsmop (AOP_DIR);
-  mc6800_aop_pass[5]->size = 1;
-  mc6800_aop_pass[5]->aopu.aop_dir = "___SDCC_mc6800_ret5";
-  mc6800_aop_pass[6] = newAsmop (AOP_DIR);
-  mc6800_aop_pass[6]->size = 1;
-  mc6800_aop_pass[6]->aopu.aop_dir = "___SDCC_mc6800_ret6";
-  mc6800_aop_pass[7] = newAsmop (AOP_DIR);
-  mc6800_aop_pass[7]->size = 1;
-  mc6800_aop_pass[7]->aopu.aop_dir = "___SDCC_mc6800_ret7";
+
+  static const char *retname[8] =
+    {
+      "___SDCC_mc6800_ret0",
+      "___SDCC_mc6800_ret1",
+      "___SDCC_mc6800_ret2",
+      "___SDCC_mc6800_ret3",
+      "___SDCC_mc6800_ret4",
+      "___SDCC_mc6800_ret5",
+      "___SDCC_mc6800_ret6",
+      "___SDCC_mc6800_ret7"
+    };
+  for (int i = 0; i < 8; i++)
+    {
+      mc6800_aop_ret[i] = newAsmop (AOP_DIR);
+      mc6800_aop_ret[i]->size = 1;
+      mc6800_aop_ret[i]->aopu.aop_dir = retname[i];
+    }
 }
 
 float
