@@ -64,6 +64,7 @@ static struct
   short regsinuse;
   set *sendSet;
   int tsxStackPushes;
+  int tempOfs;
 }
 _G;
 
@@ -3904,6 +3905,12 @@ genFunction (iCode * ic)
   if (IFFUNC_ISNAKED (ftype))
     {
       emitcode (";", "naked function: no prologue.");
+      return;
+    }
+
+  if (IFFUNC_ISISR (sym->type))
+    {
+      wassertl (0, "__interrupt not supported");
       return;
     }
 

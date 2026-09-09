@@ -28,10 +28,4 @@
    might be covered by the GNU General Public License.
 -------------------------------------------------------------------------*/
 
-__data unsigned char __SDCC_hc08_ret2;
-__data unsigned char __SDCC_hc08_ret3;
-__data unsigned char __SDCC_hc08_ret4;
-__data unsigned char __SDCC_hc08_ret5;
-__data unsigned char __SDCC_hc08_ret6;
-__data unsigned char __SDCC_hc08_ret7;
 

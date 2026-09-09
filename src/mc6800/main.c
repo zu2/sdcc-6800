@@ -177,6 +177,7 @@ _mc6800_setDefaultOptions (void)
 
   options.omitFramePtr = 1;     /* no frame pointer (we use SP */
                                 /* offsets instead)            */
+  options.noOverlay = 1;
 }
 
 static const char *
