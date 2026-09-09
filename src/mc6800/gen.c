@@ -473,8 +473,8 @@ adjustStack (int n)
     {
       for (int i=0; i<n; i++ ){
         emitcode ("ins","");
+        regalloc_dry_run_cost++;
       }
-      regalloc_dry_run_cost++;
       _G.stackPushes -= n;
       updateCFA ();
     }
@@ -482,8 +482,8 @@ adjustStack (int n)
     {
       for (int i=0; i>n; i-- ){
         emitcode ("des","");
+        regalloc_dry_run_cost++;
       }
-      regalloc_dry_run_cost++;
       _G.stackPushes -= n;
       updateCFA ();
     }
