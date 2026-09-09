@@ -856,8 +856,8 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
 
   if ((reg->rIdx == D_IDX) && aop->stacked && (aop->stk_aop[loffset] || aop->stk_aop[loffset + 1]))
     {
-      storeRegToAop (mc6800_reg_b, aop, loffset + 1);
-      storeRegToAop (mc6800_reg_a, aop, loffset);
+      storeRegToAop (mc6800_reg_b, aop, loffset);
+      storeRegToAop (mc6800_reg_a, aop, loffset + 1);
       return;
     }
 
@@ -1052,8 +1052,8 @@ loadRegFromConst (reg_info * reg, int c)
       c &= 0xffff;
       if (reg->isLitConst && reg->litConst == c)
 	break;
-      loadRegFromConst (mc6800_reg_b, c >> 8);
-      loadRegFromConst (mc6800_reg_a, c);
+      loadRegFromConst (mc6800_reg_a, c >> 8);
+      loadRegFromConst (mc6800_reg_b, c);
       break;
     default:
       werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "Bad rIdx in loadRegFromConst");
