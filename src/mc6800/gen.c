@@ -70,6 +70,28 @@ _G;
 
 static asmop *mc6800_aop_pass[2];
 static asmop *mc6800_aop_ret[8];
+
+static const char *
+allocTemp (void)
+{
+  static const char *tempname[NUM_TEMP_REGS] =
+    {
+      "___SDCC_mc6800_tmp0", "___SDCC_mc6800_tmp1",
+      "___SDCC_mc6800_tmp2", "___SDCC_mc6800_tmp3",
+      "___SDCC_mc6800_tmp4", "___SDCC_mc6800_tmp5",
+      "___SDCC_mc6800_tmp6", "___SDCC_mc6800_tmp7"
+    };
+
+  wassertl (_G.tempOfs < NUM_TEMP_REGS, "out of temporaries");
+  return tempname[_G.tempOfs++];
+}
+
+static void
+freeTemp (void)
+{
+  wassertl (_G.tempOfs > 0, "temporary underflow");
+  _G.tempOfs--;
+}
 static asmop tsxaop;
 
 extern int mc6800_ptrRegReq;
@@ -190,19 +212,14 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
       switch (srcidx)
         {
         case D_IDX:            /* D to X */
-          emitcode ("tfr d,x", "");
-          regalloc_dry_run_cost++;
-          break;
-        default:
-          error = 1;
-        }
-      break;
-    case D_IDX:
-      switch (srcidx)
-        {
-        case X_IDX:           /* X to D */
-          emitcode ("tfr x,d", "");
-          regalloc_dry_run_cost++;
+          {
+            const char *tmp = allocTemp ();
+            emitcode ("staa", "%s", tmp);
+            emitcode ("stab", "%s+1", tmp);
+            emitcode ("ldx", "%s", tmp);
+            regalloc_dry_run_cost += 6;
+            freeTemp ();
+          }
           break;
         default:
           error = 1;
@@ -889,6 +906,12 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
           emitcode ("stx", "%s", aopAdrStr (aop, loffset, false));
           regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 :3);
         }
+      break;
+    case D_IDX:
+      if ((aop->type == AOP_REG) && IS_AOP_D (aop))
+        break;
+      storeRegToAop (mc6800_reg_b, aop, loffset);
+      storeRegToAop (mc6800_reg_a, aop, loffset + 1);
       break;
     default:
       wassert (0);
