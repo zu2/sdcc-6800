@@ -240,11 +240,8 @@ _mc6800_genAssemblerStart (FILE * of)
       fprintf (of, "__sdcc_gs_init_startup:\n");
       if (options.stack_loc)
         {
-          fprintf (of, "\tldhx\t#0x%04x\n", options.stack_loc+1);
-          fprintf (of, "\ttxs\n");
+          fprintf (of, "\tlds\t#0x%04x\n", options.stack_loc);
         }
-      else
-        fprintf (of, "\trsp\n");
       fprintf (of, "\tjsr\t___sdcc_external_startup\n");
       fprintf (of, "\tbeq\t__sdcc_init_data\n");
       fprintf (of, "\tjmp\t__sdcc_program_startup\n");
