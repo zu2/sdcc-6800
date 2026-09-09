@@ -191,11 +191,6 @@ _mc6800_getRegName (const struct reg_info *reg)
 static void
 _mc6800_genAssemblerStart (FILE * of)
 {
-  int i;
-  int needOrg = 1;
-  symbol *mainExists=newSymbol("main", 0);
-  mainExists->block=0;
-
   if (!options.noOptsdccInAsm)
     fprintf (of, "\t.optsdcc -m%s\n", port->target);
 
@@ -213,61 +208,6 @@ _mc6800_genAssemblerStart (FILE * of)
   tfprintf (of, "\t!area\n",XDATA_NAME);
   tfprintf (of, "\t!area\n",XIDATA_NAME);
 
-  if ((mainExists=findSymWithLevel(SymbolTab, mainExists)))
-    {
-      // generate interrupt vector table
-      fprintf (of, "\t.area\tCODEIVT (ABS)\n");
-
-      for (i=maxInterrupts;i>0;i--)
-        {
-          if (interrupts[i])
-            {
-              if (needOrg)
-                {
-                  fprintf (of, "\t.org\t0x%04x\n", (0xfffe - (i * 2)));
-                  needOrg = 0;
-                }
-              fprintf (of, "\t.dw\t%s\n", interrupts[i]->rname);
-            }
-          else
-            needOrg = 1;
-        }
-      if (needOrg)
-        fprintf (of, "\t.org\t0xfffe\n");
-      fprintf (of, "\t.dw\t%s", "__sdcc_gs_init_startup\n\n");
-
-      fprintf (of, "\t.area GSINIT0\n");
-      fprintf (of, "__sdcc_gs_init_startup:\n");
-      if (options.stack_loc)
-        {
-          fprintf (of, "\tlds\t#0x%04x\n", options.stack_loc);
-        }
-      fprintf (of, "\tjsr\t___sdcc_external_startup\n");
-      fprintf (of, "\tbeq\t__sdcc_init_data\n");
-      fprintf (of, "\tjmp\t__sdcc_program_startup\n");
-      fprintf (of, "__sdcc_init_data:\n");
-
-      fprintf (of, "; _mc6800_genXINIT() start\n");
-      fprintf (of, "        ldhx #0\n");
-      fprintf (of, "00001$:\n");
-      fprintf (of, "        cphx #l_XINIT\n");
-      fprintf (of, "        beq  00002$\n");
-      fprintf (of, "        lda  s_XINIT,x\n");
-      fprintf (of, "        sta  s_XISEG,x\n");
-      fprintf (of, "        aix  #1\n");
-      fprintf (of, "        bra  00001$\n");
-      fprintf (of, "00002$:\n");
-      fprintf (of, "; _mc6800_genXINIT() end\n");
-
-      fprintf (of, "\t.area GSFINAL\n");
-      fprintf (of, "\tjmp\t__sdcc_program_startup\n\n");
-
-      fprintf (of, "\t.area CSEG\n");
-      fprintf (of, "__sdcc_program_startup:\n");
-      fprintf (of, "\tjsr\t_main\n");
-      fprintf (of, "\tbra\t.\n");
-
-    }
 }
 
 static void
@@ -280,34 +220,18 @@ _mc6800_genAssemblerEnd (FILE * of)
 }
 
 static void
+_mc6800_genExtraAreaLinkOptions (FILE * of)
+{
+  fprintf (of, "-g __sdcc_stack_top=0x%04x\n", options.stack_loc);
+}
+
+static void
 _mc6800_genExtraAreas (FILE * asmFile, bool mainExists)
 {
     fprintf (asmFile, "%s", iComments2);
     fprintf (asmFile, "; extended address mode data\n");
     fprintf (asmFile, "%s", iComments2);
     dbuf_write_and_destroy (&xdata->oBuf, asmFile);
-}
-
-/* Generate interrupt vector table. */
-static int
-_mc6800_genIVT (struct dbuf_s * oBuf, symbol ** interrupts, int maxInterrupts)
-{
-  int i;
-
-  dbuf_printf (oBuf, "\t.area\tCODEIVT (ABS)\n");
-  dbuf_printf (oBuf, "\t.org\t0x%04x\n",
-    (0xfffe - (maxInterrupts * 2)));
-
-  for (i=maxInterrupts;i>0;i--)
-    {
-      if (interrupts[i])
-        dbuf_printf (oBuf, "\t.dw\t%s\n", interrupts[i]->rname);
-      else
-        dbuf_printf (oBuf, "\t.dw\t0xffff\n");
-    }
-  dbuf_printf (oBuf, "\t.dw\t%s", "__sdcc_gs_init_startup\n");
-
-  return true;
 }
 
 /* Generate code to copy XINIT to XISEG */
@@ -780,6 +704,8 @@ static const char *_asmCmd[] =
   "sdas6800", "$l", "$3", "$2", "$1.asm", NULL
 };
 
+static const char * const _crt[] = { "crt0.rel", NULL, };
+
 static const char * const _libs_mc6800[] = { "mc6800", NULL, };
 
 /* Globals */
@@ -811,7 +737,7 @@ PORT mc6800_port =
     NULL,
     ".rel",
     1,
-    NULL,                       /* crt */
+    _crt,                       /* crt */
     _libs_mc6800,                 /* libs */
   },
   {                             /* Peephole optimizer */
@@ -854,7 +780,7 @@ PORT mc6800_port =
     1                     // No fancy alignments supported.
   },
   { _mc6800_genExtraAreas,
-    NULL },
+    _mc6800_genExtraAreaLinkOptions },
   0,                      // ABI revision
   {
     -1,         /* direction (-1 = stack grows down) */
@@ -903,7 +829,7 @@ PORT mc6800_port =
   _mc6800_keywords,
   _mc6800_genAssemblerStart,
   _mc6800_genAssemblerEnd,        /* no genAssemblerEnd */
-  _mc6800_genIVT,
+  NULL,                         /* genIVT */
   _mc6800_genXINIT,
   NULL,                         /* genInitStartup */
   _mc6800_reset_regparm,

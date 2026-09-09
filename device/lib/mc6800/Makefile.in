@@ -1,4 +1,4 @@
-# libc/hc08 Makefile
+# libc/mc6800 Makefile
 
 VPATH  = @srcdir@
 srcdir = @srcdir@
@@ -7,11 +7,11 @@ abs_top_builddir = @abs_top_builddir@
 
 LIB_TYPE     = @LIB_TYPE@
 
-EXTRA_CFLAGS = -mhc08 --max-allocs-per-node 25000
-SAS = $(top_builddir)/bin/sdas6808
+EXTRA_CFLAGS = -mmc6800 --max-allocs-per-node 25000
+SAS = $(top_builddir)/bin/sdas6800
 
 # override PORTDIR defined by super (parent) makefile
-override PORTDIR = ../build/hc08
+override PORTDIR = ../build/mc6800
 
 include $(srcdir)/../incl.mk
 
@@ -59,15 +59,19 @@ HC08_SDCC = $(COMMON_SDCC) \
 HC08SOURCES = $(addprefix ../,$(HC08_FLOAT) $(HC08_INT) $(HC08_LONG) $(HC08_LONGLONG) $(HC08_SDCC))
 HC08OBJECTS = $(patsubst %.c,%.rel,$(HC08_FLOAT) $(HC08_INT) $(HC08_LONG) $(HC08_LONGLONG) $(HC08_SDCC))
 
-OBJ = __sdcc_regs.rel _ret.rel _mulint.rel _setjmp.rel atomic_flag_test_and_set.rel
+OBJ = __sdcc_regs.rel _ret.rel _mulint.rel _setjmp.rel atomic_flag_test_and_set.rel \
+      _xinit.rel
 
-LIB = hc08.lib
+LIB = mc6800.lib
 AS = $(SAS)
 ASFLAGS = -plosgff
 
 CFLAGS = -I$(srcdir)/../../include -I. --std-c23
 
-all: $(PORTDIR)/$(LIB)
+all: $(PORTDIR)/$(LIB) $(PORTDIR)/crt0.rel
+
+$(PORTDIR)/crt0.rel: crt0.rel
+	cp crt0.rel $(PORTDIR)/crt0.rel
 
 $(PORTDIR)/$(LIB): $(OBJ) $(HC08OBJECTS) Makefile
 ifeq ($(LIB_TYPE), SDCCLIB)
