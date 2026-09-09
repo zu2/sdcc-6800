@@ -4293,12 +4293,12 @@ genPlus16 (iCode *ic)
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
   bool maskedtopbyte = (topbytemask != 0xff);
 
-  loadRegFromAop (mc6800_reg_b, leftOp, 1);
-  loadRegFromAop (mc6800_reg_a, leftOp, 0);
-  accopWithAop ("addb", rightOp, 1);
-  accopWithAop ("adca", rightOp, 0);
-  storeRegToAop (mc6800_reg_b, result, 1);
-  storeRegToAop (mc6800_reg_a, result, 0);
+  loadRegFromAop (mc6800_reg_b, leftOp, 0);
+  loadRegFromAop (mc6800_reg_a, leftOp, 1);
+  accopWithAop ("addb", rightOp, 0);
+  accopWithAop ("adca", rightOp, 1);
+  storeRegToAop (mc6800_reg_b, result, 0);
+  storeRegToAop (mc6800_reg_a, result, 1);
   
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
