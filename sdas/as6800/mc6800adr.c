@@ -1,4 +1,4 @@
-/* m08adr.c */
+/* mc6800adr.c */
 
 /*
  *  Copyright (C) 1989-2025  Alan R. Baldwin
@@ -23,151 +23,48 @@
  */
 
 #include "asxxxx.h"
-#include "m6808.h"
+#include "mc6800.h"
 
+/*
+ * The MC6800 operand forms:
+ *
+ *	#n	immediate
+ *	*n	direct (page 0)
+ *	n	extended
+ *	n,x	indexed (n is 0 to 255)
+ *	,x	indexed with an offset of 0
+ */
 int
 addr(struct expr *esp)
 {
 	int c;
-	char *tcp;
-	char *p;
-
-	/* fix order of '<', '>', and '#' */
-	p = ip;
-	if (((c = getnb()) == '<') || (c == '>')) {
-		p = ip-1;
-		if (getnb() == '#') {
-			*p = *(ip-1);
-			*(ip-1) = c;
-		}
-	}
-	ip = p;
 
 	if ((c = getnb()) == '#') {
 		expr(esp, 0);
 		esp->e_mode = S_IMMED;
 	} else if (c == ',') {
-		switch(admode(axs)) {
-		default:
-			xerr('a', "Register S, X, or X+ Required, Not A.");
-
-		case S_X:
-			c = S_IX;
-			break;
-
-		case S_S:
-			c = S_IS;
-			break;
-
-		case S_XP:
-			c = S_IXP;
-			break;
+		if (admode(axs) != S_X) {
+			xerr('a', "Register X Required.");
 		}
-		esp->e_mode = c;
+		esp->e_mode = S_IX;
 	} else if (c == '*') {
 		expr(esp, 0);
 		esp->e_mode = S_DIR;
-		if (more()) {
-			comma(1);
-			tcp = ip;
-			switch(admode(axs)) {
-			case S_X:
-				esp->e_mode = S_IX1;
-				break;
-
-			case S_S:
-				esp->e_mode = S_SP1;
-				break;
-
-			case S_XP:
-				esp->e_mode = S_IX1P;
-				break;
-
-			default:
-				ip = --tcp;
-				break;
-			}
-		}
 	} else {
 		unget(c);
-		if ((esp->e_mode = admode(axs)) != 0) {
-			;
+		expr(esp, 0);
+		if (more()) {
+			comma(1);
+			if (admode(axs) != S_X) {
+				xerr('a', "Register X Required.");
+			}
+			esp->e_mode = S_IX;
 		} else {
-			expr(esp, 0);
-			if ((!esp->e_flag)
-			    && (esp->e_base.e_ap == NULL)
-			    && !(esp->e_addr & ~0xFF)) {
-				esp->e_mode = S_DIR;
-			}
-			if ((!esp->e_flag)
-				&& (zpg != NULL)
-				&& (esp->e_base.e_ap == zpg)) {
-				esp->e_mode = S_DIR;
-			}
-			if ((esp->e_mode == S_DIR) && more()) {
-				comma(1);
-				tcp = ip;
-				switch(admode(axs)) {
-				case S_X:
-					esp->e_mode = S_IX1;
-					break;
-
-				case S_S:
-					esp->e_mode = S_SP1;
-					break;
-
-				case S_XP:
-					esp->e_mode = S_IX1P;
-					break;
-
-				default:
-					ip = --tcp;
-					break;
-				}
-			} else
-			if ((esp->e_mode != S_DIR) && more()) {
-				comma(1);
-				switch(admode(axs)) {
-				default:
-					xerr('a', "Register S, X, or X+ Required, Not A.");
-
-				case S_X:
-					esp->e_mode = S_IX2;
-					break;
-
-				case S_S:
-					esp->e_mode = S_SP2;
-					break;
-
-				case S_XP:
-					esp->e_mode = S_IX2P;
-					break;
-				}
-			} else
-			if (esp->e_mode != S_DIR) {
-				esp->e_mode = S_EXT;
-			}
+			esp->e_mode = S_EXT;
 		}
 	}
 	return (esp->e_mode);
 }
-	
-/*
- * When building a table that has variations of a common
- * symbol always start with the most complex symbol first.
- * for example if x, x+, and x++ are in the same table
- * the order should be x++, x+, and then x.  The search
- * order is then most to least complex.
- */
-
-/*
- * When searching symbol tables that contain characters
- * not of type LTR16, eg with '-' or '+', always search
- * the more complex symbol tables first. For example:
- * searching for x+ will match the first part of x++,
- * a false match if the table with x+ is searched
- * before the table with x++.
- */
 
 /*
  * Enter admode() to search a specific addressing mode table
@@ -223,10 +120,7 @@ srch(char *str)
 	return(0);
 }
 
-struct adsym	axs[] = {	/* a, x, or s registers */
-    {	"x+",	S_XP	},
-    {	"a",	S_A	},
+struct adsym	axs[] = {	/* x register */
     {	"x",	S_X	},
-    {	"s",	S_S	},
     {	"",	0x00	}
 };

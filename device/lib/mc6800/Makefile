@@ -59,7 +59,7 @@ HC08_SDCC = $(COMMON_SDCC) \
 HC08SOURCES = $(addprefix ../,$(HC08_FLOAT) $(HC08_INT) $(HC08_LONG) $(HC08_LONGLONG) $(HC08_SDCC))
 HC08OBJECTS = $(patsubst %.c,%.rel,$(HC08_FLOAT) $(HC08_INT) $(HC08_LONG) $(HC08_LONGLONG) $(HC08_SDCC))
 
-OBJ = _ret.rel _mulint.rel _setjmp.rel atomic_flag_test_and_set.rel
+OBJ = __sdcc_regs.rel _ret.rel _mulint.rel _setjmp.rel atomic_flag_test_and_set.rel
 
 LIB = hc08.lib
 AS = $(SAS)
@@ -86,6 +86,11 @@ else
     endif
   endif
 endif
+
+%.rel: %.s
+	test $(srcdir) = . || cp $< .
+	-$(AS) $(ASFLAGS) $(notdir $<)
+	test $(srcdir) = . || rm $(notdir $<)
 
 %.rel: %.c
 	$(CC) $(CFLAGS) ${EXTRA_CFLAGS} -c $<

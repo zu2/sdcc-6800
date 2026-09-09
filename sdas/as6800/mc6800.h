@@ -23,15 +23,15 @@
  */
 
 /*)BUILD
-	$(PROGRAM) =	AS6808
+	$(PROGRAM) =	AS6800
 	$(INCLUDE) = {
 		ASXXXX.H
-		M6808.H
+		MC6800.H
 	}
 	$(FILES) = {
-		M08MCH.C
-		M08ADR.C
-		M08PST.C
+		MC6800MCH.C
+		MC6800ADR.C
+		MC6800PST.C
 		ASMAIN.C
 		ASDBG.C
 		ASLEX.C
@@ -58,39 +58,22 @@ struct adsym
 #define	S_DIR	31
 #define	S_EXT	32
 #define	S_IX	33
-#define	S_IXP	34
-#define	S_IX1	35
-#define	S_IX1P	36
-#define	S_IX2	37
-#define	S_IX2P	38
-#define	S_IS	39
-#define	S_SP1	40
-#define	S_SP2	41
-#define	S_A	42
+
+/*
+ * Registers
+ */
 #define	S_X	43
-#define	S_S	44
-#define	S_XP	45
 
 /*
  * Instruction types
  */
-#define	S_INH	60
-#define	S_BRA	61
-#define	S_TYP1	62
-#define	S_TYP2	63
-#define	S_TYP3	64
-#define	S_TYP4	65
-#define	S_TYPAI	66
-#define	S_TYPHX	67
-#define	S_CBEQ	68
-#define	S_CQAX	69
-#define	S_DBNZ	70
-#define	S_DZAX	71
-#define	S_MOV	72
-
-#define	S_INH8	73
-#define	S_INH8S	74
-#define	S_BRA8	75
+#define	S_INH	60	/* inherent */
+#define	S_BRA	61	/* 8 bit relative */
+#define	S_TYP1	62	/* n,x and extended (neg com lsr ... clr jmp) */
+#define	S_TYP2	63	/* 1 byte immediate (suba ldaa ...) */
+#define	S_TYP3	64	/* 2 byte immediate (cpx lds ldx) */
+#define	S_TYP4	65	/* no immediate (staa stab sts stx) */
+#define	S_TYP5	66	/* n,x and extended (jsr) */
 
 /*
  * Special Types
@@ -105,28 +88,19 @@ struct adsym
 /*
  * Processor Types (S_CPU)
  */
-#define	X_HC08	0
-#define X_HCS08	1
-#define	X_6805	2
-#define	X_HC05	3
-
-/*
- * Extended Addressing Modes
- */
-#define	R_3BIT	0x0100		/* 3-Bit Addressing Mode */
+#define	X_6800	0
 
 
 	/* machine dependent functions */
 
-	/* m08adr.c */
+	/* mc6800adr.c */
 extern	struct	adsym	axs[];
 extern	int		addr(struct expr *esp);
 extern	int		admode(struct adsym *sp);
 extern	int		srch(char *str);
 
-	/* m08mch.c */
+	/* mc6800mch.c */
 extern	struct  area	*zpg;
 extern	void		machine(struct mne *mp);
 extern	int		mchpcr(struct expr *esp);
 extern	void		minit(void);
-
