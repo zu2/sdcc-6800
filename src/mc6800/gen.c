@@ -1935,8 +1935,6 @@ aopForSym (iCode * ic, symbol * sym, bool result)
               if (operandConflictsWithX (IC_RIGHT (ic)))
                 return aop;
             }
-          if (!tsxUseful (ic))
-            return aop;
           emitcode ("tsx", "");
           mc6800_dirtyReg (mc6800_reg_x, false);
           mc6800_reg_x->aop = &tsxaop;
