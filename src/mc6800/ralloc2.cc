@@ -102,36 +102,7 @@ static bool operand_in_reg(const operand *o, reg_t r, const i_assignment_t &ia, 
 }
 
 template <class G_t, class I_t>
-static bool operand_is_ax(const operand *o, const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
-{  
-  if(!o || !IS_SYMOP(o))
-    return(false);
- 
-  operand_map_t::const_iterator oi, oi2, oi_end;
-  boost::tie(oi, oi_end) = G[i].operands.equal_range(OP_SYMBOL_CONST(o)->key);
-  
-  if(oi == oi_end)
-    return(false);
-
-  oi2 = oi;
-  oi2++;
-  if (oi2 == oi_end)
-    return(false);
-  
-  // Register combinations code generation cannot handle yet (AX, AH, XH, HA).
-  if(std::binary_search(a.local.begin(), a.local.end(), oi->second) && std::binary_search(a.local.begin(), a.local.end(), oi2->second))
-    {
-      const reg_t l = a.global[oi->second];
-      const reg_t h = a.global[oi2->second];
-      if(l == REG_B && h == REG_A)
-        return(true);
-    }
-
-  return(false);
-}
-
-template <class G_t, class I_t>
-static bool XAinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
+static bool ABXinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
 {
   const iCode *ic = G[i].ic;
 
@@ -185,7 +156,7 @@ static bool XAinst_ok(const assignment &a, unsigned short int i, const G_t &G, c
     return(true);
 
 #if 0
-  std::cout << "XAinst_ok: at (" << i << ", " << ic->key << ")\nX = (" << ia.registers[REG_XL][0] << ", " << ia.registers[REG_XL][1] << "), A = (" << ia.registers[REG_A][0] << ", " << ia.registers[REG_A][1] << ")inst " << i << ", " << ic->key << "\n";
+  std::cout << "ABXinst_ok: at (" << i << ", " << ic->key << ")\nX = (" << ia.registers[REG_XL][0] << ", " << ia.registers[REG_XL][1] << "), A = (" << ia.registers[REG_A][0] << ", " << ia.registers[REG_A][1] << ")inst " << i << ", " << ic->key << "\n";
 #endif
 
   const operand *left = IC_LEFT(ic);
@@ -234,68 +205,21 @@ static bool XAinst_ok(const assignment &a, unsigned short int i, const G_t &G, c
 }
 
 template <class G_t, class I_t>
-static bool AXinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
+static bool Dinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
 {
-  const iCode *ic = G[i].ic;
-
   const i_assignment_t &ia = a.i_assignment;
 
-  if(ic->op == '!' ||
-    ic->op == '~' ||
-    ic->op == IPUSH ||
-    ic->op == CALL ||
-    ic->op == FUNCTION ||
-    ic->op == ENDFUNCTION ||
-    ic->op == RETURN ||
-    ic->op == LABEL ||
-    ic->op == GOTO ||
-    ic->op == '+' ||
-    ic->op == '-' ||
-    ic->op == NE_OP || ic->op == EQ_OP ||
-    ic->op == '^' ||
-    ic->op == '|' ||
-    ic->op == BITWISEAND ||
-    ic->op == GETABIT ||
-    ic->op == GETBYTE ||
-    ic->op == GETWORD ||
-    /*ic->op == LEFT_OP ||
-    ic->op == RIGHT_OP ||*/
-    ic->op == GET_VALUE_AT_ADDRESS ||
-    ic->op == '=' ||
-    ic->op == ADDRESS_OF ||
-    ic->op == RECEIVE ||
-    ic->op == SEND ||
-    ic->op == DUMMY_READ_VOLATILE ||
-    ic->op == CRITICAL ||
-    ic->op == ENDCRITICAL ||
-    ic->op == ROT && IS_OP_LITERAL (IC_RIGHT (ic)) && (bitsForType (operandType (IC_LEFT (ic))) == 8 || operandLitValueUll (IC_RIGHT (ic)) * 2 == bitsForType (operandType (IC_LEFT (ic)))))
-    return(true);
+  if(ia.registers[REG_A][1] >= 0 && ia.registers[REG_B][1] >= 0 &&
+    I[ia.registers[REG_A][1]].v == I[ia.registers[REG_B][1]].v &&
+    I[ia.registers[REG_B][1]].byte + 1 != I[ia.registers[REG_A][1]].byte)
+    return(false);
 
-  bool unused_A = (ia.registers[REG_A][1] < 0);
-  bool unused_X = (ia.registers[REG_XL][1] < 0);
+  if(ia.registers[REG_A][0] >= 0 && ia.registers[REG_B][0] >= 0 &&
+    I[ia.registers[REG_A][0]].v == I[ia.registers[REG_B][0]].v &&
+    I[ia.registers[REG_B][0]].byte + 1 != I[ia.registers[REG_A][0]].byte)
+    return(false);
 
-  if (unused_A || unused_X)
-    return(true);
-
-  const operand *left = IC_LEFT(ic);
-  const operand *right = IC_RIGHT(ic);
-  const operand *result = IC_RESULT(ic);
-
-  bool result_in_A = operand_in_reg(result, REG_A, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
-  bool result_in_X = operand_in_reg(result, REG_XL, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
-  bool left_in_A = operand_in_reg(result, REG_A, ia, i, G);
-  bool left_in_X = operand_in_reg(result, REG_XL, ia, i, G);
-  bool right_in_A = operand_in_reg(result, REG_A, ia, i, G);
-  bool right_in_X = operand_in_reg(result, REG_XL, ia, i, G);
-
-  bool result_is_ax = operand_is_ax (result, a, i, G, I);
-  bool left_is_ax = operand_is_ax (left, a, i, G, I);
-  bool right_is_ax = operand_is_ax (right, a, i, G, I);
-
-  if (!result_is_ax && !left_is_ax && !right_is_ax)
-    return(true);
-
-  return(false);
+  return(true);
 }
 
 template <class G_t, class I_t>
@@ -480,10 +404,10 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
   if(ic->generated)
     return(0.0f);
 
-  if(!XAinst_ok(a, i, G, I))
+  if(!ABXinst_ok(a, i, G, I))
     return(std::numeric_limits<float>::infinity());
 
-  if(!AXinst_ok(a, i, G, I))
+  if(!Dinst_ok(a, i, G, I))
     return(std::numeric_limits<float>::infinity());
 
   if(!Xinst_ok(a, i, G, I))
@@ -557,6 +481,10 @@ static bool assignment_hopeless(const assignment &a, unsigned short int i, const
 
   if((ia.registers[REG_XL][1] >= 0 || ia.registers[REG_XH][1] >= 0) &&
       !Xinst_ok(a, i, G, I))
+    return(true);
+
+  if((ia.registers[REG_A][1] >= 0 || ia.registers[REG_B][1] >= 0) &&
+      !Dinst_ok(a, i, G, I))
     return(true);
 
   return(false);
