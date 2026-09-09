@@ -10657,7 +10657,7 @@ genmc6800iCode (iCode *ic)
         updateiTempRegisterUse (IC_RIGHT (ic));
       }
 
-    for (i = A_IDX; i <= B_IDX; i++)
+    for (i = A_IDX; i <= XH_IDX; i++)
       {
         if (bitVectBitValue (ic->rSurv, i))
           {
@@ -10667,6 +10667,9 @@ genmc6800iCode (iCode *ic)
         else
           mc6800_regWithIdx (i)->isDead = true;
       }
+
+    mc6800_reg_x->isDead = mc6800_reg_xl->isDead && mc6800_reg_xh->isDead;
+    mc6800_reg_x->isFree = mc6800_reg_xl->isFree && mc6800_reg_xh->isFree;
   }
 
   /* depending on the operation */
