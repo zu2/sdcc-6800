@@ -369,6 +369,9 @@ static PORT *_ports[] = {
 #if !OPT_DISABLE_HC08
   &hc08_port,
 #endif
+#if !OPT_DISABLE_MC6800
+  &mc6800_port,
+#endif
 #if !OPT_DISABLE_S08
   &s08_port,
 #endif
