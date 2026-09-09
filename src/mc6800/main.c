@@ -780,7 +780,7 @@ static const char *_linkCmd[] =
 /* $3 is replaced by assembler.debug_opts resp. port->assembler.plain_opts */
 static const char *_asmCmd[] =
 {
-  "sdas6808", "$l", "$3", "$2", "$1.asm", NULL
+  "sdas6800", "$l", "$3", "$2", "$1.asm", NULL
 };
 
 static const char * const _libs_mc6800[] = { "mc6800", NULL, };

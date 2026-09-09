@@ -56,9 +56,9 @@ ASSOURCES = $(SRC) $(ASXXLIBSRC:%.c=$(ASXXLIB)/%.c) $(UTILSRC:%.c=$(UTILLIB)/%.c
 
 ASOBJECTS = $(OBJS) $(ASXXLIBOBJS) $(UTILLIBOBJS)
 
-ASX = $(top_builddir)/bin/sdas6808$(EXEEXT)
-#DEST = $(DESTDIR)$(bindir)/sdas6808$(EXEEXT)
-DEST = sdas6808
+ASX = $(top_builddir)/bin/sdas6800$(EXEEXT)
+#DEST = $(DESTDIR)$(bindir)/sdas6800$(EXEEXT)
+DEST = sdas6800
 DESTPATH = $(DESTDIR)$(bindir)/
 
 transform       = @program_transform_name@
