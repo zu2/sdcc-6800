@@ -144,7 +144,7 @@ cl_m6800::reset(void)
 void
 cl_m6800::set_PC(t_addr addr)
 {
-  PC= addr;
+  PC= addr & PCmask;
 }
 
 void
