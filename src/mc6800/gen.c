@@ -10706,12 +10706,10 @@ genmc6800iCode (iCode *ic)
     case SEND:
       if (!regalloc_dry_run)
         addSet (&_G.sendSet, ic);
-      else if (!ic->next || ic->next->op != SEND)
+      else
         {
           set * sendSet = NULL;
-          iCode * sic;
-          for (sic = ic; sic && sic->op == SEND; sic = sic->prev)
-            addSet (&sendSet, sic);
+          addSet (&sendSet, ic);
           genSend (sendSet);
           deleteSet (&sendSet);
         }
