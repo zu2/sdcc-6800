@@ -1263,9 +1263,9 @@ storeRegSignToUpperAop (reg_info * reg, asmop * aop, int loffset, bool isSigned)
       /* Signed case */
       transferRegReg (reg, mc6800_reg_a, false);
       emitcode ("rola", "");
-      emitcode ("clra", "");
-      emitcode ("sbc", "#0");
-      regalloc_dry_run_cost += 4;
+      emitcode ("ldaa", "#0");
+      emitcode ("sbca", "#0");
+      regalloc_dry_run_cost += 5;
       mc6800_useReg (mc6800_reg_a);
       while (loffset < size)
         storeRegToAop (mc6800_reg_a, aop, loffset++);
@@ -4449,10 +4449,10 @@ addSign (operand * result, int offset, int sign)
       if (sign)
         {
           emitcode ("rola", "");
-          emitcode ("clra", "");
-          emitcode ("sbc", zero);
+          emitcode ("ldaa", "%s", zero);
+          emitcode ("sbca", "%s", zero);
           mc6800_dirtyReg (mc6800_reg_a, false);
-          regalloc_dry_run_cost += 4;
+          regalloc_dry_run_cost += 5;
           while (size--)
             storeRegToAop (mc6800_reg_a, AOP (result), offset++);
         }
@@ -7172,8 +7172,8 @@ AccSRsh (int shCount)
   if (shCount == 7)
     {
       accopWithMisc ("rola", "");
-      accopWithMisc ("clra", "");
-      accopWithMisc ("sbc", zero);
+      accopWithMisc ("ldaa", zero);
+      accopWithMisc ("sbca", zero);
       /* total: 4 cycles, 4 bytes */
       return;
     }
@@ -8882,9 +8882,9 @@ finish:
 
           /* signed bitfield: sign extension with 0x00 or 0xff */
           emitcode ("rola", "");
-          emitcode ("clra", "");
-          emitcode ("sbc", zero);
-          regalloc_dry_run_cost += 4;
+          emitcode ("ldaa", "%s", zero);
+          emitcode ("sbca", "%s", zero);
+          regalloc_dry_run_cost += 5;
 
           while (rsize--)
             storeRegToAop (mc6800_reg_a, AOP (result), offset++);
@@ -10184,7 +10184,7 @@ genCast (iCode * ic)
           loadRegFromAop (mc6800_reg_a, AOP (right), 0);
         }
         accopWithMisc ("rola", "");
-        accopWithMisc ("clra", "");
+        accopWithMisc ("ldaa", zero);
         accopWithMisc ("sbca", zero);
         if (masktopbyte) {
           emitcode ("anda", "#0x%02x", topbytemask);
@@ -10241,7 +10241,7 @@ genCast (iCode * ic)
     }
   } else if (size) {
     accopWithMisc ("rola", "");
-    accopWithMisc ("clra", "");
+    accopWithMisc ("ldaa", zero);
     accopWithMisc ("sbca", zero);
     while (size--) {
       if (!size && masktopbyte) {
