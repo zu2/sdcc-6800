@@ -514,6 +514,8 @@ cl_m6800::accept_it(class it_level *il)
 
   if (!wai)
       push_regs(false);
+  else
+    tick(4);
   wai= false;
   
   rCC|= flagI;
@@ -538,7 +540,7 @@ cl_m6800::push_regs(bool inst_part)
   rom->write(rSP--, rB);
   rom->write(rSP--, rCC);
   if (!inst_part)
-    tick(7);
+    tick(12);
 }
 
 void
