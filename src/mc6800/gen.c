@@ -3471,77 +3471,59 @@ genSend (set *sendSet)
 {
   iCode *send1;
   iCode *send2;
+  int size;
 
   D (emitcode (";", "genSend"));
-#if 0
-  /* case 1: single parameter in A
-   * case 2: single parameter in XA
-   * case 3: first parameter in A, second parameter in X
-   */
+
   send1 = setFirstItem (sendSet);
   send2 = setNextItem (sendSet);
+  wassert (send1);
 
   if (!send2)
     {
-      int size;
-      /* case 1 or 2, this is fairly easy */
       aopOp (IC_LEFT (send1), send1, false);
       size = AOP_SIZE (IC_LEFT (send1));
       wassert (size <= 2);
       if (size == 1)
         {
-          loadRegFromAop (send1->argreg == 2 ? mc6800_reg_x : mc6800_reg_a, AOP (IC_LEFT (send1)), 0);
-        }
-      else if (AOP (IC_LEFT (send1))->type == AOP_REG)
-        loadRegFromAop (mc6800_reg_xa, AOP (IC_LEFT (send1)), 0);
-      else if (isOperandVolatile (IC_LEFT (send1), false))
-        {
-          /* use msb to lsb order for volatile operands */
-          loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (send1)), 1);
-          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send1)), 0);
+          loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
         }
       else
         {
-          /* otherwise prefer to load x last (lsb to msb order) */
-          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send1)), 0);
-          loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (send1)), 1);
+          loadRegFromAop (mc6800_reg_d, AOP (IC_LEFT (send1)), 0);
         }
       freeAsmop (IC_LEFT (send1), NULL, send1, true);
     }
   else
     {
-      /* case 3 */
-      /* make sure send1 is the first argument and swap with send2 if not */
       if (send1->argreg > send2->argreg)
         {
-          iCode * sic = send1;
+          iCode *sic = send1;
           send1 = send2;
           send2 = sic;
         }
       aopOp (IC_LEFT (send1), send1, false);
       aopOp (IC_LEFT (send2), send2, false);
-      if (IS_AOP_X (AOP (IC_LEFT (send1))) && IS_AOP_A (AOP (IC_LEFT (send2))))
+      wassert (AOP_SIZE (IC_LEFT (send1)) == 1 && AOP_SIZE (IC_LEFT (send2)) == 1);
+      if (IS_AOP_A (AOP (IC_LEFT (send1))) && IS_AOP_B (AOP (IC_LEFT (send2))))
         {
-          /* If the parameters' register assignment is exactly backwards */
-          /* from what is needed, then swap the registers. */
           pushReg (mc6800_reg_a, false);
-          transferRegReg (mc6800_reg_x, mc6800_reg_a, false);
-          pullReg (mc6800_reg_x);
+          transferRegReg (mc6800_reg_b, mc6800_reg_a, false);
+          pullReg (mc6800_reg_b);
         }
-      else if (IS_AOP_A (AOP (IC_LEFT (send2))))
+      else if (IS_AOP_B (AOP (IC_LEFT (send2))))
         {
-          loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (send2)), 0);
-          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send1)), 0);
+          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send2)), 0);
+          loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
         }
       else
         {
-          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send1)), 0);
-          loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (send2)), 0);
+          loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
+          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send2)), 0);
         }
       freeAsmop (IC_LEFT (send2), NULL, send2, true);
       freeAsmop (IC_LEFT (send1), NULL, send1, true);
     }
-#endif
 }
 
 /*-----------------------------------------------------------------*/
@@ -3597,83 +3579,54 @@ genCall (iCode * ic)
 {
   sym_link *dtype;
   sym_link *etype;
-//  bool restoreBank = false;
-//  bool swapBanks = false;
 
   D (emitcode (";", "genCall"));
 
-#if 0
-  /* if caller saves & we have not saved then */
   if (!ic->regsSaved)
     saveRegisters (ic);
 
   dtype = operandType (IC_LEFT (ic));
   etype = getSpec (dtype);
-  const bool bigreturn = IS_STRUCT (dtype->next);
+  wassert (!IS_STRUCT (dtype->next));
 
-  /* if send set is not empty then assign */
   if (_G.sendSet && !regalloc_dry_run)
     {
-      if (IFFUNC_ISREENT (dtype))       /* need to reverse the send set */
-        {
-          genSend (reverseSet (_G.sendSet));
-        }
-      else
-        {
-          genSend (_G.sendSet);
-        }
+      genSend (_G.sendSet);
       _G.sendSet = NULL;
     }
 
-  // Pass pointer for storing return value
-  if (bigreturn)
-    pushbigreturn (IC_RESULT (ic));
-
-  /* make the call */
   if (IS_LITERAL (etype))
     {
-      emitcode ("jsr", "0x%04X", ulFromVal (OP_VALUE (IC_LEFT (ic))));
+      emitcode ("jsr", "0x%04X", (unsigned int) ulFromVal (OP_VALUE (IC_LEFT (ic))));
       regalloc_dry_run_cost += 3;
     }
   else
     {
-      bool jump = (!ic->parmBytes && IFFUNC_ISNORETURN (OP_SYMBOL (IC_LEFT (ic))->type));
-
-      emitcode (jump ? "jmp" : "jsr", "%s", (OP_SYMBOL (IC_LEFT (ic))->rname[0] ?
+      emitcode ("jsr", "%s", (OP_SYMBOL (IC_LEFT (ic))->rname[0] ?
                               OP_SYMBOL (IC_LEFT (ic))->rname : OP_SYMBOL (IC_LEFT (ic))->name));
       regalloc_dry_run_cost += 3;
     }
 
   mc6800_dirtyReg (mc6800_reg_a, false);
-  mc6800_dirtyReg (mc6800_reg_hx, false);
+  mc6800_dirtyReg (mc6800_reg_b, false);
+  mc6800_dirtyReg (mc6800_reg_x, false);
 
-  // Adjust stack pointer for the hidden pointer parameter.
-  if (bigreturn)
-    adjustStack (2);
-
-  /* if we need assign a result value */
-  else if ((IS_ITEMP (IC_RESULT (ic)) &&
+  if ((IS_ITEMP (IC_RESULT (ic)) &&
        (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic)))
     {
-      mc6800_useReg (mc6800_reg_a);
+      mc6800_useReg (mc6800_reg_b);
       if (operandSize (IC_RESULT (ic)) > 1)
-        mc6800_useReg (mc6800_reg_x);
-      _G.accInUse++;
+        mc6800_useReg (mc6800_reg_a);
       aopOp (IC_RESULT (ic), ic, false);
-      _G.accInUse--;
 
       assignResultValue (IC_RESULT (ic));
 
       freeAsmop (IC_RESULT (ic), NULL, ic, true);
     }
 
-  /* adjust the stack for parameters if required */
   if (ic->parmBytes)
-    {
-      pullNull (ic->parmBytes);
-    }
-#endif
-  /* if we had saved some registers then unsave them */
+    pullNull (ic->parmBytes);
+
   if (ic->regsSaved && !IFFUNC_CALLEESAVES (dtype))
     unsaveRegisters (ic);
 }
@@ -10366,42 +10319,25 @@ genReceive (iCode * ic)
 {
   int size;
   int offset;
-  bool delayed_x = false;
 
   D (emitcode (";", "genReceive"));
 
-#if 0
   aopOp (IC_RESULT (ic), ic, false);
   size = AOP_SIZE (IC_RESULT (ic));
   offset = 0;
 
-  if (ic->argreg && IS_AOP_HX (AOP (IC_RESULT (ic))) && (offset + (ic->argreg - 1)) == 0)
+  if (ic->argreg)
     {
-      pushReg (mc6800_reg_x, true);
-      emitcode ("tax", "");
-      regalloc_dry_run_cost++;
-      pullReg (mc6800_reg_h);
-    }
-  else if (ic->argreg)
-    {
+      wassert (size <= 2);
       while (size--)
         {
-          if (AOP_TYPE (IC_RESULT (ic)) == AOP_REG && !(offset + (ic->argreg - 1)) && AOP (IC_RESULT (ic))->aopu.aop_reg[0]->rIdx == X_IDX && size)
-            {
-              pushReg (mc6800_reg_a, true);
-              delayed_x = true;
-            }
-          else
-            transferAopAop (mc6800_aop_pass[offset + (ic->argreg - 1)], 0, AOP (IC_RESULT (ic)), offset);
-          if (mc6800_aop_pass[offset]->type == AOP_REG)
-            mc6800_freeReg (mc6800_aop_pass[offset]->aopu.aop_reg[0]);
+          transferAopAop (mc6800_aop_pass[offset + (ic->argreg - 1)], 0, AOP (IC_RESULT (ic)), offset);
+          if (mc6800_aop_pass[offset + (ic->argreg - 1)]->type == AOP_REG)
+            mc6800_freeReg (mc6800_aop_pass[offset + (ic->argreg - 1)]->aopu.aop_reg[0]);
           offset++;
         }
     }
 
-  if (delayed_x)
-    pullReg (mc6800_reg_x);
-#endif
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
 }
 
