@@ -3486,7 +3486,7 @@ genSend (set *sendSet)
       wassert (size <= 2);
       if (size == 1)
         {
-          loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
+          loadRegFromAop (send1->argreg == 2 ? mc6800_reg_a : mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
         }
       else
         {
@@ -4216,10 +4216,10 @@ genPlus8 (iCode *ic)
     }
   else
     {
-      needpullb = pushRegIfSurv (mc6800_reg_b);
-      reg = mc6800_reg_b;
-      add = "addb";
-      mask = "andb";
+      reg = IS_AOP_A (result) ? mc6800_reg_a : mc6800_reg_b;
+      needpullb = (reg == mc6800_reg_b) ? pushRegIfSurv (mc6800_reg_b) : false;
+      add = (reg == mc6800_reg_b) ? "addb" : "adda";
+      mask = (reg == mc6800_reg_b) ? "andb" : "anda";
     }
 
   loadRegFromAop (reg, leftOp, 0);
@@ -10706,10 +10706,12 @@ genmc6800iCode (iCode *ic)
     case SEND:
       if (!regalloc_dry_run)
         addSet (&_G.sendSet, ic);
-      else
+      else if (!ic->next || ic->next->op != SEND)
         {
           set * sendSet = NULL;
-          addSet (&sendSet, ic);
+          iCode * sic;
+          for (sic = ic; sic && sic->op == SEND; sic = sic->prev)
+            addSet (&sendSet, sic);
           genSend (sendSet);
           deleteSet (&sendSet);
         }
