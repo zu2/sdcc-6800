@@ -547,7 +547,7 @@ void
 cl_m6800::pull_regs(bool inst_part)
 {
   u8_t l, h;
-  rCC= rom->read(++rSP);
+  cCC.W(rom->read(++rSP));
   rB= rom->read(++rSP);
   rA= rom->read(++rSP);
   h= rom->read(++rSP);
