@@ -63,6 +63,7 @@ endif
 OPT_DISABLE_DS390    = @OPT_DISABLE_DS390@
 OPT_DISABLE_DS400    = @OPT_DISABLE_DS400@
 OPT_DISABLE_HC08     = @OPT_DISABLE_HC08@
+OPT_DISABLE_MC6800   = @OPT_DISABLE_MC6800@
 OPT_DISABLE_S08      = @OPT_DISABLE_S08@
 OPT_DISABLE_MCS51    = @OPT_DISABLE_MCS51@
 OPT_DISABLE_PIC14    = @OPT_DISABLE_PIC14@
@@ -212,6 +213,11 @@ endif
 ifeq ($(OPT_DISABLE_S08), 0)
 TARGETS        += model-s08
 TARGETS        += model-s08-stack-auto
+endif
+
+ifeq ($(OPT_DISABLE_MC6800), 0)
+TARGETS        += model-mc6800
+TARGETS        += model-mc6800-stack-auto
 endif
 
 ifeq ($(OPT_DISABLE_MOS6502), 0)
@@ -487,6 +493,21 @@ model-s08-stack-auto:
 	fi
 
 objects-hc08:
+	$(MAKE) build-dir
+	$(MAKE) port-specific-objects
+	$(MAKE) clean_intermediate
+
+model-mc6800:
+	if grep '^mc6800$$' $(top_builddir)/ports.build > /dev/null; then \
+	  $(MAKE) MODELFLAGS="-mmc6800" PORT=mc6800 objects-mc6800 || exit 1; \
+	fi
+
+model-mc6800-stack-auto:
+	if grep '^mc6800$$' $(top_builddir)/ports.build > /dev/null; then \
+	  $(MAKE) MODELFLAGS="-mmc6800 --stack-auto" PORT=mc6800-stack-auto objects-mc6800 || exit 1; \
+	fi
+
+objects-mc6800:
 	$(MAKE) build-dir
 	$(MAKE) port-specific-objects
 	$(MAKE) clean_intermediate
