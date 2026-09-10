@@ -4,6 +4,38 @@ Porting to the MC6800 has started.
 The port is still in an early stage, and almost nothing works except very simple programs.
 It uses sdas6800, sdld6808, and ucsim_m6800.
 
+
+./configure \
+	--disable-mcs51-port \
+	--disable-z80-port \
+	--disable-z180-port \
+	--disable-r2k-port \
+	--disable-r2ka-port \
+	--disable-r3ka-port \
+	--disable-r4k-port \
+	--disable-r5k-port \
+	--disable-r6k-port \
+	--disable-sm83-port \
+	--disable-tlcs90-port \
+	--disable-ez80-port \
+	--disable-z80n-port \
+	--disable-r800-port \
+	--disable-ds390-port \
+	--disable-ds400-port \
+	--disable-pic14-port \
+	--disable-pic16-port \
+	--enable-hc08-port \
+	--disable-s08-port \
+	--disable-stm8-port \
+	--enable-mc6800-port \
+	--disable-pdk13-port \
+	--disable-pdk14-port \
+	--disable-pdk15-port \
+	--disable-mos6502-port \
+	--disable-mos65c02-port \
+	--disable-f8-port \
+	--disable-f8l-port
+
 ----
 Please see doc/README.txt.
 
