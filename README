@@ -1,2 +1,9 @@
+### MC6800 port
+
+Porting to the MC6800 has started.
+The port is still in an early stage, and almost nothing works except very simple programs.
+It uses sdas6800, sdld6808, and ucsim_m6800.
+
+----
 Please see doc/README.txt.
 
