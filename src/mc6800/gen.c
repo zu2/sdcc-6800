@@ -598,7 +598,7 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
             }
           else
             {
-              const char *l = aopAdrStr (aop, loffset, false);
+              const char *l = aopAdrStr (aop, loffset, true);
               emitcode ("ldx", "%s", l);
               regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD || aop->type == AOP_LIT) ? 2 : 3);
               mc6800_dirtyReg (reg, false);
@@ -905,7 +905,7 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
         {
-          emitcode ("stx", "%s", aopAdrStr (aop, loffset, false));
+          emitcode ("stx", "%s", aopAdrStr (aop, loffset, true));
           regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 :3);
         }
       break;
