@@ -2458,7 +2458,7 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
 {
   char *s = buffer;
   char *rs;
-  int offset = loffset;
+  int offset = aop->size - 1 - loffset - (bit16 ? 1 : 0);
   int xofs;
 
   /* offset is greater than
