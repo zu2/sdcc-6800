@@ -33,7 +33,7 @@ struct dis_entry disass_m6800[]=
   {
     { 0x01, 0xff, ' ', 1, "NOP" },
     { 0x06, 0xff, ' ', 1, "TAP" },
-    { 0x07, 0xff, ' ', 1, "TAP" },
+    { 0x07, 0xff, ' ', 1, "TPA" },
     { 0x08, 0xff, ' ', 1, "INX" },
     { 0x09, 0xff, ' ', 1, "DEX" },
     { 0x0a, 0xff, ' ', 1, "CLV" },
