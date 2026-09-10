@@ -51,7 +51,10 @@ cl_m6800::WAI(t_mem code)
 int
 cl_m6800::SWI(t_mem code)
 {
-  src_swi->request();
+  push_regs(true);
+  rCC|= flagI;
+  cCC.W(rCC);
+  PC= read_addr(rom, SWI_AT);
   return resGO;
 }
 

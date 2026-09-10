@@ -90,7 +90,7 @@ cl_m6800::add(class cl_memory_cell &dest, u8_t op, bool c)
   a7= a&0x80; na7= a7^0x80;
   b7= b&0x80; nb7= b7^0x80;
   r7= r&0x80; nr7= r7^0x80;
-  if ((a&0xf) + (b&0xf) > 0xf) f|= flagH;
+  if ((a&0xf) + (b&0xf) + ((c && orgc)?1:0) > 0xf) f|= flagH;
   if (r7) f|= flagN;
   if (!r) f|= flagZ;
   if ((a7&b7&nr7) | (na7&nb7&r7)) f|= flagV;
@@ -307,18 +307,16 @@ cl_m6800::Or(class cl_memory_cell &dest, u8_t op)
 int
 cl_m6800::cpx(u16_t op)
 {
-  u32_t r;
-  u16_t x= rX, r2;
+  u16_t x= rX, r;
   u8_t f= rF & ~(flagN|flagZ|flagV);
-  op= ~op+1;
-  r= x+op;
-  r2= (x&0x7fff) + (op&0x7fff);
+  u8_t a7, b7, r7, na7, nb7, nr7;
+  r= (x&0xff00) - (op&0xff00);
+  if (x == op) f|= flagZ;
   if (r&0x8000) f|= flagN;
-  if (!(r&0xffff)) f|= flagZ;
-  r &= ~0xffff;
-  r2&= ~0x7fff;
-  if ((r && !r2) ||
-      (!r && r2)) f|= flagV;
+  a7= (x>>8)&0x80; na7= a7^0x80;
+  b7= (op>>8)&0x80; nb7= b7^0x80;
+  r7= (r>>8)&0x80; nr7= r7^0x80;
+  if ((a7&nb7&nr7) | (na7&b7&r7)) f|= flagV;
   cCC.W(f);
   return resGO;
 }

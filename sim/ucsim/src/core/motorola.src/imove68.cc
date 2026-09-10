@@ -40,7 +40,7 @@ cl_m6800::clr(class cl_memory_cell &dest)
 int
 cl_m6800::lda(class cl_memory_cell &dest, u8_t op)
 {
-  u8_t f= rF & ~(flagN|flagV|flagC);
+  u8_t f= rF & ~(flagN|flagZ|flagV);
   dest.W(op);
   if (!op) f|= flagZ;
   if (op&0x80) f|= flagN;
@@ -51,7 +51,7 @@ cl_m6800::lda(class cl_memory_cell &dest, u8_t op)
 int
 cl_m6800::sta(class cl_memory_cell &dest, u8_t op)
 {
-  u8_t f= rF & ~(flagN|flagV|flagC);
+  u8_t f= rF & ~(flagN|flagZ|flagV);
   dest.W(op);
   if (!op) f|= flagZ;
   if (op&0x80) f|= flagN;
@@ -62,7 +62,7 @@ cl_m6800::sta(class cl_memory_cell &dest, u8_t op)
 int
 cl_m6800::ldsx(class cl_cell16 &dest, u16_t op)
 {
-  u8_t f= rF & ~(flagN|flagV|flagC);
+  u8_t f= rF & ~(flagN|flagZ|flagV);
   dest.W(op);
   if (!op) f|= flagZ;
   if (op&0x8000) f|= flagN;
@@ -73,7 +73,7 @@ cl_m6800::ldsx(class cl_cell16 &dest, u16_t op)
 int
 cl_m6800::stsx(t_addr a, u16_t op)
 {
-  u8_t f= rF & ~(flagN|flagV|flagC);
+  u8_t f= rF & ~(flagN|flagZ|flagV);
   rom->write(a, op>>8);
   rom->write(a+1, op&0xff);
   vc.wr+= 2;

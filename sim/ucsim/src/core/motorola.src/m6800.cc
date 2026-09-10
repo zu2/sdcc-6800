@@ -135,7 +135,8 @@ cl_m6800::reset(void)
 {
   cl_uc::reset();
 
-  cCC.W(0xc0);
+  cIX.W(0);
+  cCC.W(0xc0|flagI);
   PC= read_addr(rom, RESET_AT);
   tick(6);
 }
@@ -515,9 +516,7 @@ cl_m6800::accept_it(class it_level *il)
       push_regs(false);
   wai= false;
   
-  if ((is == src_irq) ||
-      (is == src_swi))
-    rCC|= flagI;
+  rCC|= flagI;
   
   t_addr a= read_addr(rom, is->addr);
   PC= a;
