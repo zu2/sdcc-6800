@@ -64,9 +64,7 @@ cl_m6800::branch(t_addr a, bool cond)
 int
 cl_m6800::JMPi(t_mem code)
 {
-  t_addr a= fetch();
-  a+= rX;
-  PC= a;
+  PC= iaddr();
   return resGO;
 }
 
