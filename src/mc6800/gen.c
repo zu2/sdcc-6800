@@ -3664,6 +3664,7 @@ genPcall (iCode * ic)
   symbol *rlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   iCode * sendic;
+  const char *tmp = NULL;
 
   D (emitcode (";", "genPcall"));
 
@@ -3684,7 +3685,13 @@ genPcall (iCode * ic)
     {
       aopOp (IC_LEFT (ic), ic, false);
       if (IS_AOP_D (AOP (IC_LEFT (ic))))
-        transferRegReg (mc6800_reg_d, mc6800_reg_x, true);
+        {
+          tmp = allocTemp ();
+          mc6800_emitOp ("staa", "%s", tmp);
+          mc6800_emitOp ("stab", "%s+1", tmp);
+          regalloc_dry_run_cost += 4;
+          mc6800_freeReg (mc6800_reg_d);
+        }
     }
 
   /* if send set is not empty then assign */
@@ -3697,7 +3704,14 @@ genPcall (iCode * ic)
   /* make the call */
   if (!IS_LITERAL (etype))
     {
-      if (!IS_AOP_D (AOP (IC_LEFT (ic))))
+      if (IS_AOP_D (AOP (IC_LEFT (ic))))
+        {
+          mc6800_emitOp ("ldx", "%s", tmp);
+          regalloc_dry_run_cost += 2;
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          freeTemp ();
+        }
+      else
         loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (ic)), 0);
       freeAsmop (IC_LEFT (ic), NULL, ic, true);
       mc6800_emitOp ("jsr", ",x");
