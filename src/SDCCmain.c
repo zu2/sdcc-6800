@@ -1878,7 +1878,7 @@ linkEdit (char **envp)
           exit (EXIT_FAILURE);
         }
 
-      if (TARGET_Z80_LIKE||TARGET_MOS6502_LIKE)
+      if (TARGET_Z80_LIKE||TARGET_MOS6502_LIKE||TARGET_MC6800_LIKE)
         {
           fprintf (lnkfile, "-mjwx\n-%c %s\n", out_fmt, dbuf_c_str (&binFileName));
         }
