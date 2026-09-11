@@ -293,7 +293,7 @@ _mc6800_finaliseOptions (void)
 static void
 _mc6800_setDefaultOptions (void)
 {
-  options.code_loc = 0x8000;
+  options.code_loc = 0x0100;
   options.data_loc = 0x80;
   options.xdata_loc = 0;        /* 0 means immediately following data */
   options.stack_loc = 0x7fff;
