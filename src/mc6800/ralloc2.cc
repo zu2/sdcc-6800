@@ -219,6 +219,16 @@ static bool Dinst_ok(const assignment &a, unsigned short int i, const G_t &G, co
     I[ia.registers[REG_B][0]].byte + 1 != I[ia.registers[REG_A][0]].byte)
     return(false);
 
+  if(ia.registers[REG_A][1] >= 0 && ia.registers[REG_B][0] >= 0 &&
+    I[ia.registers[REG_A][1]].v == I[ia.registers[REG_B][0]].v &&
+    I[ia.registers[REG_B][0]].byte + 1 != I[ia.registers[REG_A][1]].byte)
+    return(false);
+
+  if(ia.registers[REG_A][0] >= 0 && ia.registers[REG_B][1] >= 0 &&
+    I[ia.registers[REG_A][0]].v == I[ia.registers[REG_B][1]].v &&
+    I[ia.registers[REG_B][1]].byte + 1 != I[ia.registers[REG_A][0]].byte)
+    return(false);
+
   return(true);
 }
 
