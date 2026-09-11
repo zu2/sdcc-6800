@@ -229,9 +229,9 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
         case D_IDX:            /* D to X */
           {
             const char *tmp = allocTemp ();
-            mc6800_emitOp ("staa", "%s", tmp);
-            mc6800_emitOp ("stab", "%s+1", tmp);
-            mc6800_emitOp ("ldx", "%s", tmp);
+            mc6800_emitOp ("staa", "*%s", tmp);
+            mc6800_emitOp ("stab", "*%s+1", tmp);
+            mc6800_emitOp ("ldx", "*%s", tmp);
             regalloc_dry_run_cost += 6;
             freeTemp ();
           }
@@ -3396,14 +3396,14 @@ genIpush (iCode * ic)
   if (IS_AOP_X (AOP (IC_LEFT (ic))))
     {
       const char *tmp = allocTemp ();
-      mc6800_emitOp ("stx", "%s", tmp);
+      mc6800_emitOp ("stx", "*%s", tmp);
       regalloc_dry_run_cost += 2;
-      mc6800_emitOp ("ldaa", "%s+1", tmp);
+      mc6800_emitOp ("ldaa", "*%s+1", tmp);
       regalloc_dry_run_cost += 2;
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
       pushReg (mc6800_reg_a, true);
-      mc6800_emitOp ("ldaa", "%s", tmp);
+      mc6800_emitOp ("ldaa", "*%s", tmp);
       regalloc_dry_run_cost += 2;
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
@@ -3687,8 +3687,8 @@ genPcall (iCode * ic)
       if (IS_AOP_D (AOP (IC_LEFT (ic))))
         {
           tmp = allocTemp ();
-          mc6800_emitOp ("staa", "%s", tmp);
-          mc6800_emitOp ("stab", "%s+1", tmp);
+          mc6800_emitOp ("staa", "*%s", tmp);
+          mc6800_emitOp ("stab", "*%s+1", tmp);
           regalloc_dry_run_cost += 4;
           mc6800_freeReg (mc6800_reg_d);
         }
@@ -3706,7 +3706,7 @@ genPcall (iCode * ic)
     {
       if (IS_AOP_D (AOP (IC_LEFT (ic))))
         {
-          mc6800_emitOp ("ldx", "%s", tmp);
+          mc6800_emitOp ("ldx", "*%s", tmp);
           regalloc_dry_run_cost += 2;
           mc6800_dirtyReg (mc6800_reg_x, false);
           freeTemp ();
@@ -5769,14 +5769,14 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   else if (IS_AOP_D (AOP (left)) && IS_AOP_X (AOP (right)))
     {
       const char *tmp = allocTemp ();
-      mc6800_emitOp ("stx", "%s", tmp);
+      mc6800_emitOp ("stx", "*%s", tmp);
       regalloc_dry_run_cost += 2;
-      mc6800_emitOp ("cmpb", "%s+1", tmp);
+      mc6800_emitOp ("cmpb", "*%s+1", tmp);
       regalloc_dry_run_cost += 2;
       if (!tlbl_NE && !regalloc_dry_run)
         tlbl_NE = newiTempLabel (NULL);
       emitBranch ("bne", tlbl_NE);
-      mc6800_emitOp ("cmpa", "%s", tmp);
+      mc6800_emitOp ("cmpa", "*%s", tmp);
       regalloc_dry_run_cost += 2;
       freeTemp ();
     }
