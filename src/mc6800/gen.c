@@ -1426,7 +1426,7 @@ accopWithMisc (char *accop, char *param)
 {
   emitcode (accop, "%s", param);
   regalloc_dry_run_cost += ((!param[0] || !strcmp(param, ",x")) ? 1 : ((param[0]=='#' || param[0]=='*') ? 2 : 3));
-  if (strcmp (accop, "bit") && strcmp (accop, "cmp") && strcmp (accop, "cpx"))
+  if (strcmp (accop, "bita") && strcmp (accop, "cmpa") && strcmp (accop, "cpx"))
     mc6800_dirtyReg (mc6800_reg_a, false);
 }
 
@@ -1496,7 +1496,7 @@ accopWithAop (char *accop, asmop *aop, int loffset)
         regalloc_dry_run_cost += 3;
     }
 
-  if (strcmp (accop, "bit") && strcmp (accop, "cmp") && strcmp (accop, "cpx"))
+  if (strcmp (accop, "bita") && strcmp (accop, "cmpa") && strcmp (accop, "cpx"))
     mc6800_dirtyReg (mc6800_reg_a, false);
 }
 
@@ -5614,7 +5614,7 @@ genCmp (iCode * ic, iCode * ifx)
 
   if (size == 1 && IS_AOP_A (AOP (left)))
     {
-      accopWithAop ("cmp", AOP (right), offset);
+      accopWithAop ("cmpa", AOP (right), offset);
     }
   // 2-byte comparison on the MC6800 is not straightforward, but we simply write it as cmpd here.
   else if ((size == 2)
@@ -6241,7 +6241,7 @@ genAnd (iCode * ic, iCode * ifx)
       while (size--)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          accopWithAop ("and", AOP (right), offset);
+          accopWithAop ("anda", AOP (right), offset);
           emitcode ("ora", "1,s");
           emitcode ("sta", "1,s");
           regalloc_dry_run_cost += 6;
@@ -6272,9 +6272,9 @@ genAnd (iCode * ic, iCode * ifx)
   if (AOP_TYPE (result) == AOP_CRY && size == 1 && (IS_AOP_A (AOP (left)) || IS_AOP_A (AOP (right))))
     {
       if (IS_AOP_A (AOP (left)))
-        accopWithAop ("bit", AOP (right), 0);
+        accopWithAop ("bita", AOP (right), 0);
       else
-        accopWithAop ("bit", AOP (left), 0);
+        accopWithAop ("bita", AOP (left), 0);
       genIfxJump (ifx, "a");
       goto release;
     }
@@ -6307,7 +6307,7 @@ genAnd (iCode * ic, iCode * ifx)
           else
             {
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              accopWithAop ("bit", AOP (right), offset);
+              accopWithAop ("bita", AOP (right), offset);
               mc6800_freeReg (mc6800_reg_a);
               if (size)
                 {
@@ -6370,7 +6370,7 @@ genAnd (iCode * ic, iCode * ifx)
       else
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          accopWithAop ("and", AOP (right), offset);
+          accopWithAop ("anda", AOP (right), offset);
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
           mc6800_freeReg (mc6800_reg_a);
         }
@@ -6447,7 +6447,7 @@ genOr (iCode * ic, iCode * ifx)
       while (size--)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          accopWithAop ("ora", AOP (right), offset);
+          accopWithAop ("oraa", AOP (right), offset);
           emitcode ("ora", "1,s");
           emitcode ("sta", "1,s");
           regalloc_dry_run_cost += 6;
@@ -6489,7 +6489,7 @@ genOr (iCode * ic, iCode * ifx)
           else
             {
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              accopWithAop ("ora", AOP (right), offset);
+              accopWithAop ("oraa", AOP (right), offset);
               mc6800_freeReg (mc6800_reg_a);
               if (size)
                 {
@@ -6548,7 +6548,7 @@ genOr (iCode * ic, iCode * ifx)
       else
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          accopWithAop ("ora", AOP (right), offset);
+          accopWithAop ("oraa", AOP (right), offset);
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
           mc6800_freeReg (mc6800_reg_a);
         }
@@ -6625,7 +6625,7 @@ genXor (iCode * ic, iCode * ifx)
               regalloc_dry_run_cost++;
             }
           else
-            accopWithAop ("eor", AOP (right), offset);
+            accopWithAop ("eora", AOP (right), offset);
 
           mc6800_freeReg (mc6800_reg_a);
           if (size)
@@ -6656,7 +6656,7 @@ genXor (iCode * ic, iCode * ifx)
         pullReg (mc6800_reg_a);
       loadRegFromAop (mc6800_reg_a, AOP (left), offset);
       if (!aopIsLitVal (right->aop, offset, 1, 0x00))
-        accopWithAop ("eor", right->aop, offset);
+        accopWithAop ("eora", right->aop, offset);
       storeRegToAop (mc6800_reg_a, AOP (result), offset);
       if (AOP_TYPE (result) == AOP_REG && size && AOP (result)->aopu.aop_reg[offset]->rIdx == A_IDX)
         {
