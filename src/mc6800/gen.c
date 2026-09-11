@@ -3359,7 +3359,6 @@ genIpush (iCode * ic)
 
   D (emitcode (";", "genIpush"));
 
-#if 0
   /* if this is not a parm push : ie. it is spill push
      and spill push is always done on the local stack */
   if (!ic->parmPush)
@@ -3392,14 +3391,23 @@ genIpush (iCode * ic)
   size = AOP_SIZE (IC_LEFT (ic));
 
 //  l = aopGet (AOP (IC_LEFT (ic)), 0, false, true);
-  if (AOP_TYPE (IC_LEFT (ic)) == AOP_IMMD || AOP_TYPE (IC_LEFT (ic)) == AOP_LIT ||IS_AOP_HX (AOP (IC_LEFT (ic))))
+  if (IS_AOP_X (AOP (IC_LEFT (ic))))
     {
-      if ((size == 2) && mc6800_reg_hx->isDead || IS_AOP_HX (AOP (IC_LEFT (ic))))
-        {
-          loadRegFromAop (mc6800_reg_hx, AOP (IC_LEFT (ic)), 0);
-          pushReg (mc6800_reg_hx, true);
-          goto release;
-        }
+      const char *tmp = allocTemp ();
+      mc6800_emitOp ("stx", "%s", tmp);
+      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("ldaa", "%s+1", tmp);
+      regalloc_dry_run_cost += 2;
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      mc6800_useReg (mc6800_reg_a);
+      pushReg (mc6800_reg_a, true);
+      mc6800_emitOp ("ldaa", "%s", tmp);
+      regalloc_dry_run_cost += 2;
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      mc6800_useReg (mc6800_reg_a);
+      pushReg (mc6800_reg_a, true);
+      freeTemp ();
+      goto release;
     }
 
   if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG)
@@ -3416,7 +3424,6 @@ genIpush (iCode * ic)
 //      printf("pushing \n");
       pushReg (mc6800_reg_a, true);
     }
-#endif
 release:
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
 }
@@ -3658,7 +3665,6 @@ genPcall (iCode * ic)
 
   D (emitcode (";", "genPcall"));
 
-#if 0
   dtype = operandType (IC_LEFT (ic))->next;
   etype = getSpec (dtype);
   /* if caller saves & we have not saved then */
@@ -3674,16 +3680,9 @@ genPcall (iCode * ic)
   
   if (!IS_LITERAL (etype))
     {
-      /* push the return address on to the stack */
-      emitBranch ("bsr", tlbl);
-      emitBranch ("bra", rlbl);
-      if (!regalloc_dry_run)
-        emitLabel (tlbl);
-      _G.stackPushes += 2;          /* account for the bsr return address now on stack */
-      updateCFA ();
-
-      /* now push the function address */
-      pushSide (IC_LEFT (ic), FARPTRSIZE, ic);
+      aopOp (IC_LEFT (ic), ic, false);
+      if (IS_AOP_D (AOP (IC_LEFT (ic))))
+        transferRegReg (mc6800_reg_d, mc6800_reg_x, true);
     }
 
   /* if send set is not empty then assign */
@@ -3696,13 +3695,11 @@ genPcall (iCode * ic)
   /* make the call */
   if (!IS_LITERAL (etype))
     {
-      emitcode ("rts", "");
-      regalloc_dry_run_cost++;
-
-      if (!regalloc_dry_run)
-        emitLabel (rlbl);
-      _G.stackPushes -= 4;          /* account for rts here & in called function */
-      updateCFA ();
+      if (!IS_AOP_D (AOP (IC_LEFT (ic))))
+        loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (ic)), 0);
+      freeAsmop (IC_LEFT (ic), NULL, ic, true);
+      mc6800_emitOp ("jsr", ",x");
+      regalloc_dry_run_cost += 2;
     }
   else
     {
@@ -3711,15 +3708,16 @@ genPcall (iCode * ic)
     }
 
   mc6800_dirtyReg (mc6800_reg_a, false);
-  mc6800_dirtyReg (mc6800_reg_hx, false);
+  mc6800_dirtyReg (mc6800_reg_b, false);
+  mc6800_dirtyReg (mc6800_reg_x, false);
 
   /* if we need assign a result value */
   if ((IS_ITEMP (IC_RESULT (ic)) &&
        (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic)))
     {
-      mc6800_useReg (mc6800_reg_a);
+      mc6800_useReg (mc6800_reg_b);
       if (operandSize (IC_RESULT (ic)) > 1)
-        mc6800_useReg (mc6800_reg_x);
+        mc6800_useReg (mc6800_reg_a);
       _G.accInUse++;
       aopOp (IC_RESULT (ic), ic, false);
       _G.accInUse--;
@@ -3734,7 +3732,6 @@ genPcall (iCode * ic)
     {
       pullNull (ic->parmBytes);
     }
-#endif
   /* if we had saved some registers then unsave them */
   if (ic->regsSaved && !IFFUNC_CALLEESAVES (dtype))
     unsaveRegisters (ic);
