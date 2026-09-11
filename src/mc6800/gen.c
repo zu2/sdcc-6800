@@ -1451,10 +1451,37 @@ accopWithAop (char *accop, asmop *aop, int loffset)
     {
   if (loffset < aop->size)
     {
-      pushReg (aop->aopu.aop_reg[loffset], false);
-      emitcode (accop, "1,s");
-      regalloc_dry_run_cost += 3;
-      pullNull (1);
+      reg_info *reg = aop->aopu.aop_reg[loffset];
+
+      if ((reg->rIdx == XL_IDX || reg->rIdx == XH_IDX) && _G.tempOfs + 2 <= NUM_TEMP_REGS)
+        {
+          const char *tmp = allocTemp ();
+          allocTemp ();
+          mc6800_emitOp ("stx", "*%s", tmp);
+          emitcode (accop, (reg->rIdx == XL_IDX) ? "*%s+1" : "*%s", tmp);
+          regalloc_dry_run_cost += 4;
+          freeTemp ();
+          freeTemp ();
+        }
+      else if ((reg->rIdx == A_IDX || reg->rIdx == B_IDX) && _G.tempOfs < NUM_TEMP_REGS)
+        {
+          const char *tmp = allocTemp ();
+          mc6800_emitOp ((reg->rIdx == A_IDX) ? "staa" : "stab", "*%s", tmp);
+          emitcode (accop, "*%s", tmp);
+          regalloc_dry_run_cost += 4;
+          freeTemp ();
+        }
+      else
+        {
+          wassertl (reg->rIdx == A_IDX || reg->rIdx == B_IDX, "no temporary for register operand");
+          wassertl (mc6800_reg_x->isFree && mc6800_reg_x->isDead, "X is not free for register operand");
+          pushReg (reg, false);
+          mc6800_emitOp ("tsx", "");
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          emitcode (accop, ",x");
+          regalloc_dry_run_cost += 3;
+          pullNull (1);
+        }
     } else {
       emitcode (accop, "#0");
       regalloc_dry_run_cost += 2;
