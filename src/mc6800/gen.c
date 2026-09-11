@@ -317,13 +317,13 @@ pushReg (reg_info * reg, bool freereg)
   switch (regidx)
     {
     case A_IDX:
-      emitcode ("psha", "");
+      mc6800_emitOp ("psha", "");
       regalloc_dry_run_cost++;
       _G.stackPushes++;
       updateCFA ();
       break;
     case B_IDX:
-      emitcode ("pshb", "");
+      mc6800_emitOp ("pshb", "");
       regalloc_dry_run_cost++;
       _G.stackPushes++;
       updateCFA ();
@@ -335,7 +335,7 @@ pushReg (reg_info * reg, bool freereg)
       updateCFA ();
       break;
     case D_IDX:
-      emitcode ("psha", "");
+      mc6800_emitOp ("psha", "");
       regalloc_dry_run_cost++;
       updateCFA ();
       _G.stackPushes++;
@@ -363,13 +363,13 @@ pullReg (reg_info * reg)
   switch (regidx)
     {
     case A_IDX:
-      emitcode ("pula", "");
+      mc6800_emitOp ("pula", "");
       regalloc_dry_run_cost++;
       _G.stackPushes--;
       updateCFA ();
       break;
     case B_IDX:
-      emitcode ("pulb", "");
+      mc6800_emitOp ("pulb", "");
       regalloc_dry_run_cost++;
       _G.stackPushes--;
       updateCFA ();
@@ -381,11 +381,11 @@ pullReg (reg_info * reg)
       updateCFA ();
       break;
     case D_IDX:
-      emitcode ("pulb", "");
+      mc6800_emitOp ("pulb", "");
       regalloc_dry_run_cost++;
       _G.stackPushes--;
       updateCFA ();
-      emitcode ("pula", "");
+      mc6800_emitOp ("pula", "");
       regalloc_dry_run_cost++;
       _G.stackPushes--;
       updateCFA ();
@@ -487,7 +487,7 @@ adjustStack (int n)
   if (n>0)
     {
       for (int i=0; i<n; i++ ){
-        emitcode ("ins","");
+        mc6800_emitOp ("ins", "");
         regalloc_dry_run_cost++;
       }
       _G.stackPushes -= n;
@@ -496,7 +496,7 @@ adjustStack (int n)
   else if (n<0)
     {
       for (int i=0; i>n; i-- ){
-        emitcode ("des","");
+        mc6800_emitOp ("des", "");
         regalloc_dry_run_cost++;
       }
       _G.stackPushes -= n;
@@ -3610,12 +3610,12 @@ genCall (iCode * ic)
 
   if (IS_LITERAL (etype))
     {
-      emitcode ("jsr", "0x%04X", (unsigned int) ulFromVal (OP_VALUE (IC_LEFT (ic))));
+      mc6800_emitOp ("jsr", "0x%04X", (unsigned int) ulFromVal (OP_VALUE (IC_LEFT (ic))));
       regalloc_dry_run_cost += 3;
     }
   else
     {
-      emitcode ("jsr", "%s", (OP_SYMBOL (IC_LEFT (ic))->rname[0] ?
+      mc6800_emitOp ("jsr", "%s", (OP_SYMBOL (IC_LEFT (ic))->rname[0] ?
                               OP_SYMBOL (IC_LEFT (ic))->rname : OP_SYMBOL (IC_LEFT (ic))->name));
       regalloc_dry_run_cost += 3;
     }
@@ -3884,10 +3884,10 @@ genFunction (iCode * ic)
           /* Function was passed parameters, so make sure A is preserved */
           pushReg (mc6800_reg_a, false);
           pushReg (mc6800_reg_a, false);
-          emitcode ("tpa", "");
-          emitcode ("tsx", "");
-          emitcode ("staa", "1,x");
-          emitcode ("sei", "");
+          mc6800_emitOp ("tpa", "");
+          mc6800_emitOp ("tsx", "");
+          mc6800_emitOp ("staa", "1,x");
+          mc6800_emitOp ("sei", "");
           regalloc_dry_run_cost += 5;
           mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
@@ -3895,10 +3895,10 @@ genFunction (iCode * ic)
       else
         {
           /* No passed parameters, so A can be freely modified */
-          emitcode ("tpa", "");
+          mc6800_emitOp ("tpa", "");
           regalloc_dry_run_cost++;
           pushReg (mc6800_reg_a, true);
-          emitcode ("sei", "");
+          mc6800_emitOp ("sei", "");
           regalloc_dry_run_cost++;
         }
     }
@@ -3927,9 +3927,9 @@ genEndFunction (iCode * ic)
         {
           /* Function has return value, so make sure A is preserved */
           pushReg (mc6800_reg_a, false);
-          emitcode ("tsx", "");
-          emitcode ("ldaa", "1,x");
-          emitcode ("tap", "");
+          mc6800_emitOp ("tsx", "");
+          mc6800_emitOp ("ldaa", "1,x");
+          mc6800_emitOp ("tap", "");
           regalloc_dry_run_cost += 4;
           mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
@@ -3939,7 +3939,7 @@ genEndFunction (iCode * ic)
         {
           /* Function returns void, so A can be freely modified */
           pullReg (mc6800_reg_a);
-          emitcode ("tap", "");
+          mc6800_emitOp ("tap", "");
           regalloc_dry_run_cost++;
         }
     }
@@ -3967,7 +3967,7 @@ genEndFunction (iCode * ic)
           debugFile->writeEndFunction (currFunc, ic, 1);
         }
 
-      emitcode ("rti", "");
+      mc6800_emitOp ("rti", "");
       regalloc_dry_run_cost++;
     }
   else
@@ -3978,7 +3978,7 @@ genEndFunction (iCode * ic)
           debugFile->writeEndFunction (currFunc, ic, 1);
         }
 
-      emitcode ("rts", "");
+      mc6800_emitOp ("rts", "");
       regalloc_dry_run_cost++;
     }
 }
@@ -4055,7 +4055,7 @@ jumpret:
      if the next is not the return statement */
   if (!(ic->next && ic->next->op == LABEL && IC_LABEL (ic->next) == returnLabel))
     {
-      emitcode ("jmp", "%05d$", labelKey2num (returnLabel->key));
+      mc6800_emitOp ("jmp", "%05d$", labelKey2num (returnLabel->key));
       regalloc_dry_run_cost += 3;
     }
 }
@@ -4501,11 +4501,11 @@ genMinus8 (iCode *ic)
     }
     needpulla = pushRegIfSurv (mc6800_reg_a);
     loadRegFromAop (mc6800_reg_a, leftOp, 0);
-    emitcode ("sba", "");
+    mc6800_emitOp ("sba", "");
     regalloc_dry_run_cost++;
     mc6800_dirtyReg (mc6800_reg_a, false);
     if (maskedtopbyte) {
-      emitcode ("anda", "#0x%02x", topbytemask);
+      mc6800_emitOp ("anda", "#0x%02x", topbytemask);
       regalloc_dry_run_cost += 2;
     }
     storeRegToAop (mc6800_reg_a, result, 0);
