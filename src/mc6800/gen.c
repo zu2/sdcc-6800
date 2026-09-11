@@ -132,6 +132,19 @@ static bool regalloc_dry_run;
 static unsigned int regalloc_dry_run_cost;
 
 static void
+mc6800_emitOp (const char *inst, const char *fmt, ...)
+{
+  va_list ap;
+
+  if (!mc6800_getOpcodeData (inst))
+    werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "unknown opcode");
+
+  va_start (ap, fmt);
+  va_emitcode (inst, fmt, ap);
+  va_end (ap);
+}
+
+static void
 emitBranch (char *branchop, symbol * tlbl)
 {
   if (!regalloc_dry_run)
@@ -192,7 +205,7 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
       switch (srcidx)
         {
         case B_IDX:            /* B to A */
-          emitcode ("tba", "");
+          mc6800_emitOp ("tba", "");
           regalloc_dry_run_cost++;
           break;
         default:
@@ -203,7 +216,7 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
       switch (srcidx)
         {
         case A_IDX:            /* A to B */
-          emitcode ("tab", "");
+          mc6800_emitOp ("tab", "");
           regalloc_dry_run_cost++;
           break;
         default:
@@ -216,9 +229,9 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
         case D_IDX:            /* D to X */
           {
             const char *tmp = allocTemp ();
-            emitcode ("staa", "%s", tmp);
-            emitcode ("stab", "%s+1", tmp);
-            emitcode ("ldx", "%s", tmp);
+            mc6800_emitOp ("staa", "%s", tmp);
+            mc6800_emitOp ("stab", "%s+1", tmp);
+            mc6800_emitOp ("ldx", "%s", tmp);
             regalloc_dry_run_cost += 6;
             freeTemp ();
           }

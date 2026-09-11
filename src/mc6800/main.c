@@ -39,6 +39,130 @@ static char _mc6800_defaultRules[] =
 
 MC6800_OPTS mc6800_opts;
 
+static const mc6800opcodedata mc6800opcodeDataTable[] =
+{
+  { ".db",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 0}, {0, 0}}, 0, 0, 0      , 0      ,  0, "......", OP_SPECIAL },
+  { "adda",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_A    , M_A    ,  0, "t.tttt", OP_NORMAL },
+  { "addb",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_B    , M_B    ,  0, "t.tttt", OP_NORMAL },
+  { "adca",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_A    , M_A    ,  0, "t.tttt", OP_NORMAL },
+  { "adcb",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_B    , M_B    ,  0, "t.tttt", OP_NORMAL },
+  { "anda",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_A    , M_A    ,  0, "..ttR.", OP_NORMAL },
+  { "andb",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_B    , M_B    ,  0, "..ttR.", OP_NORMAL },
+  { "bita",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_A    , 0      ,  0, "..ttR.", OP_NORMAL },
+  { "bitb",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_B    , 0      ,  0, "..ttR.", OP_NORMAL },
+  { "cmpa",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_A    , 0      ,  0, "..tttt", OP_NORMAL },
+  { "cmpb",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_B    , 0      ,  0, "..tttt", OP_NORMAL },
+  { "eora",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_A    , M_A    ,  0, "..ttR.", OP_NORMAL },
+  { "eorb",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_B    , M_B    ,  0, "..ttR.", OP_NORMAL },
+  { "ldaa",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, 0      , M_A    ,  0, "..ttR.", OP_NORMAL },
+  { "ldab",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, 0      , M_B    ,  0, "..ttR.", OP_NORMAL },
+  { "oraa",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_A    , M_A    ,  0, "..ttR.", OP_NORMAL },
+  { "orab",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_B    , M_B    ,  0, "..ttR.", OP_NORMAL },
+  { "sbca",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_A    , M_A    ,  0, "..tttt", OP_NORMAL },
+  { "sbcb",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_B    , M_B    ,  0, "..tttt", OP_NORMAL },
+  { "suba",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_A    , M_A    ,  0, "..tttt", OP_NORMAL },
+  { "subb",  {{2, 2}, {2, 3}, {2, 5}, {3, 4}, {0, 0}, {0, 0}}, 1, 0, M_B    , M_B    ,  0, "..tttt", OP_NORMAL },
+  { "staa",  {{0, 0}, {2, 4}, {2, 6}, {3, 5}, {0, 0}, {0, 0}}, 0, 1, M_A    , 0      ,  0, "..ttR.", OP_NORMAL },
+  { "stab",  {{0, 0}, {2, 4}, {2, 6}, {3, 5}, {0, 0}, {0, 0}}, 0, 1, M_B    , 0      ,  0, "..ttR.", OP_NORMAL },
+  { "clr",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 0, 1, 0      , 0      ,  0, "..RSRR", OP_NORMAL },
+  { "com",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 1, 0      , 0      ,  0, "..ttRS", OP_NORMAL },
+  { "neg",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 1, 0      , 0      ,  0, "..tttt", OP_NORMAL },
+  { "dec",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 1, 0      , 0      ,  0, "..ttt.", OP_NORMAL },
+  { "inc",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 1, 0      , 0      ,  0, "..ttt.", OP_NORMAL },
+  { "rol",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 1, 0      , 0      ,  0, "..tttt", OP_NORMAL },
+  { "ror",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 1, 0      , 0      ,  0, "..tttt", OP_NORMAL },
+  { "asl",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 1, 0      , 0      ,  0, "..tttt", OP_NORMAL },
+  { "asr",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 1, 0      , 0      ,  0, "..tttt", OP_NORMAL },
+  { "lsr",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 1, 0      , 0      ,  0, "..Rttt", OP_NORMAL },
+  { "tst",   {{0, 0}, {0, 0}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 1, 0, 0      , 0      ,  0, "..ttRR", OP_NORMAL },
+  { "clra",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , M_A    ,  0, "..RSRR", OP_NORMAL },
+  { "clrb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , M_B    ,  0, "..RSRR", OP_NORMAL },
+  { "coma",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..ttRS", OP_NORMAL },
+  { "comb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_B    ,  0, "..ttRS", OP_NORMAL },
+  { "nega",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..tttt", OP_NORMAL },
+  { "negb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_B    ,  0, "..tttt", OP_NORMAL },
+  { "deca",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..ttt.", OP_NORMAL },
+  { "decb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_B    ,  0, "..ttt.", OP_NORMAL },
+  { "inca",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..ttt.", OP_NORMAL },
+  { "incb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_B    ,  0, "..ttt.", OP_NORMAL },
+  { "rola",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..tttt", OP_NORMAL },
+  { "rolb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_B    ,  0, "..tttt", OP_NORMAL },
+  { "rora",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..tttt", OP_NORMAL },
+  { "rorb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_B    ,  0, "..tttt", OP_NORMAL },
+  { "asla",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..tttt", OP_NORMAL },
+  { "aslb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_B    ,  0, "..tttt", OP_NORMAL },
+  { "asra",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..tttt", OP_NORMAL },
+  { "asrb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_B    ,  0, "..tttt", OP_NORMAL },
+  { "lsra",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..Rttt", OP_NORMAL },
+  { "lsrb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_B    ,  0, "..Rttt", OP_NORMAL },
+  { "tsta",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , 0      ,  0, "..ttRR", OP_NORMAL },
+  { "tstb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , 0      ,  0, "..ttRR", OP_NORMAL },
+  { "aba",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A|M_B, M_A    ,  0, "t.tttt", OP_NORMAL },
+  { "sba",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A|M_B, M_A    ,  0, "..tttt", OP_NORMAL },
+  { "cba",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A|M_B, 0      ,  0, "..tttt", OP_NORMAL },
+  { "daa",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_A    ,  0, "..tttt", OP_NORMAL },
+  { "tab",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , M_B    ,  0, "..ttR.", OP_NORMAL },
+  { "tba",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_B    , M_A    ,  0, "..ttR.", OP_NORMAL },
+  { "psha",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, M_A    , 0      , -1, "......", OP_NORMAL },
+  { "pshb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, M_B    , 0      , -1, "......", OP_NORMAL },
+  { "pula",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, 0      , M_A    ,  1, "......", OP_NORMAL },
+  { "pulb",  {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, 0      , M_B    ,  1, "......", OP_NORMAL },
+  { "cpx",   {{3, 3}, {2, 4}, {2, 6}, {3, 5}, {0, 0}, {0, 0}}, 1, 0, M_X    , 0      ,  0, "..ttt.", OP_NORMAL },
+  { "ldx",   {{3, 3}, {2, 4}, {2, 6}, {3, 5}, {0, 0}, {0, 0}}, 1, 0, 0      , M_X    ,  0, "..ttR.", OP_NORMAL },
+  { "lds",   {{3, 3}, {2, 4}, {2, 6}, {3, 5}, {0, 0}, {0, 0}}, 1, 0, 0      , M_S    ,  0, "..ttR.", OP_NORMAL },
+  { "stx",   {{0, 0}, {2, 5}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 0, 1, M_X    , 0      ,  0, "..ttR.", OP_NORMAL },
+  { "sts",   {{0, 0}, {2, 5}, {2, 7}, {3, 6}, {0, 0}, {0, 0}}, 0, 1, M_S    , 0      ,  0, "..ttR.", OP_NORMAL },
+  { "inx",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, M_X    , M_X    ,  0, "...t..", OP_NORMAL },
+  { "dex",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, M_X    , M_X    ,  0, "...t..", OP_NORMAL },
+  { "ins",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, M_S    , M_S    ,  1, "......", OP_NORMAL },
+  { "des",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, M_S    , M_S    , -1, "......", OP_NORMAL },
+  { "txs",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, M_X    , M_S    ,  0, "......", OP_NORMAL },
+  { "tsx",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 4}, {0, 0}}, 0, 0, M_S    , M_X    ,  0, "......", OP_NORMAL },
+  { "bra",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bcc",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bcs",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "beq",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bge",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bgt",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bhi",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "ble",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bls",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "blt",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bmi",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bne",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bvc",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bvs",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bpl",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 4}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "bsr",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {2, 8}}, 0, 0, 0      , 0      ,  0, "......", OP_BR },
+  { "jmp",   {{0, 0}, {0, 0}, {2, 4}, {3, 3}, {0, 0}, {0, 0}}, 0, 0, 0      , 0      ,  0, "......", OP_JMP },
+  { "jsr",   {{0, 0}, {0, 0}, {2, 8}, {3, 9}, {0, 0}, {0, 0}}, 0, 0, 0      , 0      ,  0, "......", OP_JMP },
+  { "nop",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , 0      ,  0, "......", OP_SPECIAL },
+  { "rti",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1,10}, {0, 0}}, 0, 0, 0      , 0      ,  0, "tttttt", OP_SPECIAL },
+  { "rts",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 5}, {0, 0}}, 0, 0, 0      , 0      ,  0, "......", OP_SPECIAL },
+  { "swi",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1,12}, {0, 0}}, 0, 0, 0      , 0      ,  0, ".S....", OP_SPECIAL },
+  { "wai",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 9}, {0, 0}}, 0, 0, 0      , 0      ,  0, ".t....", OP_SPECIAL },
+  { "clc",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , 0      ,  0, ".....R", OP_NORMAL },
+  { "cli",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , 0      ,  0, ".R....", OP_NORMAL },
+  { "clv",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , 0      ,  0, "....R.", OP_NORMAL },
+  { "sec",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , 0      ,  0, ".....S", OP_NORMAL },
+  { "sei",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , 0      ,  0, ".S....", OP_NORMAL },
+  { "sev",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , 0      ,  0, "....S.", OP_NORMAL },
+  { "tap",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, M_A    , 0      ,  0, "tttttt", OP_NORMAL },
+  { "tpa",   {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {1, 2}, {0, 0}}, 0, 0, 0      , M_A    ,  0, "......", OP_NORMAL },
+};
+
+const mc6800opcodedata *
+mc6800_getOpcodeData (const char *inst)
+{
+  unsigned int i;
+
+  for (i = 0; i < sizeof (mc6800opcodeDataTable) / sizeof (mc6800opcodedata); i++)
+    if (!strcmp (inst, mc6800opcodeDataTable[i].name))
+      return &mc6800opcodeDataTable[i];
+
+  return NULL;
+}
+
 /* list of key words used by msc51 */
 static char *_mc6800_keywords[] =
 {
@@ -360,160 +484,6 @@ newAsmLineNode (void)
   return aln;
 }
 
-typedef struct mc6800opcodedata
-  {
-    char name[6];
-    char adrmode;
-    /* info for registers used and/or modified by an instruction will be added here */
-  }
-mc6800opcodedata;
-
-#define MC6800OP_STD 1
-#define MC6800OP_RMW 2
-#define MC6800OP_INH 3
-#define MC6800OP_IM1 4
-#define MC6800OP_BR 5
-#define MC6800OP_BTB 6
-#define MC6800OP_BSC 7
-#define MC6800OP_MOV 8
-#define MC6800OP_CBEQ 9
-#define MC6800OP_CPHX 10
-#define MC6800OP_LDHX 11
-#define MC6800OP_STHX 12
-#define MC6800OP_DBNZ 13
-
-/* These must be kept sorted by opcode name */
-static mc6800opcodedata mc6800opcodeDataTable[] =
-  {
-    {".db",   MC6800OP_INH}, /* used by the code generator only in the jump table */
-    {"adc",   MC6800OP_STD},
-    {"add",   MC6800OP_STD},
-    {"ais",   MC6800OP_IM1},
-    {"aix",   MC6800OP_IM1},
-    {"and",   MC6800OP_STD},
-    {"asl",   MC6800OP_RMW},
-    {"asla",  MC6800OP_INH},
-    {"aslx",  MC6800OP_INH},
-    {"asr",   MC6800OP_RMW},
-    {"asra",  MC6800OP_INH},
-    {"asrx",  MC6800OP_INH},
-    {"bcc",   MC6800OP_BR,},
-    {"bclr",  MC6800OP_BSC},
-    {"bcs",   MC6800OP_BR},
-    {"beq",   MC6800OP_BR},
-    {"bge",   MC6800OP_BR},
-    {"bgnd",  MC6800OP_INH},
-    {"bgt",   MC6800OP_BR},
-    {"bhcc",  MC6800OP_BR},
-    {"bhcs",  MC6800OP_BR},
-    {"bhi",   MC6800OP_BR},
-    {"bhs",   MC6800OP_BR},
-    {"bih",   MC6800OP_BR},
-    {"bil",   MC6800OP_BR},
-    {"bit",   MC6800OP_STD},
-    {"ble",   MC6800OP_BR},
-    {"blo",   MC6800OP_BR},
-    {"bls",   MC6800OP_BR},
-    {"blt",   MC6800OP_BR},
-    {"bmc",   MC6800OP_BR},
-    {"bmi",   MC6800OP_BR},
-    {"bms",   MC6800OP_BR},
-    {"bne",   MC6800OP_BR},
-    {"bpl",   MC6800OP_BR},
-    {"bra",   MC6800OP_BR},
-    {"brclr", MC6800OP_BTB},
-    {"brn",   MC6800OP_BR},
-    {"brset", MC6800OP_BTB},
-    {"bset",  MC6800OP_BSC},
-    {"bsr",   MC6800OP_BR},
-    {"cbeq",  MC6800OP_CBEQ},
-    {"cbeqa", MC6800OP_CBEQ},
-    {"cbeqx", MC6800OP_CBEQ},
-    {"clc",   MC6800OP_INH},
-    {"cli",   MC6800OP_INH},
-    {"clr",   MC6800OP_RMW},
-    {"clra",  MC6800OP_INH},
-    {"clrh",  MC6800OP_INH},
-    {"clrx",  MC6800OP_INH},
-    {"cmp",   MC6800OP_STD},
-    {"com",   MC6800OP_RMW},
-    {"coma",  MC6800OP_INH},
-    {"comx",  MC6800OP_INH},
-    {"cphx",  MC6800OP_CPHX},
-    {"cpx",   MC6800OP_STD},
-    {"daa",   MC6800OP_INH},
-    {"dbnz",  MC6800OP_DBNZ},
-    {"dbnza", MC6800OP_BR},
-    {"dbnzx", MC6800OP_BR},
-    {"dec",   MC6800OP_RMW},
-    {"deca",  MC6800OP_INH},
-    {"decx",  MC6800OP_INH},
-    {"div",   MC6800OP_INH},
-    {"eor",   MC6800OP_STD},
-    {"inc",   MC6800OP_RMW},
-    {"inca",  MC6800OP_INH},
-    {"incx",  MC6800OP_INH},
-    {"jmp",   MC6800OP_STD},
-    {"jsr",   MC6800OP_STD},
-    {"lda",   MC6800OP_STD},
-    {"ldhx",  MC6800OP_LDHX},
-    {"ldx",   MC6800OP_STD},
-    {"lsl",   MC6800OP_RMW},
-    {"lsla",  MC6800OP_INH},
-    {"lslx",  MC6800OP_INH},
-    {"lsr",   MC6800OP_RMW},
-    {"lsra",  MC6800OP_INH},
-    {"lsrx",  MC6800OP_INH},
-    {"mov",   MC6800OP_MOV},
-    {"mul",   MC6800OP_INH},
-    {"neg",   MC6800OP_RMW},
-    {"nega",  MC6800OP_INH},
-    {"negx",  MC6800OP_INH},
-    {"nop",   MC6800OP_INH},
-    {"nsa",   MC6800OP_INH},
-    {"ora",   MC6800OP_STD},
-    {"psha",  MC6800OP_INH},
-    {"pshh",  MC6800OP_INH},
-    {"pshx",  MC6800OP_INH},
-    {"pula",  MC6800OP_INH},
-    {"pulh",  MC6800OP_INH},
-    {"pulx",  MC6800OP_INH},
-    {"rol",   MC6800OP_RMW},
-    {"rola",  MC6800OP_INH},
-    {"rolx",  MC6800OP_INH},
-    {"ror",   MC6800OP_RMW},
-    {"rora",  MC6800OP_INH},
-    {"rorx",  MC6800OP_INH},
-    {"rsp",   MC6800OP_INH},
-    {"rti",   MC6800OP_INH},
-    {"rts",   MC6800OP_INH},
-    {"sbc",   MC6800OP_STD},
-    {"sec",   MC6800OP_INH},
-    {"sei",   MC6800OP_INH},
-    {"sta",   MC6800OP_STD},
-    {"sthx",  MC6800OP_STHX},
-    {"stop",  MC6800OP_INH},
-    {"stx",   MC6800OP_STD},
-    {"sub",   MC6800OP_STD},
-    {"swi",   MC6800OP_INH},
-    {"tap",   MC6800OP_INH},
-    {"tax",   MC6800OP_INH},
-    {"tpa",   MC6800OP_INH},
-    {"tst",   MC6800OP_RMW},
-    {"tsta",  MC6800OP_INH},
-    {"tstx",  MC6800OP_INH},
-    {"tsx",   MC6800OP_INH},
-    {"txa",   MC6800OP_INH},
-    {"txs",   MC6800OP_INH},
-    {"wait",  MC6800OP_INH}
-  };
-
-static int
-mc6800_opcodeCompare (const void *key, const void *member)
-{
-  return strcmp((const char *)key, ((mc6800opcodedata *)member)->name);
-}
-
 /*--------------------------------------------------------------------*/
 /* Given an instruction and its first two operands, compute the       */
 /* instruction size. There are a few cases where it's too complicated */
@@ -521,104 +491,38 @@ mc6800_opcodeCompare (const void *key, const void *member)
 /* cases we conservatively assume the 16-bit offset size.             */
 /*--------------------------------------------------------------------*/
 static int
-mc6800_instructionSize(const char *inst, const char *op1, const char *op2)
+mc6800_instructionSize (const char *inst, const char *op1, const char *op2)
 {
-  mc6800opcodedata *opcode;
-  int size;
-  long offset;
-  char * endnum = NULL;
-  
-  opcode = bsearch (inst, mc6800opcodeDataTable,
-                    sizeof(mc6800opcodeDataTable)/sizeof(mc6800opcodedata),
-                    sizeof(mc6800opcodedata), mc6800_opcodeCompare);
+  const mc6800opcodedata *opcode = mc6800_getOpcodeData (inst);
+  int mode, only, i, n;
 
   if (!opcode)
     return 999;
-  switch (opcode->adrmode)
-    {
-      case MC6800OP_INH: /* Inherent addressing mode */
-        return 1;
-        
-      case MC6800OP_BSC: /* Bit set/clear direct addressing mode */
-      case MC6800OP_BR:  /* Branch (1 byte signed offset) */
-      case MC6800OP_IM1: /* 1 byte immediate addressing mode */
-        return 2;
-        
-      case MC6800OP_BTB:  /* Bit test direct addressing mode and branch */
-        return 3;
-        
-      case MC6800OP_RMW: /* read/modify/write instructions */
-        if (!op2[0]) /* if not ,x or ,sp must be direct addressing mode */
-          return 2;
-        if (!op1[0])  /* if ,x with no offset */
-          return 1;
-        if (op2[0] == 'x')  /* if ,x with offset */
-          return 2;
-        return 3;  /* Otherwise, must be ,sp with offset */
-        
-      case MC6800OP_STD: /* standard instruction */
-        if (!op2[0])
-          {
-            if (op1[0] == '#') /* Immediate addressing mode */
-              return 2;
-            if (op1[0] == '*') /* Direct addressing mode */
-              return 2;
-            return 3; /* Otherwise, must be extended addressing mode */
-          }
-        else
-          {
-            if (!op1[0]) /* if ,x with no offset */
-              return 1;
-            size = 2;
-            if (op2[0] == 's')
-              size++;
-            offset = strtol (op1, &endnum, 0) & 0xffff;
-            if (endnum && *endnum)
-              size++;
-            else if (offset > 0xff)
-              size++;
-            return size;
-          }
-      case MC6800OP_MOV:
-        if (op2[0] == 'x')
-          return 2;
-        return 3;
-      case MC6800OP_CBEQ:
-        if (op2[0] == 'x' && !op1[0])
-          return 2;  /* cbeq ,x+,rel */
-        if (op2[0] == 's')
-          return 4;  /* cbeq oprx8,sp,rel */
-        return 3;
-      case MC6800OP_CPHX:
-        if (op1[0] == '*')
-          return 2;
-        return 3;
-      case MC6800OP_DBNZ:
-        if (!op2[0])
-          return 2;
-        if (!op1[0] && op2[0] == 'x')
-          return 2;
-        if (op2[0] == 's')
-          return 4;
-        return 3;
-      case MC6800OP_LDHX:
-      case MC6800OP_STHX:
-        if (op1[0] == '*')
-          return 2;
-        if (!op1[0] && op2[0] == 'x')
-          return 2;
-        if (op2[0] == 's' || op1[0] == '#' || !op2[0])
-          return 3;
-        size = 3;
-        offset = strtol (op1, &endnum, 0) & 0xffff;
-        if (endnum && *endnum)
-          size++;
-        else if (offset > 0xff)
-          size++;
-        return size;
-      default:
-        return 4;
-    }
+
+  for (i = 0, n = 0, only = MODE_INH; i < MODE_COUNT; i++)
+    if (opcode->mode[i].bytes)
+      {
+        n++;
+        only = i;
+      }
+
+  if (n == 1)
+    mode = only;
+  else if (op2[0] == 'x')
+    mode = MODE_IDX;
+  else if (op1[0] == '#')
+    mode = MODE_IMM;
+  else if (op1[0] == '*')
+    mode = MODE_DIR;
+  else if (!op1[0])
+    mode = MODE_INH;
+  else
+    mode = MODE_EXT;
+
+  if (!opcode->mode[mode].bytes)
+    return 999;
+
+  return opcode->mode[mode].bytes;
 }
 
 

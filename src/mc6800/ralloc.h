@@ -88,4 +88,52 @@ bitVect *mc6800_rUmaskForOp (operand * op);
 
 iCode *mc6800_ralloc2_cc(ebbIndex *ebbi);
 
+#define M_A 0x01
+#define M_B 0x02
+#define M_X 0x04
+#define M_S 0x08
+
+enum
+  {
+    MODE_IMM,
+    MODE_DIR,
+    MODE_IDX,
+    MODE_EXT,
+    MODE_INH,
+    MODE_REL,
+    MODE_COUNT
+  };
+
+typedef enum
+  {
+    OP_NORMAL,
+    OP_BR,
+    OP_JMP,
+    OP_SPECIAL
+  }
+mc6800optype;
+
+typedef struct
+  {
+    unsigned char bytes;
+    unsigned char cycles;
+  }
+mc6800opmode;
+
+typedef struct
+  {
+    char name[5];
+    mc6800opmode mode[MODE_COUNT];
+    unsigned char read;
+    unsigned char write;
+    unsigned char use;
+    unsigned char change;
+    signed char sp;
+    char flags[7];
+    mc6800optype type;
+  }
+mc6800opcodedata;
+
+const mc6800opcodedata *mc6800_getOpcodeData (const char *inst);
+
 #endif
