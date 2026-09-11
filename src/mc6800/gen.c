@@ -6155,6 +6155,7 @@ genAnd (iCode * ic, iCode * ifx)
   int bitpos = -1;
   unsigned char bytemask;
   bool needpulla = false;
+  bool needpullb = false;
   bool earlystore = false;
 
   D (emitcode (";     genAnd", ""));
@@ -6304,6 +6305,16 @@ genAnd (iCode * ic, iCode * ifx)
                   emitBranch ("bne", tlbl);
                 }
             }
+          else if (IS_AOP_D (AOP (left)) && offset == 0)
+            {
+              accopWithAop ("bitb", AOP (right), offset);
+              if (size)
+                {
+                  if (!tlbl && !regalloc_dry_run)
+                    tlbl = newiTempLabel (NULL);
+                  emitBranch ("bne", tlbl);
+                }
+            }
           else
             {
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
@@ -6343,6 +6354,8 @@ genAnd (iCode * ic, iCode * ifx)
     }
 
   needpulla = pushRegIfSurv (mc6800_reg_a);
+  if (IS_AOP_D (AOP (left)))
+    needpullb = pushRegIfSurv (mc6800_reg_b);
 
   offset = 0;
   while (size--)
@@ -6367,6 +6380,12 @@ genAnd (iCode * ic, iCode * ifx)
         transferAopAop (left->aop, offset, result->aop, offset);
       else if (aopIsLitVal (left->aop, offset, 1, 0xff) && !isOperandVolatile (right, false))
         transferAopAop (right->aop, offset, result->aop, offset);
+      else if (IS_AOP_D (AOP (left)) && offset == 0)
+        {
+          accopWithAop ("andb", AOP (right), offset);
+          mc6800_dirtyReg (mc6800_reg_b, false);
+          storeRegToAop (mc6800_reg_b, AOP (result), offset);
+        }
       else
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
@@ -6382,6 +6401,7 @@ genAnd (iCode * ic, iCode * ifx)
       offset++;
     }
 
+  pullOrFreeReg (mc6800_reg_b, needpullb);
   pullOrFreeReg (mc6800_reg_a, needpulla);
 
 release:
@@ -6401,6 +6421,7 @@ genOr (iCode * ic, iCode * ifx)
   unsigned long long lit = 0ull;
   unsigned char bytemask;
   bool needpulla = false;
+  bool needpullb = false;
   bool earlystore = false;
 
   D (emitcode (";     genOr", ""));
@@ -6470,6 +6491,8 @@ genOr (iCode * ic, iCode * ifx)
       symbol *tlbl = NULL;
 
       needpulla = pushRegIfSurv (mc6800_reg_a);
+      if (IS_AOP_D (AOP (left)))
+        needpullb = pushRegIfSurv (mc6800_reg_b);
 
       offset = 0;
       while (size--)
@@ -6479,6 +6502,17 @@ genOr (iCode * ic, iCode * ifx)
           if (AOP_TYPE (right) == AOP_LIT && bytemask == 0x00)
             {
               rmwWithAop ("tst", AOP (left), offset);
+              if (size)
+                {
+                  if (!tlbl && !regalloc_dry_run)
+                    tlbl = newiTempLabel (NULL);
+                  emitBranch ("bne", tlbl);
+                }
+            }
+          else if (IS_AOP_D (AOP (left)) && offset == 0)
+            {
+              accopWithAop ("orab", AOP (right), offset);
+              mc6800_dirtyReg (mc6800_reg_b, false);
               if (size)
                 {
                   if (!tlbl && !regalloc_dry_run)
@@ -6503,6 +6537,7 @@ genOr (iCode * ic, iCode * ifx)
       if (tlbl)
         emitLabel (tlbl);
 
+      pullOrFreeReg (mc6800_reg_b, needpullb);
       pullOrFreeReg (mc6800_reg_a, needpulla);
 
       if (ifx)
@@ -6526,6 +6561,8 @@ genOr (iCode * ic, iCode * ifx)
     }
 
   needpulla = pushRegIfSurv (mc6800_reg_a);
+  if (IS_AOP_D (AOP (left)))
+    needpullb = pushRegIfSurv (mc6800_reg_b);
 
   offset = 0;
   while (size--)
@@ -6545,6 +6582,12 @@ genOr (iCode * ic, iCode * ifx)
         transferAopAop (left->aop, offset, result->aop, offset);
       else if (aopIsLitVal (left->aop, offset, 1, 0x00))
         transferAopAop (right->aop, offset, result->aop, offset);
+      else if (IS_AOP_D (AOP (left)) && offset == 0)
+        {
+          accopWithAop ("orab", AOP (right), offset);
+          mc6800_dirtyReg (mc6800_reg_b, false);
+          storeRegToAop (mc6800_reg_b, AOP (result), offset);
+        }
       else
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
@@ -6560,6 +6603,7 @@ genOr (iCode * ic, iCode * ifx)
       offset++;
     }
 
+  pullOrFreeReg (mc6800_reg_b, needpullb);
   pullOrFreeReg (mc6800_reg_a, needpulla);
 
 release:
@@ -6577,6 +6621,7 @@ genXor (iCode * ic, iCode * ifx)
   operand *left, *right, *result;
   int size, offset = 0;
   bool needpulla = false;
+  bool needpullb = false;
   bool earlystore = false;
 
   D (emitcode (";     genXor", ""));
@@ -6608,6 +6653,8 @@ genXor (iCode * ic, iCode * ifx)
     }
 
   needpulla = pushRegIfSurv (mc6800_reg_a);
+  if (IS_AOP_D (AOP (left)))
+    needpullb = pushRegIfSurv (mc6800_reg_b);
 
   if (AOP_TYPE (result) == AOP_CRY)
     {
@@ -6618,16 +6665,32 @@ genXor (iCode * ic, iCode * ifx)
       offset = 0;
       while (size--)
         {
-          loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          if (AOP_TYPE (right) == AOP_LIT && ((ullFromVal (AOP (right)->aopu.aop_lit) >> (offset * 8)) & 0xff) == 0)
+          if (IS_AOP_D (AOP (left)) && offset == 0)
             {
-              emitcode ("tsta", "");
-              regalloc_dry_run_cost++;
+              if (AOP_TYPE (right) == AOP_LIT && ((ullFromVal (AOP (right)->aopu.aop_lit) >> (offset * 8)) & 0xff) == 0)
+                {
+                  mc6800_emitOp ("tstb", "");
+                  regalloc_dry_run_cost++;
+                }
+              else
+                {
+                  accopWithAop ("eorb", AOP (right), offset);
+                  mc6800_dirtyReg (mc6800_reg_b, false);
+                }
             }
           else
-            accopWithAop ("eora", AOP (right), offset);
+            {
+              loadRegFromAop (mc6800_reg_a, AOP (left), offset);
+              if (AOP_TYPE (right) == AOP_LIT && ((ullFromVal (AOP (right)->aopu.aop_lit) >> (offset * 8)) & 0xff) == 0)
+                {
+                  emitcode ("tsta", "");
+                  regalloc_dry_run_cost++;
+                }
+              else
+                accopWithAop ("eora", AOP (right), offset);
 
-          mc6800_freeReg (mc6800_reg_a);
+              mc6800_freeReg (mc6800_reg_a);
+            }
           if (size)
             emitBranch ("bne", tlbl);
           else
@@ -6639,6 +6702,7 @@ genXor (iCode * ic, iCode * ifx)
                */
               if (!regalloc_dry_run)
                 emitLabel (tlbl);
+              pullOrFreeReg (mc6800_reg_b, needpullb);
               pullOrFreeReg (mc6800_reg_a, needpulla);
               if (ifx)
                 genIfxJump (ifx, "a");
@@ -6654,6 +6718,17 @@ genXor (iCode * ic, iCode * ifx)
     {
       if (earlystore && offset == 1)
         pullReg (mc6800_reg_a);
+      if (IS_AOP_D (AOP (left)) && offset == 0)
+        {
+          if (!aopIsLitVal (right->aop, offset, 1, 0x00))
+            {
+              accopWithAop ("eorb", right->aop, offset);
+              mc6800_dirtyReg (mc6800_reg_b, false);
+            }
+          storeRegToAop (mc6800_reg_b, AOP (result), offset);
+          offset++;
+          continue;
+        }
       loadRegFromAop (mc6800_reg_a, AOP (left), offset);
       if (!aopIsLitVal (right->aop, offset, 1, 0x00))
         accopWithAop ("eora", right->aop, offset);
@@ -6667,6 +6742,7 @@ genXor (iCode * ic, iCode * ifx)
       offset++;
     }
 
+  pullOrFreeReg (mc6800_reg_b, needpullb);
   pullOrFreeReg (mc6800_reg_a, needpulla);
 
 release:
