@@ -296,7 +296,7 @@ static void
 _mc6800_setDefaultOptions (void)
 {
   options.code_loc = 0x0100;
-  options.data_loc = 0x80;
+  options.data_loc = 0;
   options.xdata_loc = 0;        /* 0 means immediately following data */
   options.stack_loc = 0x7fff;
   options.out_fmt = 's';        /* use motorola S19 output */
@@ -660,7 +660,7 @@ PORT mc6800_port =
     "XSEG",
     "STACK",
     "CSEG    (CODE)",
-    "DSEG    (PAG)",
+    "ZP      (PAG)",
     NULL, /* "ISEG" */
     NULL, /* "PSEG" */
     "XSEG",

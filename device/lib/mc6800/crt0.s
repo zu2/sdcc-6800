@@ -10,6 +10,7 @@ SIMIF_STOP =	0x73
 ;--------------------------------------------------------
 ;  Ordering of segments for the linker.
 ;--------------------------------------------------------
+	.area ZP      (PAG)
 	.area HOME    (CODE)
 	.area GSINIT0 (CODE)
 	.area GSINIT  (CODE)
@@ -17,10 +18,9 @@ SIMIF_STOP =	0x73
 	.area CSEG    (CODE)
 	.area XINIT   (CODE)
 	.area CONST   (CODE)
-	.area DSEG    (PAG)
-	.area OSEG    (PAG, OVR)
 	.area XSEG
 	.area XISEG
+	.area OSEG    (PAG, OVR)
 
 ;--------------------------------------------------------
 ;  Reset vector
