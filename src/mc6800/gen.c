@@ -2613,7 +2613,9 @@ asmopToBool (asmop *aop, bool resultInA)
     {
       loadRegFromAop (mc6800_reg_a, aop, 0);
       rmwWithReg ("neg", mc6800_reg_a);
-      loadRegFromConst (mc6800_reg_a, 0);
+      mc6800_emitOp ("ldaa", "#0x00");
+      regalloc_dry_run_cost += 2;
+      mc6800_dirtyReg (mc6800_reg_a, false);
       rmwWithReg ("rol", mc6800_reg_a);
       return;
     }
@@ -2627,9 +2629,9 @@ asmopToBool (asmop *aop, bool resultInA)
           regalloc_dry_run_cost++;
           flagsonly = false;
         }
-      if (IS_AOP_B (aop))
+      else if (IS_AOP_B (aop))
         {
-          emitcode ("tsta", "");
+          mc6800_emitOp ("tstb", "");
           regalloc_dry_run_cost++;
           flagsonly = false;
         }
@@ -2668,11 +2670,11 @@ asmopToBool (asmop *aop, bool resultInA)
       loadRegFromAop (mc6800_reg_a, aop, offset--);
       if (isFloat)
         {
-          emitcode ("and", "#0x7F");      //clear sign bit
+          mc6800_emitOp ("anda", "#0x7F");      //clear sign bit
           regalloc_dry_run_cost += 2;
         }
       while (--size)
-        accopWithAop ("ora", aop, offset--);
+        accopWithAop ("oraa", aop, offset--);
       if (needpula)
         pullReg (mc6800_reg_a);
       else
@@ -2710,7 +2712,7 @@ asmopToBool (asmop *aop, bool resultInA)
           if (mc6800_reg_a->isFree)
             {
               loadRegFromAop (mc6800_reg_a, aop, 0);
-              accopWithAop ("ora", aop, 1);
+              accopWithAop ("oraa", aop, 1);
               mc6800_freeReg (mc6800_reg_a);
               flagsonly = false;
             }
@@ -2733,11 +2735,11 @@ asmopToBool (asmop *aop, bool resultInA)
           loadRegFromAop (mc6800_reg_a, aop, offset--);
           if (isFloat)
             {
-              emitcode ("and", "#0x7F");
+              mc6800_emitOp ("anda", "#0x7F");
               regalloc_dry_run_cost += 2;
             }
           while (--size)
-            accopWithAop ("ora", aop, offset--);
+            accopWithAop ("oraa", aop, offset--);
           if (needpula)
             pullReg (mc6800_reg_a);
           else
@@ -2973,7 +2975,7 @@ genNot (iCode * ic)
   needpulla = pushRegIfSurv (mc6800_reg_a);
   asmopToBool (AOP (IC_LEFT (ic)), true);
 
-  emitcode ("eor", one);
+  mc6800_emitOp ("eora", "%s", one);
   regalloc_dry_run_cost += 2;
   storeRegToFullAop (mc6800_reg_a, AOP (IC_RESULT (ic)), false);
   pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -5700,7 +5702,6 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   opcode = ic->op;
 
   D (emitcode (";     genCmpEQorNE", "(%s)", nameCmp (opcode)));
-#if 0
   result = IC_RESULT (ic);
   left = IC_LEFT (ic);
   right = IC_RIGHT (ic);
@@ -5717,6 +5718,13 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       left = right;
       right = temp;
       opcode = exchangedCmp (opcode);
+    }
+
+  if (IS_AOP_X (AOP (left)) && IS_AOP_D (AOP (right)))
+    {
+      operand *temp = left;
+      left = right;
+      right = temp;
     }
 
   if (ifx)
@@ -5736,28 +5744,47 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   size = max (AOP_SIZE (left), AOP_SIZE (right));
 
   if ((size == 2)
-      && ((AOP_TYPE (left) == AOP_DIR || IS_AOP_HX (AOP (left))) && (AOP_SIZE (left) == 2))
-      && ((AOP_TYPE (right) == AOP_LIT) || ((AOP_TYPE (right) == AOP_DIR || IS_S08 && AOP_TYPE (right) == AOP_EXT) && (AOP_SIZE (right) == 2))) && mc6800_reg_h->isDead && mc6800_reg_x->isDead)
+      && ((AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT || IS_AOP_X (AOP (left))) && (AOP_SIZE (left) == 2))
+      && ((AOP_TYPE (right) == AOP_LIT) || (AOP_TYPE (right) == AOP_IMMD) || ((AOP_TYPE (right) == AOP_DIR || AOP_TYPE (right) == AOP_EXT) && (AOP_SIZE (right) == 2))) && (mc6800_reg_x->isDead || IS_AOP_X (AOP (left))))
     {
-      loadRegFromAop (mc6800_reg_hx, AOP (left), 0);
-      emitcode ("cphx", "%s", aopAdrStr (AOP (right), 0, true));
+      loadRegFromAop (mc6800_reg_x, AOP (left), 0);
+      mc6800_emitOp ("cpx", "%s", aopAdrStr (AOP (right), 0, true));
       regalloc_dry_run_cost += (AOP_TYPE (right) == AOP_DIR ? 2 : 3);
-      mc6800_freeReg (mc6800_reg_hx);
+      mc6800_freeReg (mc6800_reg_x);
+    }
+  else if (IS_AOP_D (AOP (left)) && IS_AOP_X (AOP (right)))
+    {
+      const char *tmp = allocTemp ();
+      mc6800_emitOp ("stx", "%s", tmp);
+      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("cmpb", "%s+1", tmp);
+      regalloc_dry_run_cost += 2;
+      if (!tlbl_NE && !regalloc_dry_run)
+        tlbl_NE = newiTempLabel (NULL);
+      emitBranch ("bne", tlbl_NE);
+      mc6800_emitOp ("cmpa", "%s", tmp);
+      regalloc_dry_run_cost += 2;
+      freeTemp ();
     }
   else
     {
       offset = 0;
       while (size--)
         {
-          if (AOP_TYPE (left) == AOP_REG && AOP (left)->aopu.aop_reg[offset]->rIdx == X_IDX)
+          if (AOP_TYPE (left) == AOP_REG && AOP (left)->aopu.aop_reg[offset]->rIdx == B_IDX)
             {
               if (aopIsLitVal (right->aop, offset, 1, 0x00))
                 {
-                  emitcode ("tstx", "");
+                  mc6800_emitOp ("tstb", "");
+                  regalloc_dry_run_cost++;
+                }
+              else if (AOP_TYPE (right) == AOP_REG)
+                {
+                  mc6800_emitOp ("cba", "");
                   regalloc_dry_run_cost++;
                 }
               else
-                accopWithAop ("cpx", AOP (right), offset);
+                accopWithAop ("cmpb", AOP (right), offset);
             }
           else
             {
@@ -5771,8 +5798,13 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
                   emitcode ("tsta", "");
                   regalloc_dry_run_cost++;
                 }
+              else if (AOP_TYPE (right) == AOP_REG)
+                {
+                  mc6800_emitOp ("cba", "");
+                  regalloc_dry_run_cost++;
+                }
               else
-                accopWithAop ("cmp", AOP (right), offset);
+                accopWithAop ("cmpa", AOP (right), offset);
               if (!(AOP_TYPE (left) == AOP_REG && AOP (left)->aopu.aop_reg[offset]->rIdx == A_IDX))
                 pullOrFreeReg (mc6800_reg_a, needpulla);
               needpulla = false;
@@ -5862,7 +5894,6 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       pullOrFreeReg (mc6800_reg_a, needpulla);
       freeAsmop (result, NULL, ic, true);
     }
-#endif
 }
 
 /*-----------------------------------------------------------------*/
