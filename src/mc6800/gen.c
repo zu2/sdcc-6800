@@ -6151,7 +6151,6 @@ genAnd (iCode * ic, iCode * ifx)
   operand *left, *right, *result;
   int size, offset = 0;
   unsigned long long lit = 0ll;
-  unsigned long long litinv;
   int bitpos = -1;
   unsigned char bytemask;
   bool needpulla = false;
@@ -6199,35 +6198,6 @@ genAnd (iCode * ic, iCode * ifx)
       else if (size == 8)
         lit &= 0xffffffffffffffff;
       bitpos = isLiteralBit (lit) - 1;
-    }
-
-  if (ifx && AOP_TYPE (result) == AOP_CRY && AOP_TYPE (right) == AOP_LIT && AOP_TYPE (left) == AOP_DIR && bitpos >= 0)
-    {
-      symbol *tlbl = NULL;
-      if (!regalloc_dry_run)
-        tlbl = newiTempLabel (NULL);
-      if (IC_TRUE (ifx))
-        {
-          if (!regalloc_dry_run)
-            emitcode ("brclr", "#%d,%s,%05d$", bitpos & 7, aopAdrStr (AOP (left), bitpos >> 3, false), labelKey2num ((tlbl->key)));
-          regalloc_dry_run_cost += 3;
-          emitBranch ("jmp", IC_TRUE (ifx));
-          if (!regalloc_dry_run)
-            emitLabel (tlbl);
-          if (IC_FALSE (ifx))
-            emitBranch ("jmp", IC_FALSE (ifx));
-        }
-      else
-        {
-          if (!regalloc_dry_run)
-            emitcode ("brset", "#%d,%s,%05d$", bitpos & 7, aopAdrStr (AOP (left), bitpos >> 3, false), labelKey2num ((tlbl->key)));
-          regalloc_dry_run_cost += 3;
-          emitBranch ("jmp", IC_FALSE (ifx));
-          if (!regalloc_dry_run)
-            emitLabel (tlbl);
-        }
-      ifx->generated = true;
-      goto release;
     }
 
   if (AOP_TYPE (result) == AOP_CRY && size > 1 && (isOperandVolatile (left, false) || isOperandVolatile (right, false)))
@@ -6340,18 +6310,6 @@ genAnd (iCode * ic, iCode * ifx)
     }
 
   size = AOP_SIZE (result);
-
-  if (AOP_TYPE (right) == AOP_LIT)
-    {
-      litinv = (~lit) & ((0xffffffffffffffffull) >> (8 * (8 - size)));
-      if (sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))) && (AOP_TYPE (left) == AOP_DIR) && isLiteralBit (litinv))
-        {
-          bitpos = isLiteralBit (litinv) - 1;
-          emitcode ("bclr", "#%d,%s", bitpos & 7, aopAdrStr (AOP (left), bitpos >> 3, false));
-          regalloc_dry_run_cost += 2;
-          goto release;
-        }
-    }
 
   needpulla = pushRegIfSurv (mc6800_reg_a);
   if (IS_AOP_D (AOP (left)))
@@ -6550,15 +6508,6 @@ genOr (iCode * ic, iCode * ifx)
     lit = ullFromVal (AOP (right)->aopu.aop_lit);
 
   size = AOP_SIZE (result);
-
-  if (sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))) &&
-      (AOP_TYPE (right) == AOP_LIT) && isLiteralBit (lit) && (AOP_TYPE (left) == AOP_DIR))
-    {
-      int bitpos = isLiteralBit (lit) - 1;
-      emitcode ("bset", "#%d,%s", bitpos & 7, aopAdrStr (AOP (left), bitpos >> 3, false));
-      regalloc_dry_run_cost += 2;
-      goto release;
-    }
 
   needpulla = pushRegIfSurv (mc6800_reg_a);
   if (IS_AOP_D (AOP (left)))
