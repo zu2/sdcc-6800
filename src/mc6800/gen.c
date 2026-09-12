@@ -6202,24 +6202,31 @@ genAnd (iCode * ic, iCode * ifx)
 
   if (AOP_TYPE (result) == AOP_CRY && size > 1 && (isOperandVolatile (left, false) || isOperandVolatile (right, false)))
     {
+      const char *tmp = allocTemp ();
+
       needpulla = pushRegIfSurv (mc6800_reg_a);
 
       /* this generates ugly code, but meets volatility requirements */
       loadRegFromConst (mc6800_reg_a, 0);
-      pushReg (mc6800_reg_a, true);
+      mc6800_emitOp ("staa", "*%s", tmp);
+      regalloc_dry_run_cost += 2;
 
       offset = 0;
       while (size--)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
           accopWithAop ("anda", AOP (right), offset);
-          emitcode ("ora", "1,s");
-          emitcode ("sta", "1,s");
-          regalloc_dry_run_cost += 6;
+          mc6800_emitOp ("oraa", "*%s", tmp);
+          mc6800_emitOp ("staa", "*%s", tmp);
+          regalloc_dry_run_cost += 4;
           offset++;
         }
 
-      pullReg (mc6800_reg_a);
+      mc6800_emitOp ("ldaa", "*%s", tmp);
+      regalloc_dry_run_cost += 2;
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      mc6800_useReg (mc6800_reg_a);
+      freeTemp ();
       emitcode ("tsta", "");
       regalloc_dry_run_cost++;
 
@@ -6416,24 +6423,31 @@ genOr (iCode * ic, iCode * ifx)
 
   if (AOP_TYPE (result) == AOP_CRY && size > 1 && (isOperandVolatile (left, false) || isOperandVolatile (right, false)))
     {
+      const char *tmp = allocTemp ();
+
       needpulla = pushRegIfSurv (mc6800_reg_a);
 
       /* this generates ugly code, but meets volatility requirements */
       loadRegFromConst (mc6800_reg_a, 0);
-      pushReg (mc6800_reg_a, true);
+      mc6800_emitOp ("staa", "*%s", tmp);
+      regalloc_dry_run_cost += 2;
 
       offset = 0;
       while (size--)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
           accopWithAop ("oraa", AOP (right), offset);
-          emitcode ("ora", "1,s");
-          emitcode ("sta", "1,s");
-          regalloc_dry_run_cost += 6;
+          mc6800_emitOp ("oraa", "*%s", tmp);
+          mc6800_emitOp ("staa", "*%s", tmp);
+          regalloc_dry_run_cost += 4;
           offset++;
         }
 
-      pullReg (mc6800_reg_a);
+      mc6800_emitOp ("ldaa", "*%s", tmp);
+      regalloc_dry_run_cost += 2;
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      mc6800_useReg (mc6800_reg_a);
+      freeTemp ();
       emitcode ("tsta", "");
       regalloc_dry_run_cost++;
 
