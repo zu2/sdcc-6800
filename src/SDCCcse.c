@@ -839,7 +839,7 @@ promoteptrdcl (const int dcl)
   switch (dcl)
     {
       case POINTER:
-        if (TARGET_HC08_LIKE)
+        if (TARGET_HC08_LIKE || TARGET_MC6800_LIKE)
           return FPOINTER; /* zero page part of full address space */
         break;
       case IPOINTER:

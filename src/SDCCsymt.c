@@ -2225,7 +2225,7 @@ checkSClass (symbol *sym, bool isProto)
       if (SPEC_ADDR (sym->etype) + getSize (sym->type) - 1 > 0xff)
         werror (W_IDATA_ABSRANGE, sym->name);
     }
-  else if ((TARGET_HC08_LIKE || TARGET_MOS6502_LIKE) && IS_ABSOLUTE (sym->etype) && SPEC_SCLS (sym->etype) == S_DATA)
+  else if ((TARGET_HC08_LIKE || TARGET_MOS6502_LIKE || TARGET_MC6800_LIKE) && IS_ABSOLUTE (sym->etype) && SPEC_SCLS (sym->etype) == S_DATA)
     {
       if (SPEC_ADDR (sym->etype) + getSize (sym->type) - 1 > 0xff)
         werror (W_DATA_ABSRANGE, sym->name);
