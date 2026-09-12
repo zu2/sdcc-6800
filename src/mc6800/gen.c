@@ -5621,9 +5621,41 @@ genCmp (iCode * ic, iCode * ifx)
       && ((AOP_TYPE (left) == AOP_DIR || IS_AOP_D (AOP (left))) && (AOP_SIZE (left) == 2))
       && ((AOP_TYPE (right) == AOP_LIT) || ((AOP_TYPE (right) == AOP_DIR || AOP_TYPE (right) == AOP_EXT) && (AOP_SIZE (right) == 2))) && (mc6800_reg_d->isDead || IS_AOP_D (AOP (left))))
     {
-      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-      emitcode ("cmpd", "%s", aopAdrStr (AOP (right), 0, true));
-      regalloc_dry_run_cost += (AOP_TYPE (right) == AOP_DIR ? 2 : 3);
+      if (opcode == '<' || opcode == GE_OP)
+        {
+          loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+          mc6800_emitOp ("subb", "%s", aopAdrStr (AOP (right), 0, false));
+          mc6800_emitOp ("sbca", "%s", aopAdrStr (AOP (right), 1, false));
+          regalloc_dry_run_cost += (AOP_TYPE (right) == AOP_EXT ? 6 : 4);
+        }
+      else if (AOP_TYPE (right) == AOP_LIT
+               && (ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) != (sign ? 0x7fffull : 0xffffull))
+        {
+          unsigned int lim = (unsigned int) ((ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) + 1);
+
+          loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+          mc6800_emitOp ("subb", "#0x%02x", lim & 0xff);
+          mc6800_emitOp ("sbca", "#0x%02x", (lim >> 8) & 0xff);
+          regalloc_dry_run_cost += 4;
+          opcode = (opcode == '>') ? GE_OP : '<';
+        }
+      else
+        {
+          const char *tmp = allocTemp ();
+
+          allocTemp ();
+          loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+          mc6800_emitOp ("staa", "*%s", tmp);
+          mc6800_emitOp ("stab", "*%s+1", tmp);
+          mc6800_emitOp ("ldaa", "%s", aopAdrStr (AOP (right), 0, false));
+          mc6800_emitOp ("suba", "*%s+1", tmp);
+          mc6800_emitOp ("ldaa", "%s", aopAdrStr (AOP (right), 1, false));
+          mc6800_emitOp ("sbca", "*%s", tmp);
+          regalloc_dry_run_cost += (AOP_TYPE (right) == AOP_EXT ? 14 : 12);
+          freeTemp ();
+          freeTemp ();
+          opcode = exchangedCmp (opcode);
+        }
       mc6800_freeReg (mc6800_reg_d);
     }
   else
