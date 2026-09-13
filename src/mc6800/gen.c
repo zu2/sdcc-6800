@@ -4410,7 +4410,7 @@ genPlus (iCode *ic)
 	      break;
       case 2: genPlus16(ic);
 	      break;
-      defalut:genPlusMany(ic);
+      default:genPlusMANY(ic);
 	      break;
     }
 
