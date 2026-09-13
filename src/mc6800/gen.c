@@ -1142,22 +1142,6 @@ storeConstToAop (int c, asmop * aop, int loffset)
 
   switch (aop->type)
     {
-    case AOP_DIR:
-      /* clr operates with read-modify-write cycles, so don't use if the */
-      /* destination is volatile to avoid the read side-effect. */
-      if (!c && !(aop->op && isOperandVolatile (aop->op, false)) && optimize.codeSize)
-        {
-          /* clr dst : 2 bytes, 5 cycles */
-          emitcode ("clr", "%s", aopAdrStr (aop, loffset, false));
-          regalloc_dry_run_cost += 2;
-        }
-      else
-        {
-          /* mov #0,dst : 3 bytes, 4 cycles */
-          emitcode ("mov", "!immedbyte,%s", c, aopAdrStr (aop, loffset, false));
-          regalloc_dry_run_cost += 3;
-        }
-      break;
     case AOP_REG:
       if (loffset > (aop->size - 1))
         break;
@@ -1165,6 +1149,22 @@ storeConstToAop (int c, asmop * aop, int loffset)
       break;
     case AOP_DUMMY:
       break;
+    case AOP_EXT:
+    case AOP_DIR:
+      /* clr operates with read-modify-write cycles, so don't use if the */
+      /* destination is volatile to avoid the read side-effect. */
+      if (!c && !(aop->op && isOperandVolatile (aop->op, false)))
+        {
+          const char *adr = aopAdrStr (aop, loffset, false);
+
+          if (adr[0] == '*')
+            adr++;
+          /* clr dst : 3 bytes, 6 cycles */
+          emitcode ("clr", "%s", adr);
+          regalloc_dry_run_cost += 3;
+          break;
+        }
+      /* fall through */
     default:
       if (mc6800_reg_a->isFree)
         {
@@ -1202,22 +1202,6 @@ storeImmToAop (char *c, asmop * aop, int loffset)
 
   switch (aop->type)
     {
-    case AOP_DIR:
-      /* clr operates with read-modify-write cycles, so don't use if the */
-      /* destination is volatile to avoid the read side-effect. */
-      if (!strcmp (c, zero) && !(aop->op && isOperandVolatile (aop->op, false)) && optimize.codeSize)
-        {
-          /* clr dst : 2 bytes, 5 cycles */
-          emitcode ("clr", "%s", aopAdrStr (aop, loffset, false));
-          regalloc_dry_run_cost += 2;
-        }
-      else
-        {
-          /* mov #0,dst : 3 bytes, 4 cycles */
-          emitcode ("mov", "%s,%s", c, aopAdrStr (aop, loffset, false));
-          regalloc_dry_run_cost += 3;
-        }
-      break;
     case AOP_REG:
       if (loffset > (aop->size - 1))
         break;
@@ -1225,6 +1209,22 @@ storeImmToAop (char *c, asmop * aop, int loffset)
       break;
     case AOP_DUMMY:
       break;
+    case AOP_EXT:
+    case AOP_DIR:
+      /* clr operates with read-modify-write cycles, so don't use if the */
+      /* destination is volatile to avoid the read side-effect. */
+      if (!strcmp (c, zero) && !(aop->op && isOperandVolatile (aop->op, false)))
+        {
+          const char *adr = aopAdrStr (aop, loffset, false);
+
+          if (adr[0] == '*')
+            adr++;
+          /* clr dst : 3 bytes, 6 cycles */
+          emitcode ("clr", "%s", adr);
+          regalloc_dry_run_cost += 3;
+          break;
+        }
+      /* fall through */
     default:
       if (mc6800_reg_a->isFree)
         {
@@ -1371,15 +1371,6 @@ transferAopAop (asmop *srcaop, int srcofs, asmop *dstaop, int dstofs)
       return;
     }
     
-  if ((dstaop->type == AOP_DIR) && (srcaop->type == AOP_DIR))
-    {
-      const char *src = aopAdrStr (srcaop, srcofs, false);
-      /* mov src,dst : 3 bytes, 5 cycles */
-      emitcode ("mov", "%s,%s", src, aopAdrStr (dstaop, dstofs, false));
-      regalloc_dry_run_cost += 3;
-      return;
-    }
-
   if (dstaop->type == AOP_REG)
     {
       reg = dstaop->aopu.aop_reg[dstofs];
