@@ -166,8 +166,8 @@ static bool ABXinst_ok(const assignment &a, unsigned short int i, const G_t &G, 
   bool result_in_A = operand_in_reg(result, REG_A, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
   bool result_in_B = operand_in_reg(result, REG_B, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
   bool result_in_X = operand_in_reg(result, REG_XL, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
-  bool left_in_A = operand_in_reg(result, REG_A, ia, i, G);
-  bool left_in_X = operand_in_reg(result, REG_XL, ia, i, G);
+  bool left_in_A = operand_in_reg(left, REG_A, ia, i, G);
+  bool left_in_B = operand_in_reg(left, REG_B, ia, i, G);
 
   const cfg_dying_t &dying = G[i].dying;
 
@@ -180,7 +180,7 @@ static bool ABXinst_ok(const assignment &a, unsigned short int i, const G_t &G, 
   if(ic->op == JUMPTABLE && (unused_A || dying_A))
     return(true);
 
-  if(ic->op == IPUSH && (unused_A || dying_A || left_in_A || operand_in_reg(left, REG_B, ia, i, G) || left_in_X))
+  if(ic->op == IPUSH && (unused_A || dying_A || left_in_A || left_in_B))
     return(true);
 
   if(ic->op == RECEIVE && (!ic->next || !(ic->next->op == RECEIVE) || !result_in_X || getSize(operandType(result)) >= 2))
@@ -236,6 +236,10 @@ template <class G_t, class I_t>
 static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
 {
   const i_assignment_t &ia = a.i_assignment;
+  const iCode *ic = G[i].ic;
+
+  if(ic->op == LEFT_OP && operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G))
+    return(false);
 
   bool unused_XL = (ia.registers[REG_XL][1] < 0);
   bool unused_XH = (ia.registers[REG_XH][1] < 0);
