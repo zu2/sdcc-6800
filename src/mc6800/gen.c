@@ -71,26 +71,26 @@ _G;
 static asmop *mc6800_aop_pass[2];
 static asmop *mc6800_aop_ret[8];
 
+static const char *tempname[NUM_TEMP_REGS] =
+  {
+    "___SDCC_mc6800_tmp0", "___SDCC_mc6800_tmp1",
+    "___SDCC_mc6800_tmp2", "___SDCC_mc6800_tmp3",
+    "___SDCC_mc6800_tmp4", "___SDCC_mc6800_tmp5",
+    "___SDCC_mc6800_tmp6", "___SDCC_mc6800_tmp7"
+  };
+
 static const char *
 allocTemp (void)
 {
-  static const char *tempname[NUM_TEMP_REGS] =
-    {
-      "___SDCC_mc6800_tmp0", "___SDCC_mc6800_tmp1",
-      "___SDCC_mc6800_tmp2", "___SDCC_mc6800_tmp3",
-      "___SDCC_mc6800_tmp4", "___SDCC_mc6800_tmp5",
-      "___SDCC_mc6800_tmp6", "___SDCC_mc6800_tmp7"
-    };
-
   wassertl (_G.tempOfs < NUM_TEMP_REGS, "out of temporaries");
   return tempname[_G.tempOfs++];
 }
 
-static void
+static const char *
 freeTemp (void)
 {
   wassertl (_G.tempOfs > 0, "temporary underflow");
-  _G.tempOfs--;
+  return tempname[--_G.tempOfs];
 }
 static asmop tsxaop;
 
@@ -313,6 +313,7 @@ static int
 pushReg (reg_info * reg, bool freereg)
 {
   int regidx = reg->rIdx;
+  const char *tmp;
 
   switch (regidx)
     {
@@ -329,17 +330,17 @@ pushReg (reg_info * reg, bool freereg)
       updateCFA ();
       break;
     case X_IDX:
-      emitcode ("pshx", "");
-      regalloc_dry_run_cost++;
-      _G.stackPushes++;
-      updateCFA ();
+      tmp = allocTemp ();
+      allocTemp ();
+      mc6800_emitOp ("stx", "*%s", tmp);
+      regalloc_dry_run_cost += 2;
       break;
     case D_IDX:
       mc6800_emitOp ("psha", "");
       regalloc_dry_run_cost++;
       updateCFA ();
       _G.stackPushes++;
-      emitcode ("pshx", "");
+      mc6800_emitOp ("pshb", "");
       regalloc_dry_run_cost++;
       updateCFA ();
       _G.stackPushes++;
@@ -359,6 +360,7 @@ static void
 pullReg (reg_info * reg)
 {
   int regidx = reg->rIdx;
+  const char *tmp;
 
   switch (regidx)
     {
@@ -375,10 +377,10 @@ pullReg (reg_info * reg)
       updateCFA ();
       break;
     case X_IDX:
-      emitcode ("pulx", "");
-      regalloc_dry_run_cost++;
-      _G.stackPushes--;
-      updateCFA ();
+      freeTemp ();
+      tmp = freeTemp ();
+      mc6800_emitOp ("ldx", "*%s", tmp);
+      regalloc_dry_run_cost += 2;
       break;
     case D_IDX:
       mc6800_emitOp ("pulb", "");
