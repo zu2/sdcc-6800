@@ -252,13 +252,13 @@ static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, co
   if(!unused_XL && I[ia.registers[REG_XL][1]].size != 2 || !unused_XH && I[ia.registers[REG_XH][1]].size != 2 ||
     ia.registers[REG_XL][0] >= 0 && I[ia.registers[REG_XL][0]].size != 2 || ia.registers[REG_XH][0] >= 0 && I[ia.registers[REG_XH][0]].size != 2)
     return(false);
-  if(ia.registers[REG_XL][1] >= 0 && (ia.registers[REG_XH][1] <= 0 || I[ia.registers[REG_XL][1]].v != I[ia.registers[REG_XH][1]].v))
+  if(ia.registers[REG_XL][1] >= 0 && (ia.registers[REG_XH][1] < 0 || I[ia.registers[REG_XL][1]].v != I[ia.registers[REG_XH][1]].v))
     return(false);
-  if(ia.registers[REG_XH][1] >= 0 && (ia.registers[REG_XL][1] <= 0 || I[ia.registers[REG_XH][1]].v != I[ia.registers[REG_XL][1]].v))
+  if(ia.registers[REG_XH][1] >= 0 && (ia.registers[REG_XL][1] < 0 || I[ia.registers[REG_XH][1]].v != I[ia.registers[REG_XL][1]].v))
     return(false);
-  if(ia.registers[REG_XL][0] >= 0 && (ia.registers[REG_XH][0] <= 0 || I[ia.registers[REG_XL][0]].v != I[ia.registers[REG_XH][0]].v))
+  if(ia.registers[REG_XL][0] >= 0 && (ia.registers[REG_XH][0] < 0 || I[ia.registers[REG_XL][0]].v != I[ia.registers[REG_XH][0]].v))
     return(false);
-  if(ia.registers[REG_XH][0] >= 0 && (ia.registers[REG_XL][0] <= 0 || I[ia.registers[REG_XH][0]].v != I[ia.registers[REG_XL][0]].v))
+  if(ia.registers[REG_XH][0] >= 0 && (ia.registers[REG_XL][0] < 0 || I[ia.registers[REG_XH][0]].v != I[ia.registers[REG_XL][0]].v))
     return(false);
   if(I[ia.registers[REG_XL][1]].byte != 0 || I[ia.registers[REG_XH][1]].byte != 1)
     return(false);
