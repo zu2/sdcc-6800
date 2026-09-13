@@ -752,6 +752,17 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
   switch (regidx)
     {
     case A_IDX:
+      if (aop->type == AOP_REG && IS_AOP_X (aop) && loffset < aop->size)
+        {
+          const char *tmp = allocTemp ();
+
+          mc6800_emitOp ("stx", "*%s", tmp);
+          mc6800_emitOp ("ldaa", loffset ? "*%s" : "*%s+1", tmp);
+          regalloc_dry_run_cost += 4;
+          freeTemp ();
+          mc6800_dirtyReg (reg, false);
+          break;
+        }
       if (aop->type == AOP_REG)
         {
           if (loffset < aop->size)
@@ -769,6 +780,17 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         }
       break;
     case B_IDX:
+      if (aop->type == AOP_REG && IS_AOP_X (aop) && loffset < aop->size)
+        {
+          const char *tmp = allocTemp ();
+
+          mc6800_emitOp ("stx", "*%s", tmp);
+          mc6800_emitOp ("ldab", loffset ? "*%s" : "*%s+1", tmp);
+          regalloc_dry_run_cost += 4;
+          freeTemp ();
+          mc6800_dirtyReg (reg, false);
+          break;
+        }
       if (aop->type == AOP_REG)
         {
           if (loffset < aop->size)
@@ -920,6 +942,18 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
   switch (regidx)
     {
     case A_IDX:
+      if ((aop->type == AOP_REG) && IS_AOP_X (aop) && (loffset < aop->size))
+        {
+          const char *tmp = allocTemp ();
+
+          mc6800_emitOp ("stx", "*%s", tmp);
+          mc6800_emitOp ("staa", loffset ? "*%s" : "*%s+1", tmp);
+          mc6800_emitOp ("ldx", "*%s", tmp);
+          regalloc_dry_run_cost += 6;
+          freeTemp ();
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          break;
+        }
       if ((aop->type == AOP_REG) && (loffset < aop->size))
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
@@ -929,6 +963,18 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         }
       break;
     case B_IDX:
+      if ((aop->type == AOP_REG) && IS_AOP_X (aop) && (loffset < aop->size))
+        {
+          const char *tmp = allocTemp ();
+
+          mc6800_emitOp ("stx", "*%s", tmp);
+          mc6800_emitOp ("stab", loffset ? "*%s" : "*%s+1", tmp);
+          mc6800_emitOp ("ldx", "*%s", tmp);
+          regalloc_dry_run_cost += 6;
+          freeTemp ();
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          break;
+        }
       if ((aop->type == AOP_REG) && (loffset < aop->size))
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
@@ -943,6 +989,23 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
       D (emitcode (";     storeRegToAop", "loffset %d, app->size %d",loffset,aop->size));
       if ((aop->type == AOP_REG) && IS_AOP_X (aop))
         break;
+      if ((aop->type == AOP_REG) && IS_AOP_D (aop) && loffset == 0)
+        {
+          transferRegReg (reg, mc6800_reg_d, false);
+          break;
+        }
+      if ((aop->type == AOP_REG) && (loffset < aop->size)
+          && (aop->aopu.aop_reg[loffset] == mc6800_reg_a || aop->aopu.aop_reg[loffset] == mc6800_reg_b))
+        {
+          const char *tmp = allocTemp ();
+
+          mc6800_emitOp ("stx", "*%s", tmp);
+          mc6800_emitOp (aop->aopu.aop_reg[loffset] == mc6800_reg_a ? "ldaa" : "ldab", "*%s+1", tmp);
+          regalloc_dry_run_cost += 4;
+          freeTemp ();
+          mc6800_dirtyReg (aop->aopu.aop_reg[loffset], false);
+          break;
+        }
       if ((aop->type == AOP_REG) && (loffset < aop->size))
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
@@ -1174,6 +1237,15 @@ storeConstToAop (int c, asmop * aop, int loffset)
     case AOP_REG:
       if (loffset > (aop->size - 1))
         break;
+      if (IS_AOP_X (aop))
+        {
+          bool pula = pushRegIfUsed (mc6800_reg_a);
+
+          loadRegFromConst (mc6800_reg_a, c);
+          storeRegToAop (mc6800_reg_a, aop, loffset);
+          pullOrFreeReg (mc6800_reg_a, pula);
+          break;
+        }
       loadRegFromConst (aop->aopu.aop_reg[loffset], c);
       break;
     case AOP_DUMMY:
@@ -1400,12 +1472,12 @@ transferAopAop (asmop *srcaop, int srcofs, asmop *dstaop, int dstofs)
       return;
     }
     
-  if (dstaop->type == AOP_REG)
+  if (dstaop->type == AOP_REG && !IS_AOP_X (dstaop))
     {
       reg = dstaop->aopu.aop_reg[dstofs];
       keepreg = true;
     }
-  else if ((srcaop->type == AOP_REG) && (srcaop->aopu.aop_reg[srcofs]))
+  else if ((srcaop->type == AOP_REG) && !IS_AOP_X (srcaop) && (srcaop->aopu.aop_reg[srcofs]))
     {
       reg = srcaop->aopu.aop_reg[srcofs];
       keepreg = true;
@@ -2744,6 +2816,22 @@ genCopy (operand *result, operand *source)
   /* nothing significant to optimize. */
   if (srcsize < size)
     {
+      if (IS_AOP_X (AOP (result)) && size == 2 && srcsize == 1)
+        {
+          const char *tmp = allocTemp ();
+          bool pula = pushRegIfUsed (mc6800_reg_a);
+
+          loadRegFromAop (mc6800_reg_a, AOP (source), 0);
+          mc6800_emitOp ("staa", "*%s+1", tmp);
+          loadRegFromConst (mc6800_reg_a, 0);
+          mc6800_emitOp ("staa", "*%s", tmp);
+          mc6800_emitOp ("ldx", "*%s", tmp);
+          regalloc_dry_run_cost += 6;
+          freeTemp ();
+          pullOrFreeReg (mc6800_reg_a, pula);
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          return;
+        }
       size -= srcsize;
       while (srcsize)
         {
