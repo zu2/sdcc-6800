@@ -779,16 +779,7 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         }
       if (IS_AOP_D (aop))
         {
-          const char *tmp = allocTemp ();
-
-          allocTemp ();
-          mc6800_emitOp ("staa", "*%s", tmp);
-          mc6800_emitOp ("stab", "*%s+1", tmp);
-          mc6800_emitOp ("ldx", "*%s", tmp);
-          regalloc_dry_run_cost += 6;
-          freeTemp ();
-          freeTemp ();
-          mc6800_dirtyReg (reg, false);
+          transferRegReg (mc6800_reg_d, reg, false);
           break;
         }
       wassertl (aop->type != AOP_REG, "cannot load x from a register");
