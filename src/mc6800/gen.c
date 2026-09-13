@@ -9973,10 +9973,13 @@ genAddrOf (iCode * ic)
   struct dbuf_s dbuf;
   
   D (emitcode (";     genAddrOf", ""));
-#if 0
+
   aopOp (IC_RESULT (ic), ic, false);
   aopr = AOP (IC_RESULT (ic));
 
+  wassertl (!sym->onStack, "genAddrOf: stack symbol is not supported yet");
+
+#if 0
   /* if the operand is on the stack then we
      need to get the stack offset of this
      variable */
@@ -10012,18 +10015,14 @@ genAddrOf (iCode * ic)
       goto release;
     }
 
-  if (IS_AOP_HX (aopr) || aopr->type == AOP_DIR ||
-      (IS_S08 && aopr->type != AOP_REG))
+#endif
+
+  if (IS_AOP_X (aopr))
     {
-      needpullx = pushRegIfSurv (mc6800_reg_x);
-      needpullh = pushRegIfSurv (mc6800_reg_h);
       loadRegFromImm (mc6800_reg_x, sym->rname);
-      storeRegToFullAop (mc6800_reg_hx, AOP (IC_RESULT (ic)), false);
-      pullOrFreeReg (mc6800_reg_h, needpullh);
-      pullOrFreeReg (mc6800_reg_x, needpullx);
       goto release;
     }
-  
+
   /* object not on stack then we need the name */
   size = AOP_SIZE (IC_RESULT (ic));
   offset = 0;
@@ -10044,7 +10043,7 @@ genAddrOf (iCode * ic)
         }
       storeImmToAop (dbuf_detach_c_str (&dbuf), AOP (IC_RESULT (ic)), offset++);
     }
-#endif
+
 release:
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
 }
