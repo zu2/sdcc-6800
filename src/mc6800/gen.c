@@ -7719,8 +7719,8 @@ genlshOne (operand * result, operand * left, int shCount)
 static void
 genlshTwo (operand *result, operand *left, int shCount)
 {
-  int size;
-  bool needpulla, needpullx;
+  int size, i;
+  bool needpulla, needpullb;
 
   sym_link *resulttype = operandType (result);
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
@@ -7729,7 +7729,6 @@ genlshTwo (operand *result, operand *left, int shCount)
 
   D (emitcode (";     genlshTwo", ""));
 
-#if 0
   size = getDataSize (result);
 
   /* if shCount >= 8 */
@@ -7744,7 +7743,7 @@ genlshTwo (operand *result, operand *left, int shCount)
           AccLsh (shCount);
           if (maskedtopbyte)
             {
-              emitcode ("and", "#0x%02x", topbytemask);
+              emitcode ("anda", "#0x%02x", topbytemask);
               regalloc_dry_run_cost += 2;
             }
           storeRegToAop (mc6800_reg_a, AOP (result), 1);
@@ -7757,32 +7756,22 @@ genlshTwo (operand *result, operand *left, int shCount)
   else
     {
       needpulla = pushRegIfSurv (mc6800_reg_a);
-      needpullx = pushRegIfSurv (mc6800_reg_x);
-      loadRegFromAop (mc6800_reg_xa, AOP (left), 0);
-      XAccLsh (shCount);
+      needpullb = pushRegIfSurv (mc6800_reg_b);
+      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+      for (i = 0; i < shCount; i++)
+        {
+          rmwWithReg ("asl", mc6800_reg_b);
+          rmwWithReg ("rol", mc6800_reg_a);
+        }
       if (maskedtopbyte)
         {
-          if (topbytemask == 0x7f)
-            {
-              emitcode ("lslx", "");
-              emitcode ("lsrx", "");
-              regalloc_dry_run_cost += 2;
-            }
-          else
-            {
-              emitcode ("psha", "");
-              emitcode ("txa", "");
-              emitcode ("and", "#0x%02x", topbytemask);
-              emitcode ("tax", "");
-              emitcode ("pula", "");
-              regalloc_dry_run_cost += 6;
-            }
+          emitcode ("anda", "#0x%02x", topbytemask);
+          regalloc_dry_run_cost += 2;
         }
-      storeRegToFullAop (mc6800_reg_xa, AOP (result), 0);
-      pullOrFreeReg (mc6800_reg_x, needpullx);
+      storeRegToFullAop (mc6800_reg_d, AOP (result), 0);
+      pullOrFreeReg (mc6800_reg_b, needpullb);
       pullOrFreeReg (mc6800_reg_a, needpulla);
     }
-#endif
 }
 
 /*-----------------------------------------------------------------*/
@@ -9114,6 +9103,15 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
 
   decodePointerOffset (right, &litOffset, &rematOffset);
 
+  if (AOP_TYPE (result) == AOP_REG && !IS_AOP_WITH_X (AOP (result))
+      && AOP_SIZE (result) <= 2 && !rematOffset)
+    {
+      int i;
+
+      for (i = AOP_SIZE (result) - 1; i >= 0; i--)
+        loadRegIndexed (AOP (result)->aopu.aop_reg[i], litOffset + AOP_SIZE (result) - 1 - i, rematOffset);
+    }
+  else
 #if 0
   if (AOP_TYPE (result) == AOP_REG)
     {
