@@ -240,6 +240,23 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
           error = 1;
         }
       break;
+    case D_IDX:
+      switch (srcidx)
+        {
+        case X_IDX:
+          {
+            const char *tmp = allocTemp ();
+            mc6800_emitOp ("stx", "*%s", tmp);
+            mc6800_emitOp ("ldaa", "*%s", tmp);
+            mc6800_emitOp ("ldab", "*%s+1", tmp);
+            regalloc_dry_run_cost += 6;
+            freeTemp ();
+          }
+          break;
+        default:
+          error = 1;
+        }
+      break;
     default:
       error = 1;
     }
@@ -790,6 +807,11 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
     case D_IDX:
       if (IS_AOP_D (aop))
         break;
+      if (IS_AOP_X (aop))
+        {
+          transferRegReg (mc6800_reg_x, reg, false);
+          break;
+        }
       loadRegFromAop (mc6800_reg_b, aop, loffset);
       loadRegFromAop (mc6800_reg_a, aop, loffset + 1);
       break;
