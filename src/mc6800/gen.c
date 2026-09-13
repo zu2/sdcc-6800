@@ -7260,40 +7260,25 @@ AccLsh (int shCount)
   /* For shift counts of 6 and 7, the unrolled loop is never optimal.      */
   switch (shCount)
     {
-    case 4:
-      if (optimize.codeSpeed)
-        break;
-      accopWithMisc ("nsa", "");
-      accopWithMisc ("and", "#0xf0");
-      /* total: 5 cycles, 3 bytes */
-      return;
-    case 5:
-      if (optimize.codeSpeed)
-        break;
-      accopWithMisc ("nsa", "");
-      accopWithMisc ("and", "#0xf0");
-      accopWithMisc ("lsla", "");
-      /* total: 6 cycles, 4 bytes */
-      return;
     case 6:
       accopWithMisc ("rora", "");
       accopWithMisc ("rora", "");
       accopWithMisc ("rora", "");
-      accopWithMisc ("and", "#0xc0");
-      /* total: 5 cycles, 5 bytes */
+      accopWithMisc ("anda", "#0xc0");
+      /* total: 8 cycles, 5 bytes */
       return;
     case 7:
       accopWithMisc ("rora", "");
-      accopWithMisc ("clra", "");
+      accopWithMisc ("ldaa", "#0");
       accopWithMisc ("rora", "");
-      /* total: 3 cycles, 3 bytes */
+      /* total: 6 cycles, 4 bytes */
       return;
     }
 
   /* lsla is only 1 cycle and byte, so an unrolled loop is often  */
   /* the fastest (shCount<6) and shortest (shCount<4).            */
   for (i = 0; i < shCount; i++)
-    accopWithMisc ("lsla", "");
+    accopWithMisc ("asla", "");
 }
 
 
@@ -8077,15 +8062,9 @@ genLeftShift (iCode *ic)
 
   D (emitcode (";     genLeftShift", ""));
 
-#if 0
   right = IC_RIGHT (ic);
   left = IC_LEFT (ic);
   result = IC_RESULT (ic);
-
-  sym_link *resulttype = operandType (result);
-  unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
-    (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
 
   aopOp (right, ic, false);
 
@@ -8097,6 +8076,12 @@ genLeftShift (iCode *ic)
       genLeftShiftLiteral (left, right, result, ic);
       return;
     }
+
+#if 0
+  sym_link *resulttype = operandType (result);
+  unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
+    (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
+  bool maskedtopbyte = (topbytemask != 0xff);
 
   /* shift count is unknown then we have to form
      a loop get the loop count in X : Note: we take
