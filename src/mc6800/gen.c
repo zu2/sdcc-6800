@@ -1610,78 +1610,43 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
 static void
 loadRegIndexed (reg_info * reg, int offset, char * rematOfs)
 {
-  bool needpula = false;
-
   /* The rematerialized offset may have a "#" prefix; skip over it */
   if (rematOfs && rematOfs[0] == '#')
     rematOfs++;
   if (rematOfs && !rematOfs[0])
     rematOfs = NULL;
 
-  /* force offset to signed 16-bit range */
-  offset &= 0xffff;
-  if (offset & 0x8000)
-    offset = 0x10000 - offset;
+  wassertl (offset >= 0 && offset <= 0xff, "indexed offset outside 0..255 is not supported yet");
 
   switch (reg->rIdx)
     {
     case A_IDX:
       if (rematOfs)
-        {
-          if (!offset)
-            emitcode ("lda", "(%s),x", rematOfs);
-          else
-            emitcode ("lda", "(%s+%d),x", rematOfs, offset);
-          regalloc_dry_run_cost += 3;
-        }
-      else if (offset)
-        {
-          emitcode ("lda", "%d,x", offset);
-          if (offset > 1 && offset <= 0xff)
-            regalloc_dry_run_cost += 2;
-          else
-            regalloc_dry_run_cost += 3;
-        }
+        mc6800_emitOp ("ldaa", "(%s+%d),x", rematOfs, offset);
       else
-        {
-          emitcode ("lda", ",x");
-          regalloc_dry_run_cost++;
-        }
+        mc6800_emitOp ("ldaa", "%d,x", offset);
+      regalloc_dry_run_cost += 2;
+      mc6800_dirtyReg (reg, false);
+      break;
+    case B_IDX:
+      if (rematOfs)
+        mc6800_emitOp ("ldab", "(%s+%d),x", rematOfs, offset);
+      else
+        mc6800_emitOp ("ldab", "%d,x", offset);
+      regalloc_dry_run_cost += 2;
       mc6800_dirtyReg (reg, false);
       break;
     case X_IDX:
       if (rematOfs)
-        {
-          if (!offset)
-            emitcode ("ldx", "(%s),x", rematOfs);
-          else
-            emitcode ("ldx", "(%s+%d),x", rematOfs, offset);
-          regalloc_dry_run_cost += 3;
-        }
-      else if (offset)
-        {
-          emitcode ("ldx", "%d,x", offset);
-          if (offset > 1 && offset <= 0xff)
-            regalloc_dry_run_cost += 2;
-          else
-            regalloc_dry_run_cost += 3;
-        }
+        mc6800_emitOp ("ldx", "(%s+%d),x", rematOfs, offset);
       else
-        {
-          emitcode ("ldx", ",x");
-          regalloc_dry_run_cost++;
-        }
+        mc6800_emitOp ("ldx", "%d,x", offset);
+      regalloc_dry_run_cost += 2;
       mc6800_dirtyReg (reg, false);
       break;
-    case B_IDX:
-      needpula = pushRegIfUsed (mc6800_reg_a);
-      loadRegIndexed (mc6800_reg_a, offset, rematOfs);
-      transferRegReg (mc6800_reg_a, mc6800_reg_b, true);
-      pullOrFreeReg (mc6800_reg_a, needpula);
-      break;
     case D_IDX:
-      loadRegIndexed (mc6800_reg_a, offset+1, rematOfs);
-      loadRegIndexed (mc6800_reg_x, offset, rematOfs);
+      loadRegIndexed (mc6800_reg_b, offset + 1, rematOfs);
+      loadRegIndexed (mc6800_reg_a, offset, rematOfs);
       break;
     default:
       wassert (0);
@@ -1695,94 +1660,40 @@ loadRegIndexed (reg_info * reg, int offset, char * rematOfs)
 static void
 storeRegIndexed (reg_info * reg, int offset, char * rematOfs)
 {
-  bool needpula = false;
-
   /* The rematerialized offset may have a "#" prefix; skip over it */
   if (rematOfs && rematOfs[0] == '#')
     rematOfs++;
   if (rematOfs && !rematOfs[0])
     rematOfs = NULL;
 
-  /* force offset to signed 16-bit range */
-  offset &= 0xffff;
-  if (offset & 0x8000)
-    offset = offset - 0x10000;
+  wassertl (offset >= 0 && offset <= 0xff, "indexed offset outside 0..255 is not supported yet");
 
   switch (reg->rIdx)
     {
     case A_IDX:
       if (rematOfs)
-        {
-          if (!offset)
-            emitcode ("staa", "(%s),x", rematOfs);
-          else
-            emitcode ("staa", "(%s+%d),x", rematOfs, offset);
-          regalloc_dry_run_cost += 3;
-        }
-      else if (offset)
-        {
-          emitcode ("staa", "%d,x", offset);
-          if (offset > 1 && offset <= 0xff)
-            regalloc_dry_run_cost += 2;
-          else
-            regalloc_dry_run_cost += 3;
-        }
+        mc6800_emitOp ("staa", "(%s+%d),x", rematOfs, offset);
       else
-        {
-          emitcode ("staa", ",x");
-          regalloc_dry_run_cost++;
-        }
+        mc6800_emitOp ("staa", "%d,x", offset);
+      regalloc_dry_run_cost += 2;
       break;
     case B_IDX:
       if (rematOfs)
-        {
-          if (!offset)
-            emitcode ("stab", "(%s),x", rematOfs);
-          else
-            emitcode ("stab", "(%s+%d),x", rematOfs, offset);
-          regalloc_dry_run_cost += 3;
-        }
-      else if (offset)
-        {
-          emitcode ("stab", "%d,x", offset);
-          if (offset > 1 && offset <= 0xff)
-            regalloc_dry_run_cost += 2;
-          else
-            regalloc_dry_run_cost += 3;
-        }
+        mc6800_emitOp ("stab", "(%s+%d),x", rematOfs, offset);
       else
-        {
-          emitcode ("stab", ",x");
-          regalloc_dry_run_cost++;
-        }
+        mc6800_emitOp ("stab", "%d,x", offset);
+      regalloc_dry_run_cost += 2;
       break;
     case X_IDX:
       if (rematOfs)
-        {
-          if (!offset)
-            emitcode ("stx", "(%s),x", rematOfs);
-          else
-            emitcode ("stx", "(%s+%d),x", rematOfs, offset);
-          regalloc_dry_run_cost += 3;
-        }
-      else if (offset)
-        {
-          emitcode ("stx", "%d,x", offset);
-          if (offset > 1 && offset <= 0xff)
-            regalloc_dry_run_cost += 2;
-          else
-            regalloc_dry_run_cost += 3;
-        }
+        mc6800_emitOp ("stx", "(%s+%d),x", rematOfs, offset);
       else
-        {
-          emitcode ("stx", ",x");
-          regalloc_dry_run_cost++;
-        }
+        mc6800_emitOp ("stx", "%d,x", offset);
+      regalloc_dry_run_cost += 2;
       break;
     case D_IDX:
-      /* This case probably won't happen, but it's easy to implement */
-      storeRegIndexed (mc6800_reg_b, offset, rematOfs);
-      storeRegIndexed (mc6800_reg_a, offset+1, rematOfs);
+      storeRegIndexed (mc6800_reg_a, offset, rematOfs);
+      storeRegIndexed (mc6800_reg_b, offset + 1, rematOfs);
       break;
     default:
       wassert (0);
@@ -9157,7 +9068,6 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
 
   D (emitcode (";     genDataPointerGet", ""));
 
-#if 0
   decodePointerOffset (right, &litOffset, &rematOffset);
   wassert (rematOffset==NULL);
 
@@ -9171,8 +9081,8 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
   if (ifx)
     needpulla = pushRegIfSurv (mc6800_reg_a);
 
-  if (IS_AOP_HX (AOP (result)))
-    loadRegFromAop (mc6800_reg_hx, derefaop, 0);
+  if (IS_AOP_X (AOP (result)))
+    loadRegFromAop (mc6800_reg_x, derefaop, 0);
   else
     while (size--)
       {
@@ -9190,7 +9100,6 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
     {
       genIfxJump (ifx, "a");
     }
-#endif
 }
 
 
@@ -9214,7 +9123,10 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
 
   D (emitcode (";     genPointerGet", ""));
 
-#if 0
+  /* the 6800 has no instruction that adds a constant to x, so the
+     post-increment is left to its own icode */
+  pi = NULL;
+
   if ((size = getSize (operandType (result))) > 1)
     ifx = NULL;
 
@@ -9257,19 +9169,17 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
         AOP (left)->aopu.aop_reg[i]->isDead = true;
     }
 
-  if (!IS_AOP_HX (AOP (left)))
-    {
-      needpullx = pushRegIfSurv (mc6800_reg_x);
-      needpullh = pushRegIfSurv (mc6800_reg_h);
-    }
+  if (!IS_AOP_X (AOP (left)))
+    needpullx = pushRegIfSurv (mc6800_reg_x);
 
-  /* if the operand is already in hx
-     then we do nothing else we move the value to hx */
-  loadRegFromAop (mc6800_reg_hx, AOP (left), 0);
-  /* so hx now contains the address */
+  /* if the operand is already in x
+     then we do nothing else we move the value to x */
+  loadRegFromAop (mc6800_reg_x, AOP (left), 0);
+  /* so x now contains the address */
 
   decodePointerOffset (right, &litOffset, &rematOffset);
 
+#if 0
   if (AOP_TYPE (result) == AOP_REG)
     {
       if (pi)
@@ -9332,12 +9242,8 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
           freeAsmop (IC_RESULT (pi), NULL, pi, true);
         }
     }
-  else if (!pi && !ifx && size == 2 && IS_S08 && mc6800_reg_x->isDead && AOP_TYPE (result) == AOP_EXT) /* Todo: Use this for bigger sizes, too */
-    {
-      loadRegIndexed (mc6800_reg_hx, litOffset, rematOffset);
-      storeRegToAop (mc6800_reg_hx, AOP (result), 0);
-    }
   else
+#endif
     {
       offset = size - 1;
       needpulla = pushRegIfSurv (mc6800_reg_a);
@@ -9357,24 +9263,6 @@ release:
   freeAsmop (left, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 
-  if (pi && !pi->generated)
-    {
-      emitcode ("aix", "#%d", size);
-      regalloc_dry_run_cost += 2;
-      mc6800_dirtyReg (mc6800_reg_hx, false);
-      aopOp (IC_RESULT (pi), pi, false);
-      storeRegToAop (mc6800_reg_hx, AOP (IC_RESULT (pi)), 0);
-      if (ifx && AOP_TYPE (IC_RESULT (pi)) != AOP_REG)
-        {
-          /* Ensure Z/NZ flag is correct since storeRegToAop() */
-          /* disrupts the flag bits when storing to memory. */
-          emitcode ("tsta", "");
-          regalloc_dry_run_cost++;
-        }
-      freeAsmop (IC_RESULT (pi), NULL, pi, true);
-      pi->generated = 1;
-    }
-
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
   pullOrFreeReg (mc6800_reg_x, needpullx);
@@ -9383,7 +9271,6 @@ release:
     {
       genIfxJump (ifx, "a");
     }
-#endif
 }
 
 /*-----------------------------------------------------------------*/
