@@ -3124,7 +3124,7 @@ genUminus (iCode * ic)
   int offset, size;
   sym_link *optype;
   char *sub;
-  bool needpula;
+  bool needpula, needpullb;
   asmop *result;
 
   sym_link *resulttype = operandType (IC_RESULT (ic));
@@ -3133,19 +3133,20 @@ genUminus (iCode * ic)
   bool maskedtopbyte = (topbytemask != 0xff);
 
   D (emitcode (";     genUminus", ""));
-#if 0
   /* assign asmops */
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RESULT (ic), ic, true);
 
   optype = operandType (IC_LEFT (ic));
 
+#if 0
   /* if float then do float stuff */
   if (IS_FLOAT (optype))
     {
       genUminusFloat (IC_LEFT (ic), IC_RESULT (ic));
       goto release;
     }
+#endif
 
   /* otherwise subtract from zero */
   size = AOP_SIZE (IC_LEFT (ic));
@@ -3158,7 +3159,7 @@ genUminus (iCode * ic)
       rmwWithReg ("neg", mc6800_reg_a);
       if (maskedtopbyte)
         {
-          emitcode ("and", "#0x%02x", topbytemask);
+          mc6800_emitOp ("anda", "#0x%02x", topbytemask);
           regalloc_dry_run_cost += 2;
         }
       mc6800_freeReg (mc6800_reg_a);
@@ -3167,6 +3168,23 @@ genUminus (iCode * ic)
       goto release;
     }
 
+  if (size == 2)
+    {
+      needpullb = pushRegIfSurv (mc6800_reg_b);
+      needpula = pushRegIfSurv (mc6800_reg_a);
+      loadRegFromAop (mc6800_reg_d, AOP (IC_LEFT (ic)), 0);
+      rmwWithReg ("neg", mc6800_reg_a);
+      rmwWithReg ("neg", mc6800_reg_b);
+      mc6800_emitOp ("sbca", "#0x00");
+      regalloc_dry_run_cost += 2;
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
+      pullOrFreeReg (mc6800_reg_a, needpula);
+      pullOrFreeReg (mc6800_reg_b, needpullb);
+      goto release;
+    }
+
+#if 0
   /* If either left or result are in registers, handle this carefully to     */
   /* avoid prematurely overwriting register values. The 1 byte case was      */
   /* handled above and there aren't enough registers to handle 4 byte values */
@@ -3219,22 +3237,30 @@ genUminus (iCode * ic)
       pullOrFreeReg (mc6800_reg_a, needpula);
       goto release;
     }
+#endif
 
   result = AOP (IC_RESULT (ic));
 
   needpula = pushRegIfSurv (mc6800_reg_a);
-  sub = "sub";
+  sub = "suba";
   while (size--)
     {
-      loadRegFromConst (mc6800_reg_a, 0);
+      /* clra clears the carry, so the borrow would be lost */
+      if (offset)
+        {
+          mc6800_emitOp ("ldaa", "#0x00");
+          regalloc_dry_run_cost += 2;
+          mc6800_dirtyReg (mc6800_reg_a, false);
+        }
+      else
+        loadRegFromConst (mc6800_reg_a, 0);
       accopWithAop (sub, AOP (IC_LEFT (ic)), offset);
       storeRegToAop (mc6800_reg_a, result, offset++);
-      sub = "sbc";
+      sub = "sbca";
     }
   storeRegSignToUpperAop (mc6800_reg_a, result, offset, SPEC_USIGN (operandType (IC_LEFT (ic))));
   pullOrFreeReg (mc6800_reg_a, needpula);
 
-#endif
 release:
   /* release the aops */
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
