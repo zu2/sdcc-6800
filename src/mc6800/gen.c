@@ -9213,7 +9213,13 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
 
   decodePointerOffset (right, &litOffset, &rematOffset);
 
-  if (AOP_TYPE (result) == AOP_REG && !IS_AOP_WITH_X (AOP (result))
+  if (AOP_TYPE (result) == AOP_REG && IS_AOP_X (AOP (result))
+      && !needpullx && !rematOffset)
+    {
+      mc6800_freeReg (mc6800_reg_x);
+      loadRegIndexed (mc6800_reg_x, litOffset, rematOffset);
+    }
+  else if (AOP_TYPE (result) == AOP_REG && !IS_AOP_WITH_X (AOP (result))
       && AOP_SIZE (result) <= 2 && !rematOffset)
     {
       int i;
