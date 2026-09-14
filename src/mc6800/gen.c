@@ -9355,6 +9355,7 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
   char * rematOffset = NULL;
   asmop *derefaop;
   bool needpulla = false;
+  bool needrestorex = false;
 
   D (emitcode (";     genDataPointerGet", ""));
 
@@ -9370,6 +9371,8 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
   
   if (ifx)
     needpulla = pushRegIfSurv (mc6800_reg_a);
+  if (derefaop->type == AOP_SOF && !IS_AOP_X (AOP (result)))
+    needrestorex = pushRegIfSurv (mc6800_reg_x);
 
   if (IS_AOP_X (AOP (result)))
     loadRegFromAop (mc6800_reg_x, derefaop, 0);
@@ -9381,6 +9384,9 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
         else
           loadRegFromAop (mc6800_reg_a, derefaop, size);
       }
+
+  if (needrestorex)
+    pullReg (mc6800_reg_x);
 
   freeAsmop (NULL, derefaop, ic, true);
   freeAsmop (result, NULL, ic, true);
@@ -9965,6 +9971,7 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
   asmop *derefaop;
   int litOffset = 0;
   char *rematOffset = NULL;
+  bool needrestorex = false;
 
   D (emitcode (";     genDataPointerSet", ""));
 
@@ -9977,6 +9984,9 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
   freeAsmop (result, NULL, ic, true);
   derefaop->size = size;
 
+  if (derefaop->type == AOP_SOF && !IS_AOP_X (AOP (right)))
+    needrestorex = pushRegIfSurv (mc6800_reg_x);
+
   if (IS_AOP_X (AOP (right)))
     {
       storeRegToAop (mc6800_reg_x, derefaop, 0);
@@ -9988,6 +9998,9 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
           transferAopAop (AOP (right), size, derefaop, size);
         }
     }
+
+  if (needrestorex)
+    pullReg (mc6800_reg_x);
 
   freeAsmop (right, NULL, ic, true);
   freeAsmop (NULL, derefaop, ic, true);
