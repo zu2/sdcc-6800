@@ -279,9 +279,10 @@ _mc6800_finaliseOptions (void)
   if (options.noXinitOpt)
     port->genXINIT = 0;
 
-  if (options.model == MODEL_LARGE) {
-      port->mem.default_local_map = xdata;
-      port->mem.default_globl_map = xdata;
+  if (options.model == MODEL_LARGE)
+    {
+        port->mem.default_local_map = xdata;
+        port->mem.default_globl_map = xdata;
     }
   else
     {
@@ -382,11 +383,12 @@ static bool cseCostEstimation (iCode *ic, iCode *pdic)
     /* if bitwise | add & subtract then no since mc6800 is pretty good at it
        so we will cse only if they are local (i.e. both ic & pdic belong to
        the same basic block */
-    if (IS_BITWISE_OP(ic) || ic->op == '+' || ic->op == '-') {
-        /* then if they are the same Basic block then ok */
-        if (ic->eBBlockNum == pdic->eBBlockNum) return 1;
-        else return 0;
-    }
+    if (IS_BITWISE_OP(ic) || ic->op == '+' || ic->op == '-')
+      {
+          /* then if they are the same Basic block then ok */
+          if (ic->eBBlockNum == pdic->eBBlockNum) return 1;
+          else return 0;
+      }
 
     /* for others it is cheaper to do the cse */
     return 1;
