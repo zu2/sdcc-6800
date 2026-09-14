@@ -1917,7 +1917,14 @@ setupXForAop (asmop * aop)
   if (aop->type != AOP_SOF)
     return;
   if (mc6800_reg_x->aop != &tsxaop)
-    return;
+    {
+      if (!mc6800_reg_x->isFree)
+        return;
+      emitcode ("tsx", "");
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      mc6800_reg_x->aop = &tsxaop;
+      mc6800_reg_x->stackOffset = -_G.stackPushes;
+    }
 
   lo = _G.stackOfs - mc6800_reg_x->stackOffset + aop->aopu.aop_stk;
   hi = lo + aop->size - 1;
@@ -10090,7 +10097,7 @@ genAddrOf (iCode * ic)
   symbol *sym = OP_SYMBOL (IC_LEFT (ic));
   asmop *aopr;
   int size, offset;
-  bool needpullx, needpullh;
+  bool needpullx;
   struct dbuf_s dbuf;
   
   D (emitcode (";     genAddrOf", ""));
@@ -10098,45 +10105,18 @@ genAddrOf (iCode * ic)
   aopOp (IC_RESULT (ic), ic, false);
   aopr = AOP (IC_RESULT (ic));
 
-  wassertl (!sym->onStack, "genAddrOf: stack symbol is not supported yet");
-
-#if 0
   /* if the operand is on the stack then we
      need to get the stack offset of this
      variable */
   if (sym->onStack)
     {
       needpullx = pushRegIfSurv (mc6800_reg_x);
-      needpullh = pushRegIfSurv (mc6800_reg_h);
-      /* if it has an offset then we need to compute it */
-      offset = _G.stackOfs + _G.stackPushes + sym->stack;
       mc6800_useReg (mc6800_reg_x);
-      emitcode ("tsx", "");
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      regalloc_dry_run_cost++;
-      while (offset > 127)
-        {
-          emitcode ("aix", "#127");
-          regalloc_dry_run_cost += 2;
-          offset -= 127;
-        }
-      while (offset < -128)
-        {
-          emitcode ("aix", "#-128");
-          regalloc_dry_run_cost += 2;
-          offset += 128;
-        }
-      if (offset)
-        {
-          emitcode ("aix", "#%d", offset);
-          regalloc_dry_run_cost += 2;
-        }
-      storeRegToFullAop (mc6800_reg_x, AOP (IC_RESULT (ic)), false);
-      pullOrFreeReg (mc6800_reg_x, needpullh);
+      setupXFromSP (_G.stackOfs + sym->stack);
+      storeRegToAop (mc6800_reg_x, AOP (IC_RESULT (ic)), 0);
+      pullOrFreeReg (mc6800_reg_x, needpullx);
       goto release;
     }
-
-#endif
 
   if (IS_AOP_X (aopr))
     {
