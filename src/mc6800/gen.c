@@ -4831,6 +4831,37 @@ genMinus16 (iCode *ic)
   pullOrFreeReg (mc6800_reg_b, needpullb);
 }
 
+static void
+genMinusMANY (iCode *ic)
+{
+  asmop *result = AOP (IC_RESULT (ic));
+  int size = getDataSize (IC_RESULT (ic));
+  int offset;
+  reg_info *reg;
+  char *sub;
+  bool needpull = false;
+
+  if (mc6800_reg_b->isFree && !IS_AOP_WITH_B (result))
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_a->isFree && !IS_AOP_WITH_A (result))
+    reg = mc6800_reg_a;
+  else
+    {
+      reg = IS_AOP_WITH_B (result) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfSurv (reg);
+    }
+
+  sub = (reg == mc6800_reg_b) ? "subb" : "suba";
+  for (offset = 0; offset < size; offset++)
+    {
+      loadRegFromAop (reg, AOP (IC_LEFT (ic)), offset);
+      accopWithAop (sub, AOP (IC_RIGHT (ic)), offset);
+      storeRegToAop (reg, result, offset);
+      sub = (reg == mc6800_reg_b) ? "sbcb" : "sbca";
+    }
+  pullOrFreeReg (reg, needpull);
+}
+
 /*-----------------------------------------------------------------*/
 static void
 genMinus (iCode * ic)
@@ -4865,6 +4896,9 @@ genMinus (iCode * ic)
       break;
     case 2:
       genMinus16 (ic);
+      break;
+    default:
+      genMinusMANY (ic);
       break;
     }
 
