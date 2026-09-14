@@ -5949,7 +5949,8 @@ genCmp (iCode * ic, iCode * ifx)
           /* comparison that doesn't depend on Z. (This is safe  */
           /* to do here since ralloc won't assign multi-byte     */
           /* operands to registers for comparisons)              */
-          if ((opcode == '>') || (opcode == LE_OP))
+          if (((opcode == '>') || (opcode == LE_OP))
+              && !(AOP_TYPE (left) == AOP_REG && mc6800_reg_b->isDead))
             {
               operand *temp = left;
               left = right;
@@ -5979,6 +5980,16 @@ genCmp (iCode * ic, iCode * ifx)
               regalloc_dry_run_cost += 3;
               pullReg (mc6800_reg_a);
             }
+          else if (AOP_TYPE (left) == AOP_REG && offset < AOP_SIZE (left)
+                   && AOP (left)->aopu.aop_reg[offset]->rIdx == B_IDX)
+            {
+              if (!strcmp (sub, "cmpa"))
+                accopWithAop ("cmpb", AOP (right), offset);
+              else if (!strcmp (sub, "suba"))
+                accopWithAop ("subb", AOP (right), offset);
+              else
+                accopWithAop ("sbcb", AOP (right), offset);
+            }
           else
             {
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
@@ -6002,7 +6013,20 @@ genCmp (iCode * ic, iCode * ifx)
       freeAsmop (result, NULL, ic, true);
 
       inst = branchInstCmp (opcode, sign);
-      emitBranch (inst, tlbl);
+      if (offset > 1 && ((opcode == '>') || (opcode == LE_OP)))
+        {
+          symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+          emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl2 : tlbl);
+          emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl : tlbl2);
+          mc6800_emitOp ("tstb", "");
+          regalloc_dry_run_cost += 1;
+          emitBranch ((opcode == '>') ? "bne" : "beq", tlbl);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl2);
+        }
+      else
+        emitBranch (inst, tlbl);
       emitBranch ("jmp", jlbl);
       if (!regalloc_dry_run)
         emitLabel (tlbl);
@@ -6018,7 +6042,20 @@ genCmp (iCode * ic, iCode * ifx)
       if (!needpulla)
         needpulla = pushRegIfSurv (mc6800_reg_a);
 
-      emitBranch (branchInstCmp (opcode, sign), tlbl1);
+      if (offset > 1 && ((opcode == '>') || (opcode == LE_OP)))
+        {
+          symbol *tlbl3 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+          emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl3 : tlbl1);
+          emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl1 : tlbl3);
+          mc6800_emitOp ("tstb", "");
+          regalloc_dry_run_cost += 1;
+          emitBranch ((opcode == '>') ? "bne" : "beq", tlbl1);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl3);
+        }
+      else
+        emitBranch (branchInstCmp (opcode, sign), tlbl1);
       loadRegFromConst (mc6800_reg_a, 0);
       emitBranch ("bra", tlbl2);
       if (!regalloc_dry_run)
