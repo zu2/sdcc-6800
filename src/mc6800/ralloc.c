@@ -1282,7 +1282,7 @@ packRegisters (eBBlock ** ebpp, int count)
               IS_ITEMP (IC_RESULT (ic)) &&
               IS_TRUE_SYMOP (IC_LEFT (ic)) &&
               bitVectnBitsOn (OP_DEFS (IC_RESULT (ic))) == 1 &&
-              !OP_SYMBOL (IC_LEFT (ic))->onStack)
+              !IS_PARM (IC_RESULT (ic)))
             {
               OP_SYMBOL (IC_RESULT (ic))->remat = 1;
               OP_SYMBOL (IC_RESULT (ic))->rematiCode = ic;

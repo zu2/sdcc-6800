@@ -2519,6 +2519,7 @@ aopDerefAop (asmop * aop, int offset)
     case AOP_STL:
       newaop = newAsmop (AOP_SOF);
       newaop->aopu.aop_stk = aop->aopu.aop_stk + offset;
+      newaop->op = aop->op;
       break;
     case AOP_LIT:
       adr = (int) ulFromVal (aop->aopu.aop_lit);
