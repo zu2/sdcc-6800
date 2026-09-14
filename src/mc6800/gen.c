@@ -1583,6 +1583,12 @@ accopWithAop (char *accop, asmop *aop, int loffset)
           freeTemp ();
           freeTemp ();
         }
+      else if (reg->rIdx == B_IDX && aop->size == 1
+               && (!strcmp (accop, "adda") || !strcmp (accop, "suba") || !strcmp (accop, "cmpa")))
+        {
+          mc6800_emitOp (!strcmp (accop, "adda") ? "aba" : !strcmp (accop, "suba") ? "sba" : "cba", "");
+          regalloc_dry_run_cost += 1;
+        }
       else if ((reg->rIdx == A_IDX || reg->rIdx == B_IDX) && _G.tempOfs < NUM_TEMP_REGS)
         {
           const char *tmp = allocTemp ();
@@ -5864,7 +5870,7 @@ genCmp (iCode * ic, iCode * ifx)
   aopOp (result, ic, true);
 
   /* need register operand on left, prefer literal operand on right */
-  if ((AOP_TYPE (right) == AOP_REG) || AOP_TYPE (left) == AOP_LIT)
+  if (((AOP_TYPE (right) == AOP_REG) && !IS_AOP_A (AOP (left))) || AOP_TYPE (left) == AOP_LIT)
     {
       operand *temp = left;
       left = right;
