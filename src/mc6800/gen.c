@@ -102,6 +102,7 @@ static asmop *newAsmop (short type);
 static const char *aopAdrStr (asmop * aop, int loffset, bool bit16);
 static void setupXForAop (asmop * aop);
 static void setupXFromSP (int stackOffset);
+static const char *setupTmpFromSP (int stackOffset);
 static void updateiTempRegisterUse (operand * op);
 #define RESULTONSTACK(x) \
                          (IC_RESULT(x) && IC_RESULT(x)->aop && \
@@ -1866,8 +1867,8 @@ adjustX (int diff)
     }
 }
 
-static void
-setupXFromSP (int stackOffset)
+static const char *
+setupTmpFromSP (int stackOffset)
 {
   const char *tmp = allocTemp ();
   bool saveb = !mc6800_reg_b->isFree && !mc6800_reg_a->isFree;
@@ -1887,8 +1888,7 @@ setupXFromSP (int stackOffset)
       mc6800_emitOp ("ldab", "*%s", tmp);
       mc6800_emitOp ("adcb", "#%d", (delta >> 8) & 0xff);
       mc6800_emitOp ("stab", "*%s", tmp);
-      mc6800_emitOp ("ldx", "*%s", tmp);
-      regalloc_dry_run_cost += 16;
+      regalloc_dry_run_cost += 14;
       if (saveb)
         {
           mc6800_emitOp ("pulb", "");
@@ -1906,10 +1906,19 @@ setupXFromSP (int stackOffset)
       mc6800_emitOp ("ldaa", "*%s", tmp);
       mc6800_emitOp ("adca", "#%d", (delta >> 8) & 0xff);
       mc6800_emitOp ("staa", "*%s", tmp);
-      mc6800_emitOp ("ldx", "*%s", tmp);
-      regalloc_dry_run_cost += 16;
+      regalloc_dry_run_cost += 14;
       mc6800_dirtyReg (mc6800_reg_a, false);
     }
+  return tmp;
+}
+
+static void
+setupXFromSP (int stackOffset)
+{
+  const char *tmp = setupTmpFromSP (stackOffset);
+
+  mc6800_emitOp ("ldx", "*%s", tmp);
+  regalloc_dry_run_cost += 2;
   freeTemp ();
   mc6800_dirtyReg (mc6800_reg_x, false);
   mc6800_reg_x->aop = &tsxaop;
@@ -2971,10 +2980,16 @@ genCopy (operand *result, operand *source)
       if (IS_AOP_X (AOP (result)) && size == 2 && srcsize == 1)
         {
           const char *tmp = allocTemp ();
+          bool useb = (AOP_TYPE (source) == AOP_REG && AOP (source)->aopu.aop_reg[0] == mc6800_reg_b);
           bool pula = pushRegIfUsed (mc6800_reg_a);
 
-          loadRegFromAop (mc6800_reg_a, AOP (source), 0);
-          mc6800_emitOp ("staa", "*%s+1", tmp);
+          if (useb)
+            mc6800_emitOp ("stab", "*%s+1", tmp);
+          else
+            {
+              loadRegFromAop (mc6800_reg_a, AOP (source), 0);
+              mc6800_emitOp ("staa", "*%s+1", tmp);
+            }
           loadRegFromConst (mc6800_reg_a, 0);
           mc6800_emitOp ("staa", "*%s", tmp);
           mc6800_emitOp ("ldx", "*%s", tmp);
@@ -4482,6 +4497,46 @@ genPlus16 (iCode *ic)
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
   bool maskedtopbyte = (topbytemask != 0xff);
+
+  if (leftOp->type == AOP_STL || rightOp->type == AOP_STL)
+    {
+      asmop *stl = (leftOp->type == AOP_STL) ? leftOp : rightOp;
+      asmop *other = (leftOp->type == AOP_STL) ? rightOp : leftOp;
+      const char *tmp;
+
+      wassertl (other->type != AOP_STL, "both operands on the stack");
+      if (other->size > 1)
+        {
+          loadRegFromAop (mc6800_reg_b, other, 1);
+          pushReg (mc6800_reg_b, false);
+        }
+      loadRegFromAop (mc6800_reg_b, other, 0);
+      pushReg (mc6800_reg_b, false);
+      tmp = setupTmpFromSP (_G.stackOfs + stl->aopu.aop_stk);
+      pullReg (mc6800_reg_b);
+      mc6800_emitOp ("addb", "*%s+1", tmp);
+      mc6800_emitOp ("stab", "*%s+1", tmp);
+      if (other->size > 1)
+        {
+          pullReg (mc6800_reg_b);
+          mc6800_emitOp ("adcb", "*%s", tmp);
+        }
+      else
+        {
+          mc6800_emitOp ("ldab", "*%s", tmp);
+          mc6800_emitOp ("adcb", "#0");
+        }
+      mc6800_emitOp ("stab", "*%s", tmp);
+      mc6800_emitOp ("ldx", "*%s", tmp);
+      regalloc_dry_run_cost += 12;
+      freeTemp ();
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      storeRegToAop (mc6800_reg_x, result, 0);
+      pullOrFreeReg (mc6800_reg_a, needpulla);
+      pullOrFreeReg (mc6800_reg_b, needpullb);
+      return;
+    }
 
   loadRegFromAop (mc6800_reg_b, leftOp, 0);
   loadRegFromAop (mc6800_reg_a, leftOp, 1);
@@ -8848,6 +8903,41 @@ genRightShift (iCode * ic)
   freeAsmop (right, NULL, ic, true);
 }
 
+static bool
+stackBasedOffset (operand * opOffset)
+{
+  if (!opOffset || !IS_ITEMP (opOffset) || !OP_SYMBOL (opOffset)->remat)
+    return false;
+  return aopForRemat (OP_SYMBOL (opOffset))->type == AOP_STL;
+}
+
+static void
+addSPToX (void)
+{
+  const char *tmp = allocTemp ();
+  const char *tmp2 = allocTemp ();
+  bool savea = !mc6800_reg_a->isFree;
+
+  if (savea)
+    pushReg (mc6800_reg_a, false);
+  mc6800_emitOp ("stx", "*%s", tmp);
+  mc6800_emitOp ("sts", "*%s", tmp2);
+  mc6800_emitOp ("ldaa", "*%s+1", tmp);
+  mc6800_emitOp ("adda", "*%s+1", tmp2);
+  mc6800_emitOp ("staa", "*%s+1", tmp2);
+  mc6800_emitOp ("ldaa", "*%s", tmp);
+  mc6800_emitOp ("adca", "*%s", tmp2);
+  mc6800_emitOp ("staa", "*%s", tmp2);
+  mc6800_emitOp ("ldx", "*%s", tmp2);
+  regalloc_dry_run_cost += 18;
+  if (savea)
+    pullReg (mc6800_reg_a);
+  freeTemp ();
+  freeTemp ();
+  mc6800_dirtyReg (mc6800_reg_a, false);
+  mc6800_dirtyReg (mc6800_reg_x, false);
+}
+
 /*-----------------------------------------------------------------*/
 /* decodePointerOffset - decode a pointer offset operand into a    */
 /*                    literal offset and a rematerializable offset */
@@ -8873,6 +8963,8 @@ decodePointerOffset (operand * opOffset, int * litOffset, char ** rematOffset)
         *litOffset = (int) floatFromVal (aop->aopu.aop_lit);
       else if (aop->type == AOP_IMMD)
         *rematOffset = aop->aopu.aop_immd;
+      else if (aop->type == AOP_STL)
+        *litOffset = regalloc_dry_run ? 1 : _G.stackOfs + _G.stackPushes + aop->aopu.aop_stk + 1;
     }
   else
     wassertl (0, "Pointer get/set with non-constant offset");
@@ -9375,6 +9467,8 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   loadRegFromAop (mc6800_reg_x, AOP (left), 0);
   /* so x now contains the address */
 
+  if (stackBasedOffset (right))
+    addSPToX ();
   decodePointerOffset (right, &litOffset, &rematOffset);
 
   if (AOP_TYPE (result) == AOP_REG && IS_AOP_X (AOP (result))
@@ -10008,9 +10102,11 @@ genPointerSet (iCode * ic, iCode * pi)
 #endif
   else
     {
-      decodePointerOffset (left, &litOffset, &rematOffset);
       needpulla = pushRegIfSurv (mc6800_reg_a);
       loadRegFromAop (mc6800_reg_x, AOP (result), 0);
+      if (stackBasedOffset (left))
+        addSPToX ();
+      decodePointerOffset (left, &litOffset, &rematOffset);
 
       if (rematOffset)
         {
