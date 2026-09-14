@@ -8503,39 +8503,33 @@ genrshOne (operand * result, operand * left, int shCount, int sign)
 static void
 genrshTwo (operand * result, operand * left, int shCount, int sign)
 {
-  bool needpulla, needpullx;
+  int i;
+  bool needpulla, needpullb;
+
   D (emitcode (";     genrshTwo", ""));
-#if 0
-  /* if shCount >= 8 */
+
   if (shCount >= 8)
     {
-      if (shCount != 8 || sign)
-        {
-          needpulla = pushRegIfSurv (mc6800_reg_a);
-          loadRegFromAop (mc6800_reg_a, AOP (left), 1);
-          AccRsh (shCount - 8, sign);
-          storeRegToFullAop (mc6800_reg_a, AOP (result), sign);
-          pullOrFreeReg (mc6800_reg_a, needpulla);
-        }
-      else
-        {
-          transferAopAop (AOP (left), 1, AOP (result), 0);
-          storeConstToAop (0, AOP (result), 1);
-        }
+      needpulla = pushRegIfSurv (mc6800_reg_a);
+      loadRegFromAop (mc6800_reg_a, AOP (left), 1);
+      AccRsh (shCount - 8, sign);
+      storeRegToFullAop (mc6800_reg_a, AOP (result), sign);
+      pullOrFreeReg (mc6800_reg_a, needpulla);
     }
-
-  /*  1 <= shCount <= 7 */
   else
     {
       needpulla = pushRegIfSurv (mc6800_reg_a);
-      needpullx = pushRegIfSurv (mc6800_reg_x);
-      loadRegFromAop (mc6800_reg_xa, AOP (left), 0);
-      XAccRsh (shCount, sign);
-      storeRegToAop (mc6800_reg_xa, AOP (result), 0);
-      pullOrFreeReg (mc6800_reg_x, needpullx);
+      needpullb = pushRegIfSurv (mc6800_reg_b);
+      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+      for (i = 0; i < shCount; i++)
+        {
+          rmwWithReg (sign ? "asr" : "lsr", mc6800_reg_a);
+          rmwWithReg ("ror", mc6800_reg_b);
+        }
+      storeRegToAop (mc6800_reg_d, AOP (result), 0);
+      pullOrFreeReg (mc6800_reg_b, needpullb);
       pullOrFreeReg (mc6800_reg_a, needpulla);
     }
-#endif
 }
 
 /*-----------------------------------------------------------------*/
@@ -8766,110 +8760,62 @@ genRightShift (iCode * ic)
   symbol *tlbl, *tlbl1;
   char *shift;
   bool sign;
-  asmop *aopResult;
   bool needpullcountreg;
   reg_info *countreg = NULL;
 
   D (emitcode (";     genRightShift", ""));
 
-#if 0
-  /* signed & unsigned types are treated the same : i.e. the
-     signed is NOT propagated inwards : quoting from the
-     ANSI - standard : "for E1 >> E2, is equivalent to division
-     by 2**E2 if unsigned or if it has a non-negative value,
-     otherwise the result is implementation defined ", MY definition
-     is that the sign does not get propagated */
-
   right = IC_RIGHT (ic);
   left = IC_LEFT (ic);
   result = IC_RESULT (ic);
 
-  /* if signed then we do it the hard way preserve the
-     sign bit moving it inwards */
   sign = !SPEC_USIGN (getSpec (operandType (left)));
 
   aopOp (right, ic, false);
 
-  /* if the shift count is known then do it
-     as efficiently as possible */
   if (AOP_TYPE (right) == AOP_LIT &&
-    (getSize (operandType (result)) == 1 || getSize (operandType (result)) == 2 || getSize (operandType (result)) == 4))
+      (getSize (operandType (result)) == 1 || getSize (operandType (result)) == 2 || getSize (operandType (result)) == 4))
     {
       genRightShiftLiteral (left, right, result, ic, sign);
       return;
     }
 
-  /* shift count is unknown then we have to form
-     a loop get the loop count in X : Note: we take
-     only the lower order byte since shifting
-     more that 32 bits make no sense anyway, ( the
-     largest size of an object can be only 32 bits ) */
-
   aopOp (result, ic, false);
   aopOp (left, ic, false);
-  aopResult = AOP (result);
 
-  if (sameRegs (AOP (right), AOP (result)) || regsInCommon (right, result) || IS_AOP_D (AOP (result)) || isOperandVolatile (result, false))
-    aopResult = forceStackedAop (AOP (result), sameRegs (AOP (left), AOP (result)));
+  wassertl (!IS_AOP_WITH_X (AOP (result)),
+            "right shift by a variable count with the result in x is not supported yet");
 
-  /* now move the left to the result if they are not the
-     same */
-  if (IS_AOP_HX (aopResult) && !aopResult->stacked)
-    loadRegFromAop (mc6800_reg_hx, AOP (left), 0);
-  else if (IS_AOP_AX (AOP (result)) && IS_AOP_D (AOP (left)) || IS_AOP_D (AOP (result)) && IS_AOP_AX (AOP (left)))
+  if (!sameRegs (left->aop, AOP (result)))
     {
-      pushReg (mc6800_reg_x, true);
-      emitcode("tax", "");
-      regalloc_dry_run_cost++;
-      pullReg (mc6800_reg_a);
-    }
-  else if (!sameRegs (left->aop, aopResult))
-    {
-      int size = AOP_SIZE (result);
+      size = AOP_SIZE (result);
       offset = 0;
       while (size--)
         {
-          transferAopAop (AOP (left), offset, aopResult, offset);
+          transferAopAop (AOP (left), offset, AOP (result), offset);
           offset++;
         }
     }
   freeAsmop (left, NULL, ic, true);
-  AOP (result) = aopResult;
 
-  tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   size = AOP_SIZE (result);
-  offset = 0;
+  tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-  if (mc6800_reg_x->isDead && !IS_AOP_X (AOP (result)) && !IS_AOP_D (AOP (result)) && !IS_AOP_AX (AOP (result)) && !IS_AOP_HX (AOP (result)))
-    countreg = mc6800_reg_x;
-  else if (mc6800_reg_a->isDead && !IS_AOP_A (AOP (result)) && !IS_AOP_D (AOP (result)) && !IS_AOP_AX (AOP (result)))
+  if (!IS_AOP_WITH_B (AOP (result)))
+    countreg = mc6800_reg_b;
+  else if (!IS_AOP_WITH_A (AOP (result)))
     countreg = mc6800_reg_a;
-  else if (!IS_AOP_X (AOP (result)) && !IS_AOP_D (AOP (result)) && !IS_AOP_AX (AOP (result)) && !IS_AOP_HX (AOP (result)))
-    countreg = mc6800_reg_x;
-  else if(!IS_AOP_A (AOP (result)) && !IS_AOP_D (AOP (result)) && !IS_AOP_AX (AOP (result)))
-    countreg = mc6800_reg_a;
-  needpullcountreg = (countreg && pushRegIfSurv (countreg));
-  wassert (right->aop); // This can fail is left and right are the same, resulting in a segfault later (bug #3598).
-  if(countreg)
-    {
-      countreg->isFree = false;
-      loadRegFromAop (countreg, AOP (right), 0);
-    }
-  else
-    {
-      pushReg (mc6800_reg_a, false);
-      pushReg (mc6800_reg_a, true);
-      loadRegFromAop (mc6800_reg_a, AOP (right), 0);
-      emitcode ("sta", "2, s");
-      regalloc_dry_run_cost += 3;
-      pullReg (mc6800_reg_a);
-    }
-  emitcode (countreg == mc6800_reg_a ? "tsta" : (countreg ? "tstx" : "tst 1, s"), "");
-  regalloc_dry_run_cost += (countreg ? 1 : 3);
 
-  if (right->aop->type != AOP_LIT || !ulFromVal (right->aop->aopu.aop_lit))
-    emitBranch ("beq", tlbl1);
+  wassertl (countreg, "right shift by a variable count needs a free accumulator");
+
+  needpullcountreg = pushRegIfSurv (countreg);
+  countreg->isFree = false;
+  loadRegFromAop (countreg, AOP (right), 0);
+  emitcode (countreg == mc6800_reg_a ? "tsta" : "tstb", "");
+  regalloc_dry_run_cost++;
+  emitBranch ("beq", tlbl1);
+
   if (!regalloc_dry_run)
     emitLabel (tlbl);
 
@@ -8879,26 +8825,14 @@ genRightShift (iCode * ic)
       rmwWithAop (shift, AOP (result), offset);
       shift = "ror";
     }
-
-  if (!regalloc_dry_run)
-    emitcode (countreg == mc6800_reg_a ? "dbnza" : (countreg ? "dbnzx" : "dbnz 1, s"), "%05d$", labelKey2num (tlbl->key));
-  regalloc_dry_run_cost += (countreg ? 2 : 4);
+  rmwWithReg ("dec", countreg);
+  emitBranch ("bne", tlbl);
 
   if (!regalloc_dry_run)
     emitLabel (tlbl1);
 
-  // After loop, countreg is 0
-  if (countreg)
-    {
-      countreg->isLitConst = 1;
-      countreg->litConst = 0;
-    }
+  pullOrFreeReg (countreg, needpullcountreg);
 
-  if (!countreg)
-    pullNull (1);
-  else
-    pullOrFreeReg (countreg, needpullcountreg);
-#endif
   freeAsmop (result, NULL, ic, true);
   freeAsmop (right, NULL, ic, true);
 }
