@@ -101,6 +101,7 @@ static void loadRegFromConst (reg_info * reg, int c);
 static asmop *newAsmop (short type);
 static const char *aopAdrStr (asmop * aop, int loffset, bool bit16);
 static void setupXForAop (asmop * aop);
+static void setupXFromSP (int stackOffset);
 static void updateiTempRegisterUse (operand * op);
 #define RESULTONSTACK(x) \
                          (IC_RESULT(x) && IC_RESULT(x)->aop && \
@@ -579,6 +580,14 @@ static void
 loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
 {
   int regidx = reg->rIdx;
+
+  if (aop->type == AOP_STL)
+    {
+      setupXFromSP (_G.stackOfs + aop->aopu.aop_stk);
+      if (regidx != X_IDX)
+        transferRegReg (mc6800_reg_x, reg, false);
+      return;
+    }
 
   setupXForAop (aop);
 
@@ -2071,7 +2080,12 @@ aopForRemat (symbol * sym)
       ic = OP_SYMBOL (IC_LEFT (ic))->rematiCode;
     }
 
-  if (ic->op == ADDRESS_OF)
+  if (ic->op == ADDRESS_OF && OP_SYMBOL (IC_LEFT (ic))->onStack)
+    {
+      aop = newAsmop (AOP_STL);
+      aop->aopu.aop_stk = OP_SYMBOL (IC_LEFT (ic))->stack + val;
+    }
+  else if (ic->op == ADDRESS_OF)
     {
       if (val)
         {
@@ -2501,6 +2515,10 @@ aopDerefAop (asmop * aop, int offset)
           dbuf_printf (&dbuf, "(%s+%d)", aop->aopu.aop_immd, offset);
           newaop->aopu.aop_dir = dbuf_detach_c_str (&dbuf);
         }
+      break;
+    case AOP_STL:
+      newaop = newAsmop (AOP_SOF);
+      newaop->aopu.aop_stk = aop->aopu.aop_stk + offset;
       break;
     case AOP_LIT:
       adr = (int) ulFromVal (aop->aopu.aop_lit);
@@ -9312,7 +9330,7 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   aopOp (left, ic, false);
 
   /* if left is rematerialisable */
-  if (AOP_TYPE (left) == AOP_IMMD || AOP_TYPE (left) == AOP_LIT)
+  if (AOP_TYPE (left) == AOP_IMMD || AOP_TYPE (left) == AOP_LIT || AOP_TYPE (left) == AOP_STL)
     {
       /* if result is not bit variable type */
       if (!IS_BITVAR (retype))
@@ -9909,7 +9927,7 @@ genPointerSet (iCode * ic, iCode * pi)
   aopOp (result, ic, false);
 
   /* if the result is rematerializable */
-  if (AOP_TYPE (result) == AOP_IMMD || AOP_TYPE (result) == AOP_LIT)
+  if (AOP_TYPE (result) == AOP_IMMD || AOP_TYPE (result) == AOP_LIT || AOP_TYPE (result) == AOP_STL)
     {
       if (!bit_field)
         genDataPointerSet (left, right, result, ic);

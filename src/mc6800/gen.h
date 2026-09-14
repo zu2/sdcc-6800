@@ -34,6 +34,7 @@ typedef enum
   AOP_CRY,       /* carry contains the value of this */
   AOP_EXT,       /* operand using extended addressing mode */
   AOP_SOF,       /* operand at an offset on the stack */
+  AOP_STL,       /* operand is an address on the stack */
   AOP_DUMMY,     /* Read undefined, discard writes */
   AOP_IDX        /* operand using indexed addressing mode */
   }
