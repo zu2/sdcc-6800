@@ -1534,10 +1534,15 @@ transferAopAop (asmop *srcaop, int srcofs, asmop *dstaop, int dstofs)
 static void
 accopWithMisc (char *accop, char *param)
 {
+  const mc6800opcodedata *opcode = mc6800_getOpcodeData (accop);
+
+  assert (opcode);
   emitcode (accop, "%s", param);
   regalloc_dry_run_cost += ((!param[0] || !strcmp(param, ",x")) ? 1 : ((param[0]=='#' || param[0]=='*') ? 2 : 3));
-  if (strcmp (accop, "bita") && strcmp (accop, "cmpa") && strcmp (accop, "cpx"))
+  if (opcode->change & M_A)
     mc6800_dirtyReg (mc6800_reg_a, false);
+  if (opcode->change & M_B)
+    mc6800_dirtyReg (mc6800_reg_b, false);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -1548,6 +1553,9 @@ accopWithMisc (char *accop, char *param)
 static void
 accopWithAop (char *accop, asmop *aop, int loffset)
 {
+  const mc6800opcodedata *opcode = mc6800_getOpcodeData (accop);
+
+  assert (opcode);
   setupXForAop (aop);
 
   if (aop->stacked && aop->stk_aop[loffset])
@@ -1610,8 +1618,10 @@ accopWithAop (char *accop, asmop *aop, int loffset)
         regalloc_dry_run_cost += 3;
     }
 
-  if (strcmp (accop, "bita") && strcmp (accop, "cmpa") && strcmp (accop, "cpx"))
+  if (opcode->change & M_A)
     mc6800_dirtyReg (mc6800_reg_a, false);
+  if (opcode->change & M_B)
+    mc6800_dirtyReg (mc6800_reg_b, false);
 }
 
 
