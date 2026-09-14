@@ -69,6 +69,7 @@ typedef struct reg_info
     unsigned isDead:1;      /* does not need to survive current instruction */
     unsigned isLitConst:1;      /* has an literal constant loaded */
     int litConst;		/* last literal constant */
+    int stackOffset;
   }
 reg_info;
 extern reg_info regsmc6800[];

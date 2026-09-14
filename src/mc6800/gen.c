@@ -63,7 +63,6 @@ static struct
   int stackPushes;
   short regsinuse;
   set *sendSet;
-  int tsxStackPushes;
   int tempOfs;
 }
 _G;
@@ -1824,6 +1823,68 @@ operandConflictsWithX (operand *op)
 }
 
 
+static void
+adjustX (int diff)
+{
+  while (diff > 0) {
+    mc6800_emitOp ("inx", "");
+    regalloc_dry_run_cost++;
+    mc6800_reg_x->stackOffset++;
+    diff--;
+  }
+  while (diff < 0) {
+    mc6800_emitOp ("dex", "");
+    regalloc_dry_run_cost++;
+    mc6800_reg_x->stackOffset--;
+    diff++;
+  }
+}
+
+static void
+setupXFromSP (int stackOffset)
+{
+  const char *tmp = allocTemp ();
+  bool saveb = !mc6800_reg_b->isFree && !mc6800_reg_a->isFree;
+  int delta = (saveb ? 2 : 1) + stackOffset + _G.stackPushes;
+
+  if (mc6800_reg_b->isFree || saveb) {
+    if (saveb) {
+      mc6800_emitOp ("pshb", "");
+      regalloc_dry_run_cost++;
+    }
+    mc6800_emitOp ("sts", "*%s", tmp);
+    mc6800_emitOp ("ldab", "*%s+1", tmp);
+    mc6800_emitOp ("addb", "#%d", delta & 0xff);
+    mc6800_emitOp ("stab", "*%s+1", tmp);
+    mc6800_emitOp ("ldab", "*%s", tmp);
+    mc6800_emitOp ("adcb", "#%d", (delta >> 8) & 0xff);
+    mc6800_emitOp ("stab", "*%s", tmp);
+    mc6800_emitOp ("ldx", "*%s", tmp);
+    regalloc_dry_run_cost += 16;
+    if (saveb) {
+      mc6800_emitOp ("pulb", "");
+      regalloc_dry_run_cost++;
+    } else {
+      mc6800_dirtyReg (mc6800_reg_b, false);
+    }
+  } else {
+    mc6800_emitOp ("sts", "*%s", tmp);
+    mc6800_emitOp ("ldaa", "*%s+1", tmp);
+    mc6800_emitOp ("adda", "#%d", delta & 0xff);
+    mc6800_emitOp ("staa", "*%s+1", tmp);
+    mc6800_emitOp ("ldaa", "*%s", tmp);
+    mc6800_emitOp ("adca", "#%d", (delta >> 8) & 0xff);
+    mc6800_emitOp ("staa", "*%s", tmp);
+    mc6800_emitOp ("ldx", "*%s", tmp);
+    regalloc_dry_run_cost += 16;
+    mc6800_dirtyReg (mc6800_reg_a, false);
+  }
+  freeTemp ();
+  mc6800_dirtyReg (mc6800_reg_x, false);
+  mc6800_reg_x->aop = &tsxaop;
+  mc6800_reg_x->stackOffset = stackOffset;
+}
+
 /*-----------------------------------------------------------------*/
 /* aopForSym - for a true symbol                                   */
 /*-----------------------------------------------------------------*/
@@ -1832,6 +1893,7 @@ aopForSym (iCode * ic, symbol * sym, bool result)
 {
   asmop *aop;
   memmap *space;
+  int lo, hi, shift, limit;
 
   wassertl (ic != NULL, "Got a null iCode");
   wassertl (sym != NULL, "Got a null symbol");
@@ -1883,10 +1945,25 @@ aopForSym (iCode * ic, symbol * sym, bool result)
               if (operandConflictsWithX (IC_RIGHT (ic)))
                 return aop;
             }
-          emitcode ("tsx", "");
-          mc6800_dirtyReg (mc6800_reg_x, false);
-          mc6800_reg_x->aop = &tsxaop;
-          _G.tsxStackPushes = _G.stackPushes;
+          lo = _G.stackOfs + _G.stackPushes + sym->stack;
+          hi = lo + aop->size - 1;
+          shift = 0;
+          if (hi > 255) {
+            shift = hi - 255;
+          }
+          if (lo < 0) {
+            shift = lo;
+          }
+          limit = (mc6800_reg_a->isFree || mc6800_reg_b->isFree) ? 16 : 18;
+          if (shift >= -limit && shift <= limit) {
+            emitcode ("tsx", "");
+            mc6800_dirtyReg (mc6800_reg_x, false);
+            mc6800_reg_x->aop = &tsxaop;
+            mc6800_reg_x->stackOffset = -_G.stackPushes;
+            adjustX (shift);
+          } else {
+            setupXFromSP (shift - _G.stackPushes);
+          }
         }
       return aop;
     }
@@ -2547,7 +2624,7 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
     case AOP_SOF:
       if (!regalloc_dry_run && mc6800_reg_x->aop != &tsxaop)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "AOP_SOF without tsx");
-      xofs = _G.stackOfs + _G.tsxStackPushes + aop->aopu.aop_stk + offset;
+      xofs = _G.stackOfs - mc6800_reg_x->stackOffset + aop->aopu.aop_stk + offset;
       if (xofs < 0 || xofs > 255)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "stack offset out of range");
       if (xofs)
