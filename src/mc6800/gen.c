@@ -8139,7 +8139,8 @@ shiftLLong (operand * left, operand * result, int offr)
 static void
 genlshFour (operand * result, operand * left, int shCount)
 {
-  int size;
+  int size, offset, i;
+  char *shift;
 
   sym_link *resulttype = operandType (result);
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
@@ -8147,98 +8148,37 @@ genlshFour (operand * result, operand * left, int shCount)
   bool maskedtopbyte = (topbytemask != 0xff);
 
   D (emitcode (";     genlshFour", ""));
-#if 0
+
   size = AOP_SIZE (result);
 
-  /* TODO: deal with the &result == &left case */
-
-  /* if shifting more that 3 bytes */
-  if (shCount >= 24)
+  for (offset = size - 1; offset >= 0; offset--)
     {
-      shCount -= 24;
-      if (shCount)
-        /* lowest order of left goes to the highest
-           order of the destination */
-        shiftL1Left2Result (left, LSB, result, MSB32, shCount);
+      if (offset >= shCount / 8)
+        transferAopAop (AOP (left), offset - shCount / 8, AOP (result), offset);
       else
-        movLeft2Result (left, LSB, result, MSB32, 0);
-      storeConstToAop (0, AOP (result), LSB);
-      storeConstToAop (0, AOP (result), MSB16);
-      storeConstToAop (0, AOP (result), MSB24);
-      return;
+        storeConstToAop (0, AOP (result), offset);
     }
 
-  /* more than two bytes */
-  else if (shCount >= 16)
+  for (i = shCount % 8; i > 0; i--)
     {
-      /* lower order two bytes goes to higher order two bytes */
-      shCount -= 16;
-      /* if some more remaining */
-      if (shCount)
-        shiftL2Left2Result (left, LSB, result, MSB24, shCount);
-      else
+      shift = "asl";
+      for (offset = shCount / 8; offset < size; offset++)
         {
-          movLeft2Result (left, MSB16, result, MSB32, 0);
-          movLeft2Result (left, LSB, result, MSB24, 0);
-        }
-      storeConstToAop (0, AOP (result), LSB);
-      storeConstToAop (0, AOP (result), MSB16);
-      return;
-    }
-
-  /* if more than 1 byte */
-  else if (shCount >= 8)
-    {
-      /* lower order three bytes goes to higher order  three bytes */
-      shCount -= 8;
-      if (size == 2)
-        {
-          if (shCount)
-            shiftL1Left2Result (left, LSB, result, MSB16, shCount);
-          else
-            movLeft2Result (left, LSB, result, MSB16, 0);
-        }
-      else
-        {
-          /* size = 4 */
-          if (shCount == 0)
-            {
-              movLeft2Result (left, MSB24, result, MSB32, 0);
-              movLeft2Result (left, MSB16, result, MSB24, 0);
-              movLeft2Result (left, LSB, result, MSB16, 0);
-              storeConstToAop (0, AOP (result), LSB);
-            }
-          else if (shCount == 1)
-            shiftLLong (left, result, MSB16);
-          else
-            {
-              shiftL2Left2Result (left, MSB16, result, MSB24, shCount);
-              shiftL1Left2Result (left, LSB, result, MSB16, shCount);
-              shiftRLeftOrResult (left, LSB, result, MSB24, 8 - shCount);
-              storeConstToAop (0, AOP (result), LSB);
-            }
+          rmwWithAop (shift, AOP (result), offset);
+          shift = "rol";
         }
     }
 
-  /* 1 <= shCount <= 2 */
-  else if (shCount <= 2)
+  if (maskedtopbyte)
     {
-      shiftLLong (left, result, LSB);
-      if (shCount == 2)
-        shiftLLong (result, result, LSB);
-      if (maskedtopbyte)
-        maskByte (result, 3, topbytemask);
+      bool needpulla = pushRegIfUsed (mc6800_reg_a);
+
+      loadRegFromAop (mc6800_reg_a, AOP (result), size - 1);
+      emitcode ("anda", "#0x%02x", topbytemask);
+      regalloc_dry_run_cost += 2;
+      storeRegToAop (mc6800_reg_a, AOP (result), size - 1);
+      pullOrFreeReg (mc6800_reg_a, needpulla);
     }
-  /* 3 <= shCount <= 7, optimize */
-  else
-    {
-      shiftL2Left2Result (left, MSB24, result, MSB24, shCount);
-      shiftRLeftOrResult (left, MSB16, result, MSB24, 8 - shCount);
-      shiftL2Left2Result (left, LSB, result, LSB, shCount);
-      if (maskedtopbyte)
-        maskByte (result, 3, topbytemask);
-    }
-#endif
 }
 
 /*-----------------------------------------------------------------*/
@@ -8579,93 +8519,34 @@ shiftRLong (operand * left, int offl, operand * result, int sign)
 static void
 genrshFour (operand * result, operand * left, int shCount, int sign)
 {
-  bool needpulla = false;
-  bool needpullx = false;
-
-  /* TODO: handle cases where left == result */
+  int size, offset, i;
+  char *shift;
 
   D (emitcode (";     genrshFour", ""));
 
-#if 0
-  /* if shifting more that 3 bytes */
-  if (shCount >= 24)
+  size = AOP_SIZE (result);
+
+  for (offset = 0; offset + shCount / 8 < size; offset++)
+    transferAopAop (AOP (left), offset + shCount / 8, AOP (result), offset);
+
+  if (shCount / 8)
     {
-      needpulla = pushRegIfSurv (mc6800_reg_a);
-      loadRegFromAop (mc6800_reg_a, AOP (left), 3);
-      AccRsh (shCount - 24, sign);
-      storeRegToFullAop (mc6800_reg_a, AOP (result), sign);
+      bool needpulla = pushRegIfSurv (mc6800_reg_a);
+
+      loadRegFromAop (mc6800_reg_a, AOP (result), size - shCount / 8 - 1);
+      storeRegSignToUpperAop (mc6800_reg_a, AOP (result), size - shCount / 8, sign);
+      pullOrFreeReg (mc6800_reg_a, needpulla);
     }
-  else if (shCount >= 16)
+
+  for (i = shCount % 8; i > 0; i--)
     {
-      needpulla = pushRegIfSurv (mc6800_reg_a);
-      needpullx = pushRegIfSurv (mc6800_reg_x);
-      loadRegFromAop (mc6800_reg_xa, AOP (left), 2);
-      XAccRsh (shCount - 16, sign);
-      storeRegToFullAop (mc6800_reg_xa, AOP (result), sign);
-    }
-  else if (shCount >= 8)
-    {
-      if (shCount == 1)
+      shift = sign ? "asr" : "lsr";
+      for (offset = size - shCount / 8 - 1; offset >= 0; offset--)
         {
-          shiftRLong (left, MSB16, result, sign);
-          return;
-        }
-      else if (shCount == 8)
-        {
-          needpulla = pushRegIfSurv (mc6800_reg_a);
-          transferAopAop (AOP (left), 1, AOP (result), 0);
-          transferAopAop (AOP (left), 2, AOP (result), 1);
-          loadRegFromAop (mc6800_reg_a, AOP (left), 3);
-          storeRegToAop (mc6800_reg_a, AOP (result), 2);
-          storeRegSignToUpperAop (mc6800_reg_a, AOP (result), 3, sign);
-        }
-      else if (shCount == 9)
-        {
-          shiftRLong (left, MSB16, result, sign);
-          return;
-        }
-      else
-        {
-          needpulla = pushRegIfSurv (mc6800_reg_a);
-          needpullx = pushRegIfSurv (mc6800_reg_x);
-          loadRegFromAop (mc6800_reg_xa, AOP (left), 1);
-          XAccRsh (shCount - 8, false);
-          storeRegToAop (mc6800_reg_xa, AOP (result), 0);
-          loadRegFromAop (mc6800_reg_x, AOP (left), 3);
-          loadRegFromConst (mc6800_reg_a, 0);
-          XAccRsh (shCount - 8, sign);
-          accopWithAop ("ora", AOP (result), 1);
-          storeRegToAop (mc6800_reg_xa, AOP (result), 1);
-          storeRegSignToUpperAop (mc6800_reg_x, AOP (result), 3, sign);
+          rmwWithAop (shift, AOP (result), offset);
+          shift = "ror";
         }
     }
-  else
-    {
-      /* 1 <= shCount <= 7 */
-      if (shCount == 1)
-        {
-          shiftRLong (left, LSB, result, sign);
-          return;
-        }
-      else
-        {
-          needpulla = pushRegIfSurv (mc6800_reg_a);
-          needpullx = pushRegIfSurv (mc6800_reg_x);
-          loadRegFromAop (mc6800_reg_xa, AOP (left), 0);
-          XAccRsh (shCount, false);
-          storeRegToAop (mc6800_reg_xa, AOP (result), 0);
-          loadRegFromAop (mc6800_reg_a, AOP (left), 2);
-          AccLsh (8 - shCount);
-          accopWithAop ("ora", AOP (result), 1);
-          storeRegToAop (mc6800_reg_a, AOP (result), 1);
-          loadRegFromAop (mc6800_reg_xa, AOP (left), 2);
-          XAccRsh (shCount, sign);
-          storeRegToAop (mc6800_reg_xa, AOP (result), 2);
-        }
-    }
-  pullOrFreeReg (mc6800_reg_x, needpullx);
-  pullOrFreeReg (mc6800_reg_a, needpulla);
-#endif
 }
 
 /*-----------------------------------------------------------------*/
