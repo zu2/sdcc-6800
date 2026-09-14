@@ -4552,50 +4552,34 @@ genPlus16 (iCode *ic)
 static void
 genPlusMANY (iCode *ic)
 {
-  return;
-#if 0
-  offset = 0;
-  needpullb = pushRegIfSurv (mc6800_reg_b);
-    needpulla = pushRegIfSurv (mc6800_reg_a);
+  asmop *leftOp = AOP (IC_LEFT (ic));
+  asmop *rightOp = AOP (IC_RIGHT (ic));
+  asmop *result = AOP (IC_RESULT (ic));
+  int size = getDataSize (IC_RESULT (ic));
+  int offset;
+  reg_info *reg;
+  char *add;
+  bool needpull = false;
 
-
-  while (size--)
+  if (mc6800_reg_b->isFree && !IS_AOP_WITH_B (result))
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_a->isFree && !IS_AOP_WITH_A (result))
+    reg = mc6800_reg_a;
+  else
     {
-      if (earlystore && offset == 1)
-        pullReg (mc6800_reg_a);
-      else
-        loadRegFromAop (mc6800_reg_a, leftOp, offset);
-      if (!mayskip || !aopIsLitVal (rightOp, offset, 1, 0x00))
-        {
-          accopWithAop (add, rightOp, offset);
-          if (!size && maskedtopbyte)
-            {
-              emitcode ("and", "#0x%02x", topbytemask);
-              regalloc_dry_run_cost += 2;
-            }
-          mayskip = false;
-          skip = false;
-        }
-      else
-        skip = true;
-      if (size && AOP_TYPE (IC_RESULT (ic)) == AOP_REG && AOP (IC_RESULT (ic))->aopu.aop_reg[offset]->rIdx == A_IDX)
-        {
-          pushReg (mc6800_reg_a, true);
-          delayedstore = true;
-        }
-      else
-        storeRegToAop (mc6800_reg_a, AOP (IC_RESULT (ic)), offset);
-      offset++;
-      mc6800_freeReg (mc6800_reg_a);
-      if (!skip)
-        add = "adc";              /* further adds must propagate carry */
+      reg = IS_AOP_WITH_B (result) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfSurv (reg);
     }
- if (delayedstore)
-   pullReg (mc6800_reg_a);
- pullOrFreeReg (mc6800_reg_a, needpulla);
 
- wassert (!earlystore || !delayedstore);
-#endif
+  add = (reg == mc6800_reg_b) ? "addb" : "adda";
+  for (offset = 0; offset < size; offset++)
+    {
+      loadRegFromAop (reg, leftOp, offset);
+      accopWithAop (add, rightOp, offset);
+      storeRegToAop (reg, result, offset);
+      add = (reg == mc6800_reg_b) ? "adcb" : "adca";
+    }
+  pullOrFreeReg (reg, needpull);
 }
 
 
