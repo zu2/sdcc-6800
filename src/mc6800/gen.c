@@ -5847,6 +5847,7 @@ genCmp (iCode * ic, iCode * ifx)
   char *sub;
   symbol *jlbl = NULL;
   bool needpulla = false;
+  bool exchange;
 
   opcode = ic->op;
 
@@ -5869,15 +5870,6 @@ genCmp (iCode * ic, iCode * ifx)
   aopOp (right, ic, false);
   aopOp (result, ic, true);
 
-  /* need register operand on left, prefer literal operand on right */
-  if (((AOP_TYPE (right) == AOP_REG) && !IS_AOP_A (AOP (left))) || AOP_TYPE (left) == AOP_LIT)
-    {
-      operand *temp = left;
-      left = right;
-      right = temp;
-      opcode = exchangedCmp (opcode);
-    }
-
   if (ifx)
     {
       if (IC_TRUE (ifx))
@@ -5893,6 +5885,32 @@ genCmp (iCode * ic, iCode * ifx)
     }
 
   size = max (AOP_SIZE (left), AOP_SIZE (right));
+
+  /* need register operand on left, prefer literal operand on right */
+  if (AOP_TYPE (left) == AOP_LIT)
+    exchange = AOP_TYPE (right) != AOP_LIT;
+  else if (AOP_TYPE (right) == AOP_LIT)
+    exchange = false;
+  else if (AOP_TYPE (right) == AOP_REG && !IS_AOP_A (AOP (left)))
+    exchange = true;
+  else if (AOP_TYPE (left) == AOP_REG && IS_AOP_A (AOP (left)))
+    exchange = false;
+  /* These conditions depend on the Z flag bit, but Z is */
+  /* only valid for the last byte of the comparison, not */
+  /* the whole value. So exchange the operands to get a  */
+  /* comparison that doesn't depend on Z. (This is safe  */
+  /* to do here since ralloc won't assign multi-byte     */
+  /* operands to registers for comparisons)              */
+  else
+    exchange = size > 1 && ((opcode == '>') || (opcode == LE_OP));
+
+  if (exchange)
+    {
+      operand *temp = left;
+      left = right;
+      right = temp;
+      opcode = exchangedCmp (opcode);
+    }
 
   if (size == 1 && IS_AOP_A (AOP (left)))
     {
@@ -5948,21 +5966,6 @@ genCmp (iCode * ic, iCode * ifx)
       else
         {
           sub = "suba";
-
-          /* These conditions depend on the Z flag bit, but Z is */
-          /* only valid for the last byte of the comparison, not */
-          /* the whole value. So exchange the operands to get a  */
-          /* comparison that doesn't depend on Z. (This is safe  */
-          /* to do here since ralloc won't assign multi-byte     */
-          /* operands to registers for comparisons)              */
-          if (((opcode == '>') || (opcode == LE_OP))
-              && !(AOP_TYPE (left) == AOP_REG && mc6800_reg_b->isDead))
-            {
-              operand *temp = left;
-              left = right;
-              right = temp;
-              opcode = exchangedCmp (opcode);
-            }
 
           if ((AOP_TYPE (right) == AOP_LIT) && !isOperandVolatile (left, false))
             {
