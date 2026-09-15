@@ -10915,8 +10915,10 @@ genmc6800iCode (iCode *ic)
           mc6800_regWithIdx (i)->isDead = true;
       }
 
-    mc6800_reg_x->isDead = mc6800_reg_xl->isDead && mc6800_reg_xh->isDead;
+    mc6800_reg_d->isFree = mc6800_reg_a->isFree && mc6800_reg_b->isFree;
+    mc6800_reg_d->isDead = mc6800_reg_a->isDead && mc6800_reg_b->isDead;
     mc6800_reg_x->isFree = mc6800_reg_xl->isFree && mc6800_reg_xh->isFree;
+    mc6800_reg_x->isDead = mc6800_reg_xl->isDead && mc6800_reg_xh->isDead;
   }
 
   /* depending on the operation */
