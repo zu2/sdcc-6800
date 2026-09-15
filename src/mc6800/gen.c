@@ -6187,7 +6187,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
                 }
               if (aopIsLitVal (right->aop, offset, 1, 0x00))
                 {
-                  emitcode ("tsta", "");
+                  mc6800_emitOp ("tsta", "");
                   regalloc_dry_run_cost++;
                 }
               else if (AOP_TYPE (right) == AOP_REG)
