@@ -5833,6 +5833,351 @@ branchInstCmp (int opcode, int sign)
 }
 
 
+static void
+genCmp1 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, int sign)
+{
+  reg_info *reg;
+  bool needpull = false;
+
+  if (IS_AOP_A (AOP (left)))
+    reg = mc6800_reg_a;
+  else if (IS_AOP_B (AOP (left)))
+    reg = mc6800_reg_b;
+  else
+    {
+      reg = (mc6800_reg_b->isDead && !IS_AOP_B (AOP (right))) ? mc6800_reg_b : mc6800_reg_a;
+      needpull = pushRegIfSurv (reg);
+      loadRegFromAop (reg, AOP (left), 0);
+    }
+  accopWithAop ((reg == mc6800_reg_b) ? "cmpb" : "cmpa", AOP (right), 0);
+  mc6800_freeReg (reg);
+  freeAsmop (right, NULL, ic, false);
+  freeAsmop (left, NULL, ic, false);
+
+  if (ifx)
+    {
+      symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+      symbol *jlbl = IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx);
+
+      pullOrFreeReg (reg, needpull);
+      freeAsmop (IC_RESULT (ic), NULL, ic, true);
+      emitBranch (branchInstCmp (opcode, sign), tlbl);
+      emitBranch ("jmp", jlbl);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl);
+
+      ifx->generated = 1;
+    }
+  else
+    {
+      symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+      symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+      if (reg != mc6800_reg_b)
+        {
+          pullOrFreeReg (reg, needpull);
+          reg = mc6800_reg_b;
+          needpull = pushRegIfSurv (reg);
+        }
+      emitBranch (branchInstCmp (opcode, sign), tlbl1);
+      loadRegFromConst (reg, 0);
+      emitBranch ("bra", tlbl2);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl1);
+      mc6800_dirtyReg (reg, false);
+      loadRegFromConst (reg, 1);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl2);
+      mc6800_dirtyReg (reg, false);
+      storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
+      pullOrFreeReg (reg, needpull);
+      freeAsmop (IC_RESULT (ic), NULL, ic, true);
+    }
+}
+
+static void
+genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, int sign)
+{
+  reg_info *reg;
+  bool needpull = false;
+
+  if (!mc6800_reg_d->isDead && !IS_AOP_D (AOP (left)) && !IS_AOP_D (AOP (right)))
+    {
+      int offset;
+
+      if ((opcode == '>') || (opcode == LE_OP))
+        {
+          operand *temp = left;
+
+          left = right;
+          right = temp;
+          opcode = exchangedCmp (opcode);
+        }
+      reg = mc6800_reg_b->isDead ? mc6800_reg_b : mc6800_reg_a;
+      needpull = pushRegIfSurv (reg);
+      for (offset = 0; offset < 2; offset++)
+        {
+          if (AOP_TYPE (left) == AOP_LIT)
+            {
+              mc6800_emitOp ((reg == mc6800_reg_b) ? "ldab" : "ldaa", "#0x%02x",
+                             (unsigned int) ((ullFromVal (AOP (left)->aopu.aop_lit) >> (8 * offset)) & 0xff));
+              regalloc_dry_run_cost += 2;
+            }
+          else
+            loadRegFromAop (reg, AOP (left), offset);
+          if (offset == 0)
+            accopWithAop ((reg == mc6800_reg_b) ? "subb" : "suba", AOP (right), 0);
+          else
+            accopWithAop ((reg == mc6800_reg_b) ? "sbcb" : "sbca", AOP (right), 1);
+        }
+      mc6800_freeReg (reg);
+      freeAsmop (right, NULL, ic, false);
+      freeAsmop (left, NULL, ic, false);
+
+      if (ifx)
+        {
+          symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+          symbol *jlbl = IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx);
+
+          pullOrFreeReg (reg, needpull);
+          freeAsmop (IC_RESULT (ic), NULL, ic, true);
+          emitBranch (branchInstCmp (opcode, sign), tlbl);
+          emitBranch ("jmp", jlbl);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl);
+
+          ifx->generated = 1;
+        }
+      else
+        {
+          symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+          symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+          if (reg != mc6800_reg_b)
+            {
+              pullOrFreeReg (reg, needpull);
+              reg = mc6800_reg_b;
+              needpull = pushRegIfSurv (reg);
+            }
+          emitBranch (branchInstCmp (opcode, sign), tlbl1);
+          loadRegFromConst (reg, 0);
+          emitBranch ("bra", tlbl2);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl1);
+          mc6800_dirtyReg (reg, false);
+          loadRegFromConst (reg, 1);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl2);
+          mc6800_dirtyReg (reg, false);
+          storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
+          pullOrFreeReg (reg, needpull);
+          freeAsmop (IC_RESULT (ic), NULL, ic, true);
+        }
+      return;
+    }
+
+  // 2-byte comparison on the MC6800 is not straightforward, but we simply write it as cmpd here.
+  if (IS_AOP_D (AOP (right)))
+    {
+      operand *temp = left;
+
+      left = right;
+      right = temp;
+      opcode = exchangedCmp (opcode);
+    }
+  if (!IS_AOP_D (AOP (left)))
+    {
+      if (IS_AOP_X (AOP (left)))
+        {
+          const char *tmp = allocTemp ();
+
+          allocTemp ();
+          mc6800_emitOp ("stx", "*%s", tmp);
+          mc6800_emitOp ("ldaa", "*%s", tmp);
+          mc6800_emitOp ("ldab", "*%s+1", tmp);
+          regalloc_dry_run_cost += 6;
+          freeTemp ();
+          freeTemp ();
+        }
+      else
+        loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+    }
+  if (AOP_TYPE (right) == AOP_LIT && ((opcode == '>') || (opcode == LE_OP))
+      && (ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) != (sign ? 0x7fffull : 0xffffull))
+    {
+      unsigned int lim = (unsigned int) ((ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) + 1);
+
+      mc6800_emitOp ("subb", "#0x%02x", lim & 0xff);
+      mc6800_emitOp ("sbca", "#0x%02x", (lim >> 8) & 0xff);
+      regalloc_dry_run_cost += 4;
+      opcode = (opcode == '>') ? GE_OP : '<';
+    }
+  else
+    {
+      accopWithAop ("subb", AOP (right), 0);
+      accopWithAop ("sbca", AOP (right), 1);
+    }
+  mc6800_freeReg (mc6800_reg_d);
+  reg = mc6800_reg_b;
+  freeAsmop (right, NULL, ic, false);
+  freeAsmop (left, NULL, ic, false);
+
+  if (ifx)
+    {
+      symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+      symbol *jlbl = IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx);
+
+      freeAsmop (IC_RESULT (ic), NULL, ic, true);
+      if ((opcode == '>') || (opcode == LE_OP))
+        {
+          symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+          emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl2 : tlbl);
+          emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl : tlbl2);
+          mc6800_emitOp ("tstb", "");
+          regalloc_dry_run_cost += 1;
+          emitBranch ((opcode == '>') ? "bne" : "beq", tlbl);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl2);
+        }
+      else
+        emitBranch (branchInstCmp (opcode, sign), tlbl);
+      emitBranch ("jmp", jlbl);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl);
+
+      ifx->generated = 1;
+    }
+  else
+    {
+      symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+      symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+      if ((opcode == '>') || (opcode == LE_OP))
+        {
+          symbol *tlbl3 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+          emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl3 : tlbl1);
+          emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl1 : tlbl3);
+          mc6800_emitOp ("tstb", "");
+          regalloc_dry_run_cost += 1;
+          emitBranch ((opcode == '>') ? "bne" : "beq", tlbl1);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl3);
+        }
+      else
+        emitBranch (branchInstCmp (opcode, sign), tlbl1);
+      loadRegFromConst (reg, 0);
+      emitBranch ("bra", tlbl2);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl1);
+      mc6800_dirtyReg (reg, false);
+      loadRegFromConst (reg, 1);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl2);
+      mc6800_dirtyReg (reg, false);
+      storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
+      pullOrFreeReg (reg, needpull);
+      freeAsmop (IC_RESULT (ic), NULL, ic, true);
+    }
+}
+
+static void
+genCmpMANY (iCode * ic, iCode * ifx, operand * left, operand * right, int size, int opcode, int sign)
+{
+  reg_info *reg;
+  bool needpull;
+  int offset = 0;
+  char *sub;
+  unsigned long long lit = 0ull;
+
+  /* These conditions depend on the Z flag bit, but Z is */
+  /* only valid for the last byte of the comparison, not */
+  /* the whole value. So exchange the operands to get a  */
+  /* comparison that doesn't depend on Z. (This is safe  */
+  /* to do here since ralloc won't assign multi-byte     */
+  /* operands to registers for comparisons)              */
+  if ((opcode == '>') || (opcode == LE_OP))
+    {
+      operand *temp = left;
+
+      left = right;
+      right = temp;
+      opcode = exchangedCmp (opcode);
+    }
+  if ((AOP_TYPE (right) == AOP_LIT) && !isOperandVolatile (left, false))
+    {
+      lit = ullFromVal (AOP (right)->aopu.aop_lit);
+      while ((size > 1) && (((lit >> (8 * offset)) & 0xff) == 0))
+        {
+          offset++;
+          size--;
+        }
+    }
+  reg = mc6800_reg_b->isDead ? mc6800_reg_b : mc6800_reg_a;
+  needpull = pushRegIfSurv (reg);
+  sub = (reg == mc6800_reg_b) ? "subb" : "suba";
+  while (size--)
+    {
+      D (emitcode (";     genCmp ", "sub=%s,size=%d", sub,size));
+      if (AOP_TYPE (left) == AOP_LIT)
+        {
+          lit = ullFromVal (AOP (left)->aopu.aop_lit);
+          mc6800_emitOp ((reg == mc6800_reg_b) ? "ldab" : "ldaa", "#0x%02x",
+                         (unsigned int) ((lit >> (8 * offset)) & 0xff));
+          regalloc_dry_run_cost += 2;
+        }
+      else
+        loadRegFromAop (reg, AOP (left), offset);
+      accopWithAop (sub, AOP (right), offset);
+      mc6800_freeReg (reg);
+      offset++;
+      sub = (reg == mc6800_reg_b) ? "sbcb" : "sbca";
+    }
+  freeAsmop (right, NULL, ic, false);
+  freeAsmop (left, NULL, ic, false);
+
+  if (ifx)
+    {
+      symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+      symbol *jlbl = IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx);
+
+      pullOrFreeReg (reg, needpull);
+      freeAsmop (IC_RESULT (ic), NULL, ic, true);
+      emitBranch (branchInstCmp (opcode, sign), tlbl);
+      emitBranch ("jmp", jlbl);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl);
+
+      ifx->generated = 1;
+    }
+  else
+    {
+      symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+      symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+      if (reg != mc6800_reg_b)
+        {
+          pullOrFreeReg (reg, needpull);
+          reg = mc6800_reg_b;
+          needpull = pushRegIfSurv (reg);
+        }
+      emitBranch (branchInstCmp (opcode, sign), tlbl1);
+      loadRegFromConst (reg, 0);
+      emitBranch ("bra", tlbl2);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl1);
+      mc6800_dirtyReg (reg, false);
+      loadRegFromConst (reg, 1);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl2);
+      mc6800_dirtyReg (reg, false);
+      storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
+      pullOrFreeReg (reg, needpull);
+      freeAsmop (IC_RESULT (ic), NULL, ic, true);
+    }
+}
+
 /*------------------------------------------------------------------*/
 /* genCmp :- greater or less than (and maybe with equal) comparison */
 /*------------------------------------------------------------------*/
@@ -5842,11 +6187,7 @@ genCmp (iCode * ic, iCode * ifx)
   operand *left, *right, *result;
   sym_link *letype, *retype;
   int sign, opcode;
-  int size, offset = 0;
-  unsigned long long lit = 0ull;
-  char *sub;
-  symbol *jlbl = NULL;
-  bool needpulla = false;
+  int size;
   bool exchange;
 
   opcode = ic->op;
@@ -5870,19 +6211,8 @@ genCmp (iCode * ic, iCode * ifx)
   aopOp (right, ic, false);
   aopOp (result, ic, true);
 
-  if (ifx)
-    {
-      if (IC_TRUE (ifx))
-        {
-          jlbl = IC_TRUE (ifx);
-          opcode = negatedCmp (opcode);
-        }
-      else
-        {
-          /* false label is present */
-          jlbl = IC_FALSE (ifx);
-        }
-    }
+  if (ifx && IC_TRUE (ifx))
+    opcode = negatedCmp (opcode);
 
   size = max (AOP_SIZE (left), AOP_SIZE (right));
 
@@ -5895,14 +6225,8 @@ genCmp (iCode * ic, iCode * ifx)
     exchange = true;
   else if (AOP_TYPE (left) == AOP_REG && IS_AOP_A (AOP (left)))
     exchange = false;
-  /* These conditions depend on the Z flag bit, but Z is */
-  /* only valid for the last byte of the comparison, not */
-  /* the whole value. So exchange the operands to get a  */
-  /* comparison that doesn't depend on Z. (This is safe  */
-  /* to do here since ralloc won't assign multi-byte     */
-  /* operands to registers for comparisons)              */
   else
-    exchange = size > 1 && ((opcode == '>') || (opcode == LE_OP));
+    exchange = false;
 
   if (exchange)
     {
@@ -5912,172 +6236,12 @@ genCmp (iCode * ic, iCode * ifx)
       opcode = exchangedCmp (opcode);
     }
 
-  if (size == 1 && IS_AOP_A (AOP (left)))
-    {
-      accopWithAop ("cmpa", AOP (right), offset);
-    }
-  // 2-byte comparison on the MC6800 is not straightforward, but we simply write it as cmpd here.
-  else if ((size == 2)
-      && ((AOP_TYPE (left) == AOP_DIR || IS_AOP_D (AOP (left))) && (AOP_SIZE (left) == 2))
-      && ((AOP_TYPE (right) == AOP_LIT) || ((AOP_TYPE (right) == AOP_DIR || AOP_TYPE (right) == AOP_EXT) && (AOP_SIZE (right) == 2))) && (mc6800_reg_d->isDead || IS_AOP_D (AOP (left))))
-    {
-      if (opcode == '<' || opcode == GE_OP)
-        {
-          loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-          mc6800_emitOp ("subb", "%s", aopAdrStr (AOP (right), 0, false));
-          mc6800_emitOp ("sbca", "%s", aopAdrStr (AOP (right), 1, false));
-          regalloc_dry_run_cost += (AOP_TYPE (right) == AOP_EXT ? 6 : 4);
-        }
-      else if (AOP_TYPE (right) == AOP_LIT
-               && (ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) != (sign ? 0x7fffull : 0xffffull))
-        {
-          unsigned int lim = (unsigned int) ((ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) + 1);
-
-          loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-          mc6800_emitOp ("subb", "#0x%02x", lim & 0xff);
-          mc6800_emitOp ("sbca", "#0x%02x", (lim >> 8) & 0xff);
-          regalloc_dry_run_cost += 4;
-          opcode = (opcode == '>') ? GE_OP : '<';
-        }
-      else
-        {
-          const char *tmp = allocTemp ();
-
-          allocTemp ();
-          loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-          mc6800_emitOp ("staa", "*%s", tmp);
-          mc6800_emitOp ("stab", "*%s+1", tmp);
-          mc6800_emitOp ("ldaa", "%s", aopAdrStr (AOP (right), 0, false));
-          mc6800_emitOp ("suba", "*%s+1", tmp);
-          mc6800_emitOp ("ldaa", "%s", aopAdrStr (AOP (right), 1, false));
-          mc6800_emitOp ("sbca", "*%s", tmp);
-          regalloc_dry_run_cost += (AOP_TYPE (right) == AOP_EXT ? 14 : 12);
-          freeTemp ();
-          freeTemp ();
-          opcode = exchangedCmp (opcode);
-        }
-      mc6800_freeReg (mc6800_reg_d);
-    }
+  if (size == 1)
+    genCmp1 (ic, ifx, left, right, opcode, sign);
+  else if (size == 2)
+    genCmp2 (ic, ifx, left, right, opcode, sign);
   else
-    {
-      offset = 0;
-      if (size == 1)
-        sub = "cmpa";
-      else
-        {
-          sub = "suba";
-
-          if ((AOP_TYPE (right) == AOP_LIT) && !isOperandVolatile (left, false))
-            {
-              lit = ullFromVal (AOP (right)->aopu.aop_lit);
-              while ((size > 1) && (((lit >> (8 * offset)) & 0xff) == 0))
-                {
-                  offset++;
-                  size--;
-                }
-            }
-        }
-      needpulla = pushRegIfSurv (mc6800_reg_a);
-      while (size--)
-        {
-          D (emitcode (";     genCmp ", "sub=%s,size=%d", sub,size));
-          if (AOP_TYPE (right) == AOP_REG && AOP(right)->aopu.aop_reg[offset]->rIdx == A_IDX)
-            {
-              pushReg (mc6800_reg_a, true);
-              loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              emitcode (sub, "1, s");
-              regalloc_dry_run_cost += 3;
-              pullReg (mc6800_reg_a);
-            }
-          else if (AOP_TYPE (left) == AOP_REG && offset < AOP_SIZE (left)
-                   && AOP (left)->aopu.aop_reg[offset]->rIdx == B_IDX)
-            {
-              if (!strcmp (sub, "cmpa"))
-                accopWithAop ("cmpb", AOP (right), offset);
-              else if (!strcmp (sub, "suba"))
-                accopWithAop ("subb", AOP (right), offset);
-              else
-                accopWithAop ("sbcb", AOP (right), offset);
-            }
-          else
-            {
-              loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              accopWithAop (sub, AOP (right), offset);
-            }
-          mc6800_freeReg (mc6800_reg_a);
-          offset++;
-          sub = "sbca";
-        }
-    }
-  freeAsmop (right, NULL, ic, false);
-  freeAsmop (left, NULL, ic, false);
-
-  if (ifx)
-    {
-      symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-      char *inst;
-
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-
-      freeAsmop (result, NULL, ic, true);
-
-      inst = branchInstCmp (opcode, sign);
-      if (offset > 1 && ((opcode == '>') || (opcode == LE_OP)))
-        {
-          symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-          emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl2 : tlbl);
-          emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl : tlbl2);
-          mc6800_emitOp ("tstb", "");
-          regalloc_dry_run_cost += 1;
-          emitBranch ((opcode == '>') ? "bne" : "beq", tlbl);
-          if (!regalloc_dry_run)
-            emitLabel (tlbl2);
-        }
-      else
-        emitBranch (inst, tlbl);
-      emitBranch ("jmp", jlbl);
-      if (!regalloc_dry_run)
-        emitLabel (tlbl);
-
-      /* mark the icode as generated */
-      ifx->generated = 1;
-    }
-  else
-    {
-      symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-      symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-      if (!needpulla)
-        needpulla = pushRegIfSurv (mc6800_reg_a);
-
-      if (offset > 1 && ((opcode == '>') || (opcode == LE_OP)))
-        {
-          symbol *tlbl3 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-          emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl3 : tlbl1);
-          emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl1 : tlbl3);
-          mc6800_emitOp ("tstb", "");
-          regalloc_dry_run_cost += 1;
-          emitBranch ((opcode == '>') ? "bne" : "beq", tlbl1);
-          if (!regalloc_dry_run)
-            emitLabel (tlbl3);
-        }
-      else
-        emitBranch (branchInstCmp (opcode, sign), tlbl1);
-      loadRegFromConst (mc6800_reg_a, 0);
-      emitBranch ("bra", tlbl2);
-      if (!regalloc_dry_run)
-        emitLabel (tlbl1);
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      loadRegFromConst (mc6800_reg_a, 1);
-      if (!regalloc_dry_run)
-        emitLabel (tlbl2);
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      storeRegToFullAop (mc6800_reg_a, AOP (result), false);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-      freeAsmop (result, NULL, ic, true);
-    }
+    genCmpMANY (ic, ifx, left, right, size, opcode, sign);
 }
 
 /*-----------------------------------------------------------------*/
