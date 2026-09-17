@@ -9530,14 +9530,40 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
     addSPToX ();
   decodePointerOffset (right, &litOffset, &rematOffset);
 
+  if (rematOffset)
+    {
+      const char *tmp = allocTemp ();
+      bool useb = !mc6800_reg_a->isFree && mc6800_reg_b->isFree;
+      reg_info *acc = useb ? mc6800_reg_b : mc6800_reg_a;
+      bool needpullacc;
+
+      allocTemp ();
+      needpullacc = pushRegIfUsed (acc);
+      mc6800_emitOp ("stx", "*%s", tmp);
+      mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s+1", tmp);
+      mc6800_emitOp (useb ? "addb" : "adda", "#%s", rematOffset);
+      mc6800_emitOp (useb ? "stab" : "staa", "*%s+1", tmp);
+      mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s", tmp);
+      mc6800_emitOp (useb ? "adcb" : "adca", "#>%s", rematOffset);
+      mc6800_emitOp (useb ? "stab" : "staa", "*%s", tmp);
+      mc6800_emitOp ("ldx", "*%s", tmp);
+      regalloc_dry_run_cost += 16;
+      freeTemp ();
+      freeTemp ();
+      mc6800_dirtyReg (acc, false);
+      pullOrFreeReg (acc, needpullacc);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      rematOffset = NULL;
+    }
+
   if (AOP_TYPE (result) == AOP_REG && IS_AOP_X (AOP (result))
-      && !needpullx && !rematOffset)
+      && !needpullx)
     {
       mc6800_freeReg (mc6800_reg_x);
       loadRegIndexed (mc6800_reg_x, litOffset, rematOffset);
     }
   else if (AOP_TYPE (result) == AOP_REG && !IS_AOP_WITH_X (AOP (result))
-      && AOP_SIZE (result) <= 2 && !rematOffset)
+      && AOP_SIZE (result) <= 2)
     {
       int i;
 
@@ -9545,109 +9571,28 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
         loadRegIndexed (AOP (result)->aopu.aop_reg[i], litOffset + AOP_SIZE (result) - 1 - i, rematOffset);
     }
   else
-#if 0
-  if (AOP_TYPE (result) == AOP_REG)
-    {
-      if (pi)
-        aopOp (IC_RESULT (pi), pi, false);
-
-      if (AOP_SIZE (result) == 1)
-        {
-          if (!pi)
-            {
-              if (IS_AOP_X (AOP (result)))
-                mc6800_freeReg (mc6800_reg_x);
-              loadRegIndexed (AOP (result)->aopu.aop_reg[0], litOffset, rematOffset);
-            }
-          else
-            {
-              needpulla = pushRegIfSurv (mc6800_reg_a);
-              loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-              mc6800_useReg (mc6800_reg_a);
-              emitcode ("aix", "#%d", size);
-              regalloc_dry_run_cost += 2;
-              mc6800_dirtyReg (mc6800_reg_hx, false);
-              mc6800_freeReg (mc6800_reg_x);
-              storeRegToAop (mc6800_reg_hx, AOP (IC_RESULT (pi)), 0);
-              pi->generated = 1;
-              storeRegToAop (mc6800_reg_a, AOP (IC_RESULT (ic)), 0);
-            }
-        }
-      else
-        {
-          if (pi || (IS_AOP_D (AOP (IC_RESULT (ic))) && vol))
-            {
-              loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-              pushReg (mc6800_reg_a, false);
-              loadRegIndexed (mc6800_reg_a, litOffset+1, rematOffset);
-              mc6800_useReg (mc6800_reg_a);
-              if (pi)
-                {
-                  emitcode ("aix", "#%d", size);
-                  regalloc_dry_run_cost += 2;
-                  mc6800_dirtyReg (mc6800_reg_hx, false);
-                  mc6800_freeReg (mc6800_reg_x);
-                  storeRegToAop (mc6800_reg_hx, AOP (IC_RESULT (pi)), 0);
-                  pi->generated = 1;
-                }
-              storeRegToAop (mc6800_reg_a, AOP (IC_RESULT (ic)), 0);
-              pullReg (AOP (IC_RESULT (ic))->aopu.aop_reg[1]);
-            }
-          else
-            {
-              if (IS_AOP_D (AOP (IC_RESULT (ic))))
-                {
-                  loadRegIndexed (mc6800_reg_a, litOffset+1, rematOffset);
-                  loadRegIndexed (mc6800_reg_x, litOffset, rematOffset);
-                }
-            }
-        }
-
-      if (pi)
-        {
-          freeAsmop (IC_RESULT (pi), NULL, pi, true);
-        }
-    }
-  else
-#endif
     {
       offset = size - 1;
       needpulla = pushRegIfSurv (mc6800_reg_a);
 
-      if (rematOffset)
+      if (!ifx && AOP_TYPE (result) == AOP_REG && AOP_SIZE (result) == 2)
         {
-          const char *tmp = allocTemp ();
-          bool useb = !mc6800_reg_a->isFree && mc6800_reg_b->isFree;
-          reg_info *acc = useb ? mc6800_reg_b : mc6800_reg_a;
-          bool needpullacc;
-
-          allocTemp ();
-          needpullacc = pushRegIfUsed (acc);
-          mc6800_emitOp ("stx", "*%s", tmp);
-          mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s+1", tmp);
-          mc6800_emitOp (useb ? "addb" : "adda", "#%s", rematOffset);
-          mc6800_emitOp (useb ? "stab" : "staa", "*%s+1", tmp);
-          mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s", tmp);
-          mc6800_emitOp (useb ? "adcb" : "adca", "#>%s", rematOffset);
-          mc6800_emitOp (useb ? "stab" : "staa", "*%s", tmp);
-          mc6800_emitOp ("ldx", "*%s", tmp);
-          regalloc_dry_run_cost += 16;
-          freeTemp ();
-          freeTemp ();
-          mc6800_dirtyReg (acc, false);
-          pullOrFreeReg (acc, needpullacc);
-          mc6800_dirtyReg (mc6800_reg_x, false);
-          rematOffset = NULL;
+          loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
+          pushReg (mc6800_reg_a, false);
+          loadRegIndexed (mc6800_reg_a, litOffset + 1, rematOffset);
+          storeRegToAop (mc6800_reg_a, AOP (result), 0);
+          pullReg (mc6800_reg_a);
+          storeRegToAop (mc6800_reg_a, AOP (result), 1);
         }
-
-      while (size--)
-        {
-          xoffset = litOffset + (AOP_SIZE (result) - offset - 1);
-          loadRegIndexed (mc6800_reg_a, xoffset, rematOffset);
-          if (!ifx)
-            storeRegToAop (mc6800_reg_a, AOP (result), offset);
-          offset--;
-        }
+      else
+        while (size--)
+          {
+            xoffset = litOffset + (AOP_SIZE (result) - offset - 1);
+            loadRegIndexed (mc6800_reg_a, xoffset, rematOffset);
+            if (!ifx)
+              storeRegToAop (mc6800_reg_a, AOP (result), offset);
+            offset--;
+          }
     }
 
 release:
