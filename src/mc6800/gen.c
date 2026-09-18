@@ -4521,38 +4521,35 @@ genPlus8 (iCode *ic)
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
   bool maskedtopbyte = (topbytemask != 0xff);
 
-  if (IS_AOP_B (result) && !IS_AOP_WITH_B (rightOp))
-    {
-      reg = mc6800_reg_b;
-      add = "addb";
-      mask = "andb";
-    }
-  else if (mc6800_reg_b->isFree && !IS_AOP_A (result))
-    {
-      reg = mc6800_reg_b;
-      add = "addb";
-      mask = "andb";
-    }
+  if (IS_AOP_A (result) && !IS_AOP_WITH_A (rightOp))
+    reg = mc6800_reg_a;
+  else if (IS_AOP_B (result) && !IS_AOP_WITH_B (rightOp))
+    reg = mc6800_reg_b;
+  else if (IS_AOP_A (leftOp) && mc6800_reg_a->isDead && !IS_AOP_WITH_A (rightOp))
+    reg = mc6800_reg_a;
+  else if (IS_AOP_B (leftOp) && mc6800_reg_b->isDead && !IS_AOP_WITH_B (rightOp))
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_b->isFree)
+    reg = mc6800_reg_b;
   else if (mc6800_reg_a->isFree)
-    {
-      reg = mc6800_reg_a;
-      add = "adda";
-      mask = "anda";
-    }
+    reg = mc6800_reg_a;
   else
     {
       reg = IS_AOP_A (result) ? mc6800_reg_a : mc6800_reg_b;
       needpullb = (reg == mc6800_reg_b) ? pushRegIfSurv (mc6800_reg_b) : false;
-      add = (reg == mc6800_reg_b) ? "addb" : "adda";
-      mask = (reg == mc6800_reg_b) ? "andb" : "anda";
     }
+  add = (reg == mc6800_reg_b) ? "addb" : "adda";
+  mask = (reg == mc6800_reg_b) ? "andb" : "anda";
 
   loadRegFromAop (reg, leftOp, 0);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
       accopWithAop (add, rightOp, 0);
       if (maskedtopbyte)
-        emitcode (mask , "#0x%02x", topbytemask);
+        {
+          emitcode (mask , "#0x%02x", topbytemask);
+          regalloc_dry_run_cost += 2;
+        }
     }
   storeRegToAop (reg, result, 0);
   pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -4853,31 +4850,25 @@ genMinus8 (iCode *ic)
       return;
     }
 
-  if (IS_AOP_B (result) && !IS_AOP_WITH_B (rightOp))
-    {
-      reg = mc6800_reg_b;
-      sub = "subb";
-      mask = "andb";
-    }
-  else if (mc6800_reg_b->isFree && !IS_AOP_A (result))
-    {
-      reg = mc6800_reg_b;
-      sub = "subb";
-      mask = "andb";
-    }
+  if (IS_AOP_A (result) && !IS_AOP_WITH_A (rightOp))
+    reg = mc6800_reg_a;
+  else if (IS_AOP_B (result) && !IS_AOP_WITH_B (rightOp))
+    reg = mc6800_reg_b;
+  else if (IS_AOP_A (leftOp) && mc6800_reg_a->isDead && !IS_AOP_WITH_A (rightOp))
+    reg = mc6800_reg_a;
+  else if (IS_AOP_B (leftOp) && mc6800_reg_b->isDead && !IS_AOP_WITH_B (rightOp))
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_b->isFree)
+    reg = mc6800_reg_b;
   else if (mc6800_reg_a->isFree)
-    {
-      reg = mc6800_reg_a;
-      sub = "suba";
-      mask = "anda";
-    }
+    reg = mc6800_reg_a;
   else
     {
       reg = IS_AOP_A (result) ? mc6800_reg_a : mc6800_reg_b;
       needpullb = (reg == mc6800_reg_b) ? pushRegIfSurv (mc6800_reg_b) : false;
-      sub = (reg == mc6800_reg_b) ? "subb" : "suba";
-      mask = (reg == mc6800_reg_b) ? "andb" : "anda";
     }
+  sub = (reg == mc6800_reg_b) ? "subb" : "suba";
+  mask = (reg == mc6800_reg_b) ? "andb" : "anda";
 
   loadRegFromAop (reg, leftOp, 0);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
@@ -4886,6 +4877,7 @@ genMinus8 (iCode *ic)
       if (maskedtopbyte)
         {
           emitcode (mask, "#0x%02x", topbytemask);
+          regalloc_dry_run_cost += 2;
         }
     }
   storeRegToAop (reg, result, 0);
