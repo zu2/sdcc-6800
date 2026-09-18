@@ -2120,7 +2120,7 @@ geniCodeRValue (operand * op, bool force)
     return op;
 
   /* if this is not a temp symbol then */
-  if (!IS_ITEMP (op) && !force && !(IN_FARSPACE (SPEC_OCLS (etype)) && !TARGET_HC08_LIKE && !TARGET_MOS6502_LIKE))
+  if (!IS_ITEMP (op) && !force && !(IN_FARSPACE (SPEC_OCLS (etype)) && !TARGET_HC08_LIKE && !TARGET_MC6800_LIKE && !TARGET_MOS6502_LIKE))
     {
       op = operandFromOperand (op);
       op->isaddr = 0;
@@ -2128,7 +2128,7 @@ geniCodeRValue (operand * op, bool force)
     }
 
   if (IS_SPEC (type) &&
-      IS_TRUE_SYMOP (op) && (!(IN_FARSPACE (SPEC_OCLS (etype)) && !TARGET_HC08_LIKE && !TARGET_MOS6502_LIKE) || (options.model == MODEL_FLAT24)))
+      IS_TRUE_SYMOP (op) && (!(IN_FARSPACE (SPEC_OCLS (etype)) && !TARGET_HC08_LIKE && !TARGET_MC6800_LIKE && !TARGET_MOS6502_LIKE) || (options.model == MODEL_FLAT24)))
     {
       op = operandFromOperand (op);
       op->isaddr = 0;
