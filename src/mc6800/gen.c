@@ -6870,6 +6870,17 @@ genAnd (iCode * ic, iCode * ifx)
 
   size = AOP_SIZE (result);
 
+  if (AOP_SIZE (result) == 1 && !IS_AOP_WITH_B (AOP (right))
+  &&  !aopIsLitVal (right->aop, 0, 1, 0x00) && !aopIsLitVal (right->aop, 0, 1, 0xff)
+  &&  (IS_AOP_B (AOP (result)) || (IS_AOP_B (AOP (left)) && mc6800_reg_b->isDead)))
+    {
+      loadRegFromAop (mc6800_reg_b, AOP (left), 0);
+      accopWithAop ("andb", AOP (right), 0);
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      storeRegToAop (mc6800_reg_b, AOP (result), 0);
+      goto release;
+    }
+
   needpulla = pushRegIfSurv (mc6800_reg_a);
   if (IS_AOP_D (AOP (left)))
     needpullb = pushRegIfSurv (mc6800_reg_b);
@@ -7108,6 +7119,17 @@ genOr (iCode * ic, iCode * ifx)
 
   size = AOP_SIZE (result);
 
+  if (AOP_SIZE (result) == 1 && !IS_AOP_WITH_B (AOP (right))
+  &&  !aopIsLitVal (right->aop, 0, 1, 0x00) && !aopIsLitVal (right->aop, 0, 1, 0xff)
+  &&  (IS_AOP_B (AOP (result)) || (IS_AOP_B (AOP (left)) && mc6800_reg_b->isDead)))
+    {
+      loadRegFromAop (mc6800_reg_b, AOP (left), 0);
+      accopWithAop ("orab", AOP (right), 0);
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      storeRegToAop (mc6800_reg_b, AOP (result), 0);
+      goto release;
+    }
+
   needpulla = pushRegIfSurv (mc6800_reg_a);
   if (IS_AOP_D (AOP (left)))
     needpullb = pushRegIfSurv (mc6800_reg_b);
@@ -7200,6 +7222,20 @@ genXor (iCode * ic, iCode * ifx)
       left = tmp;
     }
 
+  if (AOP_TYPE (result) != AOP_CRY && AOP_SIZE (result) == 1 && !IS_AOP_WITH_B (AOP (right))
+  &&  !aopIsLitVal (right->aop, 0, 1, 0x00)
+  &&  (IS_AOP_B (AOP (result)) || (IS_AOP_B (AOP (left)) && mc6800_reg_b->isDead)))
+    {
+      loadRegFromAop (mc6800_reg_b, AOP (left), 0);
+      if (aopIsLitVal (right->aop, 0, 1, 0xff))
+        rmwWithReg ("com", mc6800_reg_b);
+      else
+        accopWithAop ("eorb", AOP (right), 0);
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      storeRegToAop (mc6800_reg_b, AOP (result), 0);
+      goto release;
+    }
+
   needpulla = pushRegIfSurv (mc6800_reg_a);
   if (IS_AOP_D (AOP (left)))
     needpullb = pushRegIfSurv (mc6800_reg_b);
@@ -7268,7 +7304,9 @@ genXor (iCode * ic, iCode * ifx)
         pullReg (mc6800_reg_a);
       if (IS_AOP_D (AOP (left)) && offset == 0)
         {
-          if (!aopIsLitVal (right->aop, offset, 1, 0x00))
+          if (aopIsLitVal (right->aop, offset, 1, 0xff))
+            rmwWithReg ("com", mc6800_reg_b);
+          else if (!aopIsLitVal (right->aop, offset, 1, 0x00))
             {
               accopWithAop ("eorb", right->aop, offset);
               mc6800_dirtyReg (mc6800_reg_b, false);
@@ -7278,7 +7316,9 @@ genXor (iCode * ic, iCode * ifx)
           continue;
         }
       loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-      if (!aopIsLitVal (right->aop, offset, 1, 0x00))
+      if (aopIsLitVal (right->aop, offset, 1, 0xff))
+        rmwWithReg ("com", mc6800_reg_a);
+      else if (!aopIsLitVal (right->aop, offset, 1, 0x00))
         accopWithAop ("eora", right->aop, offset);
       storeRegToAop (mc6800_reg_a, AOP (result), offset);
       if (AOP_TYPE (result) == AOP_REG && size && AOP (result)->aopu.aop_reg[offset]->rIdx == A_IDX)
