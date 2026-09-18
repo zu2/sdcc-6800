@@ -4521,7 +4521,13 @@ genPlus8 (iCode *ic)
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
   bool maskedtopbyte = (topbytemask != 0xff);
 
-  if (mc6800_reg_b->isFree && !IS_AOP_A (result))
+  if (IS_AOP_B (result) && !IS_AOP_WITH_B (rightOp))
+    {
+      reg = mc6800_reg_b;
+      add = "addb";
+      mask = "andb";
+    }
+  else if (mc6800_reg_b->isFree && !IS_AOP_A (result))
     {
       reg = mc6800_reg_b;
       add = "addb";
@@ -4704,11 +4710,11 @@ genPlus (iCode *ic)
   switch (size)
     {
       case 1: genPlus8(ic);
-	      break;
+              break;
       case 2: genPlus16(ic);
-	      break;
+              break;
       default:genPlusMANY(ic);
-	      break;
+              break;
     }
 
 
@@ -4847,25 +4853,31 @@ genMinus8 (iCode *ic)
       return;
     }
 
-  if (mc6800_reg_b->isFree && !IS_AOP_A (result))
+  if (IS_AOP_B (result) && !IS_AOP_WITH_B (rightOp))
     {
       reg = mc6800_reg_b;
       sub = "subb";
       mask = "andb";
     }
-    else if (mc6800_reg_a->isFree)
-      {
-        reg = mc6800_reg_a;
-        sub = "suba";
-        mask = "anda";
-      }
-    else
-      {
-        reg = IS_AOP_A (result) ? mc6800_reg_a : mc6800_reg_b;
-        needpullb = (reg == mc6800_reg_b) ? pushRegIfSurv (mc6800_reg_b) : false;
-        sub = (reg == mc6800_reg_b) ? "subb" : "suba";
-        mask = (reg == mc6800_reg_b) ? "andb" : "anda";
-      }
+  else if (mc6800_reg_b->isFree && !IS_AOP_A (result))
+    {
+      reg = mc6800_reg_b;
+      sub = "subb";
+      mask = "andb";
+    }
+  else if (mc6800_reg_a->isFree)
+    {
+      reg = mc6800_reg_a;
+      sub = "suba";
+      mask = "anda";
+    }
+  else
+    {
+      reg = IS_AOP_A (result) ? mc6800_reg_a : mc6800_reg_b;
+      needpullb = (reg == mc6800_reg_b) ? pushRegIfSurv (mc6800_reg_b) : false;
+      sub = (reg == mc6800_reg_b) ? "subb" : "suba";
+      mask = (reg == mc6800_reg_b) ? "andb" : "anda";
+    }
 
   loadRegFromAop (reg, leftOp, 0);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
