@@ -3321,6 +3321,20 @@ genUminus (iCode * ic)
   size = AOP_SIZE (IC_LEFT (ic));
   offset = 0;
 
+  if (size == 1 && AOP_SIZE (IC_RESULT (ic)) == 1
+  &&  (IS_AOP_B (AOP (IC_RESULT (ic))) || (IS_AOP_B (AOP (IC_LEFT (ic))) && mc6800_reg_b->isDead)))
+    {
+      loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (ic)), 0);
+      rmwWithReg ("neg", mc6800_reg_b);
+      if (maskedtopbyte)
+        {
+          mc6800_emitOp ("andb", "#0x%02x", topbytemask);
+          regalloc_dry_run_cost += 2;
+        }
+      storeRegToAop (mc6800_reg_b, AOP (IC_RESULT (ic)), 0);
+      goto release;
+    }
+
   if (size == 1)
     {
       needpula = pushRegIfSurv (mc6800_reg_a);
