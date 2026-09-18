@@ -10494,10 +10494,8 @@ genAssign (iCode * ic)
       }
   }
 
-  printf(";     genAssign %s %s %d\n",__func__,__FILE__,__LINE__);
   if (!genAssignLit (result, right))
     {
-      printf(";     genAssign %s %s %d\n",__func__,__FILE__,__LINE__);
       printf(";     genAssign size result %d,right %d\n",AOP_SIZE(result),AOP_SIZE(right));
       genCopy (result, right);
     }

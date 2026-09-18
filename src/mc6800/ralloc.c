@@ -521,17 +521,14 @@ regTypeNum (eBBlock *ebbs)
   symbol *sym;
   int k;
 
-  printf("; %s %s %d\n",__func__,__FILE__,__LINE__);
   /* for each live range do */
   for (sym = hTabFirstItem (liveRanges, &k); sym;
        sym = hTabNextItem (liveRanges, &k))
     {
-      printf("; %s %s %d\n",__func__,__FILE__,__LINE__);
       /* if used zero times then no registers needed */
       if ((sym->liveTo - sym->liveFrom) == 0)
         continue;
 
-      printf("; %s %s %d\n",__func__,__FILE__,__LINE__);
       /* if the live range is a temporary */
       if (sym->isitmp)
         {
@@ -552,7 +549,6 @@ regTypeNum (eBBlock *ebbs)
           sym->nRegs = ((IS_AGGREGATE (sym->type) || sym->isptr) ?
                         getSize (sym->type = aggrToPtr (sym->type, false)) :
                         getSize (sym->type));
-	  printf("; %s %s %d\n",__func__,__FILE__,__LINE__);
 	  printf("; sym->nRegs %d\n",sym->nRegs);
           if (sym->nRegs > 8)
             {
