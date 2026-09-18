@@ -9616,6 +9616,9 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       litOffset -= litOffset + AOP_SIZE (result) - 1 - 0xff;
     }
 
+  wassertl (!needpullx|| !IS_AOP_X (AOP (result)) || AOP_TYPE (result) != AOP_REG,
+            "duplicate assignment of X");
+
   if (AOP_TYPE (result) == AOP_REG && IS_AOP_X (AOP (result))
       && !needpullx)
     {
