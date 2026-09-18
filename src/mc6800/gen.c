@@ -1743,7 +1743,7 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
 }
 
 /*--------------------------------------------------------------------------*/
-/* addConstToX - Add a non-negative constant to the index register.        */
+/* addConstToX - Add a constant to the index register.                     */
 /*--------------------------------------------------------------------------*/
 static void
 addConstToX (int n)
@@ -1753,17 +1753,22 @@ addConstToX (int n)
   reg_info *acc;
   bool needpullacc;
 
-  wassertl (n >= 0, "addConstToX with a negative constant");
-
   if (n == 0)
     return;
 
-  if (n <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6))
+  if (abs (n) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6))
     {
-      while (n--)
+      while (n > 0)
         {
           mc6800_emitOp ("inx", "");
           regalloc_dry_run_cost++;
+          n--;
+        }
+      while (n < 0)
+        {
+          mc6800_emitOp ("dex", "");
+          regalloc_dry_run_cost++;
+          n++;
         }
       mc6800_dirtyReg (mc6800_reg_x, false);
       return;
@@ -1776,10 +1781,10 @@ addConstToX (int n)
   needpullacc = pushRegIfUsed (acc);
   mc6800_emitOp ("stx", "*%s", tmp);
   mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s+1", tmp);
-  mc6800_emitOp (useb ? "addb" : "adda", "#0x%02x", n & 0xff);
+  mc6800_emitOp (useb ? "addb" : "adda", "#0x%02x", (unsigned int) n & 0xff);
   mc6800_emitOp (useb ? "stab" : "staa", "*%s+1", tmp);
   mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s", tmp);
-  mc6800_emitOp (useb ? "adcb" : "adca", "#0x%02x", (n >> 8) & 0xff);
+  mc6800_emitOp (useb ? "adcb" : "adca", "#0x%02x", ((unsigned int) n >> 8) & 0xff);
   mc6800_emitOp (useb ? "stab" : "staa", "*%s", tmp);
   mc6800_emitOp ("ldx", "*%s", tmp);
   regalloc_dry_run_cost += 16;
@@ -9610,13 +9615,18 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       rematOffset = NULL;
     }
 
-  if (!rematOffset && litOffset + AOP_SIZE (result) - 1 > 0xff)
+  if (!rematOffset && litOffset < 0)
+    {
+      addConstToX (litOffset);
+      litOffset = 0;
+    }
+  else if (!rematOffset && litOffset + AOP_SIZE (result) - 1 > 0xff)
     {
       addConstToX (litOffset + AOP_SIZE (result) - 1 - 0xff);
       litOffset -= litOffset + AOP_SIZE (result) - 1 - 0xff;
     }
 
-  wassertl (!needpullx|| !IS_AOP_X (AOP (result)) || AOP_TYPE (result) != AOP_REG,
+  wassertl (!needpullx || !IS_AOP_X (AOP (result)) || AOP_TYPE (result) != AOP_REG,
             "duplicate assignment of X");
 
   if (AOP_TYPE (result) == AOP_REG && IS_AOP_X (AOP (result))
@@ -10167,7 +10177,12 @@ genPointerSet (iCode * ic, iCode * pi)
           rematOffset = NULL;
         }
 
-      if (!rematOffset && litOffset + size - 1 > 0xff)
+      if (!rematOffset && litOffset < 0)
+        {
+          addConstToX (litOffset);
+          litOffset = 0;
+        }
+      else if (!rematOffset && litOffset + size - 1 > 0xff)
         {
           addConstToX (litOffset + size - 1 - 0xff);
           litOffset -= litOffset + size - 1 - 0xff;
