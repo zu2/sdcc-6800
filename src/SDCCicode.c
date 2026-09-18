@@ -3938,7 +3938,7 @@ geniCodeReceive (value *args, operand *func)
              and before liveRange calculation */
           if (!sym->addrtaken && !IS_VOLATILE (sym->etype))
             {
-              if ((IN_FARSPACE (SPEC_OCLS (sym->etype)) && !TARGET_HC08_LIKE && !TARGET_MOS6502_LIKE) &&
+              if ((IN_FARSPACE (SPEC_OCLS (sym->etype)) && !TARGET_HC08_LIKE && !TARGET_MC6800_LIKE && !TARGET_MOS6502_LIKE) &&
                   options.stackAuto == 0 && (!(options.model == MODEL_FLAT24)))
                 {
                 }

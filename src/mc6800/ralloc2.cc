@@ -183,7 +183,7 @@ static bool ABXinst_ok(const assignment &a, unsigned short int i, const G_t &G, 
   if(ic->op == IPUSH && (unused_A || dying_A || left_in_A || left_in_B))
     return(true);
 
-  if(ic->op == RECEIVE && (!ic->next || !(ic->next->op == RECEIVE) || !result_in_X || getSize(operandType(result)) >= 2))
+  if(ic->op == RECEIVE && (!ic->next || !(ic->next->op == RECEIVE) || !result_in_A || getSize(operandType(result)) >= 2))
     return(true);
 
   if(ic->op == SEND && ic->next && ic->next->op == SEND && ic->next->next && ic->next->next->op == SEND)
