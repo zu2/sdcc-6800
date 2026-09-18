@@ -3253,84 +3253,6 @@ genNot (iCode * ic)
 
 
 /*-----------------------------------------------------------------*/
-/* genCpl - generate code for complement                           */
-/*-----------------------------------------------------------------*/
-static void
-genCpl (iCode * ic)
-{
-  int offset = 0;
-  int size;
-  reg_info *reg;
-  bool needpullreg;
-
-  D (emitcode (";     genCpl", ""));
-#if 0
-  /* assign asmOps to operand & result */
-  aopOp (IC_LEFT (ic), ic, false);
-  aopOp (IC_RESULT (ic), ic, true);
-  size = AOP_SIZE (IC_RESULT (ic));
-
-  if(AOP_TYPE (IC_LEFT (ic)) == AOP_REG && AOP_TYPE (IC_RESULT (ic)) == AOP_REG &&
-    AOP (IC_RESULT (ic))->aopu.aop_reg[0] == AOP (IC_LEFT (ic))->aopu.aop_reg[0] &&
-    (size < 2 || AOP (IC_RESULT (ic))->aopu.aop_reg[1] == AOP (IC_LEFT (ic))->aopu.aop_reg[1]))
-    {
-      while (size--)
-        rmwWithReg ("com", AOP (IC_RESULT (ic))->aopu.aop_reg[offset++]);
-      goto release;
-    }
-
-  if (AOP_TYPE (IC_RESULT (ic)) == AOP_REG && AOP_TYPE (IC_LEFT (ic)) == AOP_REG)
-    {
-      while (size--)
-        {
-          if ((reg = AOP (IC_RESULT (ic))->aopu.aop_reg[offset]) != mc6800_reg_h)
-            {
-              transferAopAop (AOP (IC_LEFT (ic)), offset, AOP (IC_RESULT (ic)), offset);
-              rmwWithReg ("com", reg);
-            }
-          else
-            {
-              if ((reg = AOP (IC_LEFT (ic))->aopu.aop_reg[offset]) == mc6800_reg_h)
-                reg = mc6800_reg_a->isDead ? mc6800_reg_a : mc6800_reg_x;
-              needpullreg = pushRegIfSurv (reg);
-              loadRegFromAop (reg, AOP (IC_LEFT (ic)), offset);
-              rmwWithReg ("com", reg);
-              storeRegToAop (reg, AOP (IC_RESULT (ic)), offset);
-              if (needpullreg)
-                pullReg (reg);
-            }
-          offset++;
-        }
-      goto release;
-    }
-
-  reg = (mc6800_reg_a->isDead && !(AOP_TYPE (IC_RESULT (ic)) == AOP_REG && AOP (IC_RESULT (ic))->aopu.aop_reg[0] == mc6800_reg_a) ? mc6800_reg_a : mc6800_reg_x);
-
-  needpullreg = pushRegIfSurv (reg);
-  while (size--)
-    {
-      bool needpullreg2 = (!size && AOP_TYPE (IC_RESULT (ic)) == AOP_REG && AOP (IC_RESULT (ic))->aopu.aop_reg[0] == reg || size && AOP_TYPE (IC_RESULT (ic)) == AOP_REG && AOP (IC_RESULT (ic))->aopu.aop_reg[1] == reg);
-      if (needpullreg2)
-        pushReg (reg, true);
-      loadRegFromAop (reg, AOP (IC_LEFT (ic)), offset);
-      rmwWithReg ("com", reg);
-      mc6800_useReg (reg);
-      storeRegToAop (reg, AOP (IC_RESULT (ic)), offset);
-      mc6800_freeReg (reg);
-      if (needpullreg2)
-        pullReg (reg);
-      offset++;
-    }
-  pullOrFreeReg (reg, needpullreg);
-
-  /* release the aops */
-release:
-  freeAsmop (IC_RESULT (ic), NULL, ic, true);
-  freeAsmop (IC_LEFT (ic), NULL, ic, true);
-#endif
-}
-
-/*-----------------------------------------------------------------*/
 /* genUminusFloat - unary minus for floating points                */
 /*-----------------------------------------------------------------*/
 static void
@@ -11105,10 +11027,6 @@ genmc6800iCode (iCode *ic)
     {
     case '!':
       genNot (ic);
-      break;
-
-    case '~':
-      genCpl (ic);
       break;
 
     case UNARYMINUS:
