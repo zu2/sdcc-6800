@@ -4834,6 +4834,23 @@ genMinus8 (iCode *ic)
 
   if (IS_AOP_A (rightOp) || IS_AOP_B (rightOp))
     {
+      if (IS_AOP_A (rightOp) && IS_AOP_B (leftOp))
+        {
+          needpulla = pushRegIfSurv (mc6800_reg_a);
+          mc6800_emitOp ("nega", "");
+          mc6800_emitOp ("aba", "");
+          regalloc_dry_run_cost += 2;
+          mc6800_dirtyReg (mc6800_reg_a, false);
+          if (maskedtopbyte)
+            {
+              mc6800_emitOp ("anda", "#0x%02x", topbytemask);
+              regalloc_dry_run_cost += 2;
+            }
+          storeRegToAop (mc6800_reg_a, result, 0);
+          pullOrFreeReg (mc6800_reg_a, needpulla);
+          pullOrFreeReg (mc6800_reg_b, needpullb);
+          return;
+        }
       if (IS_AOP_A (rightOp))
         {
           needpullb = pushRegIfSurv (mc6800_reg_b);
