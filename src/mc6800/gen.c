@@ -4537,6 +4537,11 @@ genPlus8 (iCode *ic)
     {
       reg = IS_AOP_A (result) ? mc6800_reg_a : mc6800_reg_b;
       needpullb = (reg == mc6800_reg_b) ? pushRegIfSurv (mc6800_reg_b) : false;
+      if (reg == mc6800_reg_b && IS_AOP_B (rightOp))
+        {
+          rightOp = leftOp;
+          leftOp = AOP (IC_RIGHT (ic));
+        }
     }
   add = (reg == mc6800_reg_b) ? "addb" : "adda";
   mask = (reg == mc6800_reg_b) ? "andb" : "anda";
