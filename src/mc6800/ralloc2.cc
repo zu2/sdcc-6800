@@ -186,16 +186,7 @@ static bool ABXinst_ok(const assignment &a, unsigned short int i, const G_t &G, 
   if(ic->op == RECEIVE && (!ic->next || !(ic->next->op == RECEIVE) || !result_in_A || getSize(operandType(result)) >= 2))
     return(true);
 
-  if(ic->op == SEND && ic->next && ic->next->op == SEND && ic->next->next && ic->next->next->op == SEND)
-    return(true);
-
-  if(ic->op == SEND && ic->next && ic->next->op == SEND && (unused_X || dying_X))
-    return(true);
-
-  if(ic->op == SEND && (unused_X || dying_X) && (unused_A || dying_A))
-    return(true);
-
-  if(ic->op == SEND && ic->next && (ic->next->op == CALL || ic->next->op == PCALL)) // Might mess up A and X, but these would have been saved before if surviving, and will not be needed again before the call.
+  if(ic->op == SEND)
     return(true);
 
   if((ic->op == CRITICAL || ic->op == ENDCRITICAL) && (unused_A || dying_A))
@@ -325,7 +316,7 @@ static void assign_operands_for_cost(const assignment &a, unsigned short int i, 
   assign_operand_for_cost(IC_RIGHT(ic), a, i, G, I);
   assign_operand_for_cost(IC_RESULT(ic), a, i, G, I);
     
-  if(ic->op == SEND && ic->builtinSEND)
+  if(ic->op == SEND && (ic->builtinSEND || ic->next && ic->next->op == SEND))
     {
       assign_operands_for_cost(a, *(adjacent_vertices(i, G).first), G, I);
     }
