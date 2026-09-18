@@ -235,6 +235,9 @@ static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, co
   bool unused_XL = (ia.registers[REG_XL][1] < 0);
   bool unused_XH = (ia.registers[REG_XH][1] < 0);
 
+  if((ic->op == CALL || ic->op == PCALL) && !unused_XL && G[i].dying.find(ia.registers[REG_XL][1]) == G[i].dying.end())
+    return(false);
+
   if(unused_XL && unused_XH)
     return(true);
 
