@@ -2281,10 +2281,15 @@ sameRegs (asmop *aop1, asmop *aop2)
               return false;
           return true;
         case AOP_SOF:
+          if (regalloc_dry_run && aop1->op && aop2->op && IS_SYMOP (aop1->op) && IS_SYMOP (aop2->op))
+            return ((IS_ITEMP (aop1->op) && OP_SYMBOL (aop1->op)->usl.spillLoc ? OP_SYMBOL (aop1->op)->usl.spillLoc : OP_SYMBOL (aop1->op)) ==
+                    (IS_ITEMP (aop2->op) && OP_SYMBOL (aop2->op)->usl.spillLoc ? OP_SYMBOL (aop2->op)->usl.spillLoc : OP_SYMBOL (aop2->op)));
           return (aop1->aopu.aop_stk == aop2->aopu.aop_stk);
         case AOP_DIR:
           if (regalloc_dry_run)
-            return false;
+            return (aop1->op && aop2->op && IS_SYMOP (aop1->op) && IS_SYMOP (aop2->op) &&
+                    (IS_ITEMP (aop1->op) && OP_SYMBOL (aop1->op)->usl.spillLoc ? OP_SYMBOL (aop1->op)->usl.spillLoc : OP_SYMBOL (aop1->op)) ==
+                    (IS_ITEMP (aop2->op) && OP_SYMBOL (aop2->op)->usl.spillLoc ? OP_SYMBOL (aop2->op)->usl.spillLoc : OP_SYMBOL (aop2->op)));
         case AOP_EXT:
           return (!strcmp (aop1->aopu.aop_dir, aop2->aopu.aop_dir));
         default:
