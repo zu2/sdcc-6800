@@ -2896,7 +2896,7 @@ computeType (sym_link * type1, sym_link * type2, RESULT_TYPE resultType, int op)
   switch (resultType)
     {
     case RESULT_TYPE_IFX:
-      if (TARGET_HC08_LIKE)
+      if (TARGET_HC08_LIKE || TARGET_MC6800_LIKE)
         break;
       //fallthrough
     case RESULT_TYPE_BOOL:

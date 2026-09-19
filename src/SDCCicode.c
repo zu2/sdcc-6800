@@ -2380,7 +2380,7 @@ geniCodeDivision (operand *left, operand *right, RESULT_TYPE resultType, bool pt
       !IS_FIXED (letype) && !IS_UNSIGNED (letype) &&
       floatFromVal (OP_VALUE (right)) >= 0 &&
       ((p2 = powof2 ((TYPE_TARGET_ULONGLONG) ullFromVal (OP_VALUE (right)))) > 0) &&
-      (TARGET_Z80_LIKE || TARGET_HC08_LIKE || TARGET_MOS6502_LIKE))
+      (TARGET_Z80_LIKE || TARGET_HC08_LIKE || TARGET_MC6800_LIKE || TARGET_MOS6502_LIKE))
     {
       operand *tmp;
       symbol *label = newiTempLabel (NULL);
