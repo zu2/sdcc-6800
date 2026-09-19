@@ -7773,68 +7773,42 @@ static void
 AccRol (int shCount)
 {
   D (emitcode (";     AccRol", ""));
-#if 0
-  shCount &= 0x0007;            // shCount : 0..7
-
-  switch (shCount)
+  shCount &= 0x0007;
+  if (shCount <= ((optimize.codeSize && !optimize.codeSpeed) ? 4 : 5))
     {
-    case 0:
-      break;
-    case 1:
-      emitcode ("lsla", "");    /* 1 cycle */
-      emitcode ("adc", "#0x00");/* 2 cycles */
-      regalloc_dry_run_cost += 3;
-      break;
-    case 2:
-      emitcode ("lsla", "");    /* 1 cycle */
-      emitcode ("adc", "#0x00");/* 2 cycles */
-      emitcode ("lsla", "");    /* 1 cycle */
-      emitcode ("adc", "#0x00");/* 2 cycles */
-      regalloc_dry_run_cost += 6;
-      break;
-    case 3:
-      emitcode ("nsa", "");     /* 3 cycles */
-      regalloc_dry_run_cost++;
-      goto ror;
-    case 4:
-      emitcode ("nsa", "");     /* 3 cycles */
-      regalloc_dry_run_cost++;
-      break;
-    case 5:
-      emitcode ("nsa", "");     /* 3 cycles */
-      emitcode ("lsla", "");    /* 1 cycle */
-      emitcode ("adc", "#0x00");/* 2 cycles */
-      regalloc_dry_run_cost += 4;
-      break;
-    case 6:
-      emitcode ("nsa", "");     /* 3 cycles */
-      emitcode ("lsla", "");    /* 1 cycle */
-      emitcode ("adc", "#0x00");/* 2 cycles */
-      emitcode ("lsla", "");    /* 1 cycle */
-      emitcode ("adc", "#0x00");/* 2 cycles */
-      regalloc_dry_run_cost += 7;
-      break;
-    case 7:
-ror:
-      emitcode ("lsra", "");     /* 1 cycle */
-      emitcode ("psha", "");     /* 2 cycles */
-      emitcode ("clra", "");     /* 1 cycle */
-      emitcode ("rora", "");     /* 1 cycles */
-      emitcode ("ora", "1, s"); /* 1 cycles */
-      regalloc_dry_run_cost += 6;
-      if (mc6800_reg_h->isFree && optimize.codeSize)
+      while (shCount--)
         {
-          emitcode ("pulh", "");      /* 1 byte,  3 cycles */
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("asla", "");
+          mc6800_emitOp ("adca", "#0x00");
+          regalloc_dry_run_cost += 3;
         }
-      else
-        {
-          emitcode ("ais", "#1"); /* 2 bytes, 2 cycles */
-          regalloc_dry_run_cost += 2;
-        }
-      break;
     }
-#endif
+  else
+    {
+      for (shCount = 8 - shCount; shCount; shCount--)
+        {
+          if (optimize.codeSize && !optimize.codeSpeed)
+            {
+              mc6800_emitOp ("psha", "");
+              mc6800_emitOp ("lsra", "");
+              mc6800_emitOp ("pula", "");
+              mc6800_emitOp ("rora", "");
+              regalloc_dry_run_cost += 4;
+            }
+          else
+            {
+              symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
+
+              mc6800_emitOp ("lsra", "");
+              regalloc_dry_run_cost++;
+              emitBranch ("bcc", tlbl);
+              mc6800_emitOp ("oraa", "#0x80");
+              regalloc_dry_run_cost += 2;
+              if (!regalloc_dry_run)
+                emitLabel (tlbl);
+            }
+        }
+    }
   mc6800_dirtyReg (mc6800_reg_a, false);
 }
 
