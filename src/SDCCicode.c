@@ -1816,7 +1816,7 @@ operandFromSymbol (symbol *sym, bool convert_sym_to_ptr)
   /* under the following conditions create a
      register equivalent for a local symbol */
   if (sym->level && sym->etype && SPEC_OCLS (sym->etype) &&
-      (IN_FARSPACE (SPEC_OCLS (sym->etype)) && !TARGET_HC08_LIKE && !TARGET_MOS6502_LIKE && (!(options.model == MODEL_FLAT24))) && options.stackAuto == 0)
+      (IN_FARSPACE (SPEC_OCLS (sym->etype)) && !TARGET_HC08_LIKE && !TARGET_MC6800_LIKE && !TARGET_MOS6502_LIKE && (!(options.model == MODEL_FLAT24))) && options.stackAuto == 0)
     {
       ok = 0;
     }
@@ -1829,7 +1829,7 @@ operandFromSymbol (symbol *sym, bool convert_sym_to_ptr)
       !sym->reqv &&                     /* does not already have a reg equivalence */
       !IS_VOLATILE (sym->type) &&       /* not declared as volatile */
       !sym->islbl &&                    /* not a label */
-      !((TARGET_HC08_LIKE || TARGET_MOS6502_LIKE) && (getSize (sym->type) > 2)) && /* will fit in regs */
+      !((TARGET_HC08_LIKE || TARGET_MC6800_LIKE || TARGET_MOS6502_LIKE) && (getSize (sym->type) > 2)) && /* will fit in regs */
       ok                                /* farspace check */
     )
     {
