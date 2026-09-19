@@ -1657,21 +1657,8 @@ rmwWithReg (char *rmwop, reg_info * reg)
       regalloc_dry_run_cost++;
       mc6800_dirtyReg (mc6800_reg_b, false);
     }
-  else if (reg->rIdx == X_IDX)
-    {
-      sprintf (rmwaop, "%sx", rmwop);
-      emitcode (rmwaop, "");
-      regalloc_dry_run_cost++;
-      mc6800_dirtyReg (mc6800_reg_x, false);
-    }
   else
-    {
-      pushReg (reg, false);
-      emitcode (rmwop, "1,s");
-      regalloc_dry_run_cost += 3;
-      pullReg (reg);
-      mc6800_dirtyReg (reg, false);
-    }
+    wassertl (0, "rmwWithReg: register must be A or B");
 }
 
 /*--------------------------------------------------------------------------*/

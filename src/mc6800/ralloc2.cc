@@ -235,7 +235,12 @@ static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, co
   const i_assignment_t &ia = a.i_assignment;
   const iCode *ic = G[i].ic;
 
-  if(ic->op == LEFT_OP && operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G))
+  if((operand_in_reg(IC_LEFT(ic), REG_XL, ia, i, G) || operand_in_reg(IC_RIGHT(ic), REG_XL, ia, i, G) || operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G)) &&
+    !(ic->op == '=' || ic->op == GET_VALUE_AT_ADDRESS || ic->op == ADDRESS_OF || ic->op == EQ_OP || ic->op == NE_OP || ic->op == IFX ||
+    ic->op == CALL || ic->op == PCALL || ic->op == RETURN || ic->op == SEND || ic->op == RECEIVE || ic->op == IPUSH ||
+    ic->op == CAST && getSize(operandType(IC_RESULT(ic))) == getSize(operandType(IC_RIGHT(ic))) ||
+    (ic->op == '+' || ic->op == '-') && IS_OP_LITERAL(IC_RIGHT(ic)) && abs((int)operandLitValue(IC_RIGHT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6) ||
+    ic->op == '+' && IS_OP_LITERAL(IC_LEFT(ic)) && abs((int)operandLitValue(IC_LEFT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6)))
     return(false);
 
   bool unused_XL = (ia.registers[REG_XL][1] < 0);
