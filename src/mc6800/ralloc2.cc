@@ -123,7 +123,6 @@ static bool ABXinst_ok(const assignment &a, unsigned short int i, const G_t &G, 
     ic->op == '*' ||
     ic->op == '/' ||
     ic->op == '%' ||
-    ic->op == '<' || ic->op == '>' || ic->op == LE_OP || ic->op == GE_OP ||
     ic->op == NE_OP || ic->op == EQ_OP ||
     ic->op == AND_OP ||
     ic->op == OR_OP ||
@@ -176,6 +175,13 @@ static bool ABXinst_ok(const assignment &a, unsigned short int i, const G_t &G, 
   bool dying_X = result_in_X || dying.find(ia.registers[REG_XL][1]) != dying.end() || dying.find(ia.registers[REG_XL][0]) != dying.end();
 
   bool result_only_XA = (result_in_X || unused_X || dying_X) && (result_in_A || unused_A || dying_A);
+
+  if((ic->op == '<' || ic->op == '>' || ic->op == LE_OP || ic->op == GE_OP) && (getSize(operandType(left)) == 2 || getSize(operandType(right)) == 2) &&
+    (left_in_A || left_in_B || operand_in_reg(right, REG_A, ia, i, G) || operand_in_reg(right, REG_B, ia, i, G)) && !(dying_A && dying_B))
+    return(false);
+
+  if(ic->op == '<' || ic->op == '>' || ic->op == LE_OP || ic->op == GE_OP)
+    return(true);
 
   if(ic->op == JUMPTABLE && (unused_A || dying_A))
     return(true);
