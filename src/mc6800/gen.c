@@ -4341,91 +4341,74 @@ genPlusIncr (iCode * ic)
   int icount;
   operand *left;
   operand *result;
-  bool needpulx;
-  bool needpulb;
   bool needpula;
   unsigned int size = getDataSize (IC_RESULT (ic));
   unsigned int offset;
   symbol *tlbl = NULL;
 
   D (emitcode (";     genPlusIncr", ""));
-#if 0
   left = IC_LEFT (ic);
   result = IC_RESULT (ic);
 
-  /* will try to generate an increment */
-  /* if the right side is not a literal
-     we cannot */
   if (AOP_TYPE (IC_RIGHT (ic)) != AOP_LIT)
     return false;
 
-  icount = (unsigned int) ulFromVal (AOP (IC_RIGHT (ic))->aopu.aop_lit);
+  if (IS_BITINT (operandType (result)) && SPEC_USIGN (operandType (result)) && (SPEC_BITINTWIDTH (operandType (result)) % 8))
+    return false;
 
-  DD (emitcode ("", "; IS_AOP_D = %d", IS_AOP_D (AOP (left))));
+  icount = (int) ulFromVal (AOP (IC_RIGHT (ic))->aopu.aop_lit);
 
-  if ((IS_AOP_D (AOP (left)) || IS_AOP_D (AOP (result)) ||
-    ((AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT) && (AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT))) && (size == 2))
+  if (IS_AOP_X (AOP (left)) && IS_AOP_X (AOP (result)))
     {
-      needpulb = pushRegIfSurv (mc6800_reg_b);
-      needpula = pushRegIfSurv (mc6800_reg_a);
-      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-      emitcode ("addd", "#%d", icount);
-      regalloc_dry_run_cost += 2;
-      mc6800_dirtyReg (mc6800_reg_d, false);
-      storeRegToAop (mc6800_reg_d, AOP (result), 0);
-      pullOrFreeReg (mc6800_reg_a, needpula);
-      pullOrFreeReg (mc6800_reg_b, needpulb);
+      icount = (short) icount;
+      if (abs (icount) > ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6))
+        return false;
+      addConstToX (icount);
       return true;
     }
 
-  DD (emitcode ("", "; icount = %d, sameRegs=%d", icount, sameRegs (AOP (left), AOP (result))));
-
-  if ((icount > 255) || (icount < 0))
+  if ((icount > 255) || (icount < 1))
     return false;
 
   if (!sameRegs (AOP (left), AOP (result)))
     return false;
 
-  D (emitcode (";     genPlusIncr", ""));
-
-  aopOpExtToIdx (AOP (result), AOP (left), NULL);
+  if (AOP_TYPE (result) == AOP_REG)
+    {
+      if (size != 1 || icount != 1 || !(IS_AOP_A (AOP (result)) || IS_AOP_B (AOP (result))))
+        return false;
+      rmwWithAop ("inc", AOP (result), 0);
+      return true;
+    }
 
   if (size > 1)
     tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
 
+  needpula = false;
   if (icount == 1)
     {
-      needpula = false;
       rmwWithAop ("inc", AOP (result), 0);
-      if (1 < size)
+      if (size > 1)
         emitBranch ("bne", tlbl);
     }
   else
     {
-      if (!IS_AOP_A (AOP (result)) && !IS_AOP_D (AOP (result)))
-        needpula = pushRegIfUsed (mc6800_reg_a);
-      else
-        needpula = false;
+      needpula = pushRegIfUsed (mc6800_reg_a);
       loadRegFromAop (mc6800_reg_a, AOP (result), 0);
-      accopWithAop ("add", AOP (IC_RIGHT (ic)), 0);
-      mc6800_useReg (mc6800_reg_a);
+      accopWithAop ("adda", AOP (IC_RIGHT (ic)), 0);
       storeRegToAop (mc6800_reg_a, AOP (result), 0);
-      mc6800_freeReg (mc6800_reg_a);
-      if (1 < size)
+      if (size > 1)
         emitBranch ("bcc", tlbl);
     }
   for (offset = 1; offset < size; offset++)
     {
       rmwWithAop ("inc", AOP (result), offset);
-      if ((offset + 1) < size)
+      if (offset + 1 < size)
         emitBranch ("bne", tlbl);
     }
-
   if (size > 1 && !regalloc_dry_run)
     emitLabel (tlbl);
-
   pullOrFreeReg (mc6800_reg_a, needpula);
-#endif
   return true;
 }
 
@@ -4615,10 +4598,8 @@ genPlus (iCode *ic)
 
   /* if I can do an increment instead
      of add then GOOD for ME */
-#if 0
-  if (!maskedtopbyte && genPlusIncr (ic))
+  if (genPlusIncr (ic))
     goto release;
-#endif
 
   DD (emitcode ("", ";  left size = %d", getDataSize (IC_LEFT (ic))));
   DD (emitcode ("", ";  right size = %d", getDataSize (IC_RIGHT (ic))));
@@ -4658,57 +4639,77 @@ genMinusDec (iCode * ic)
   int icount;
   operand *left;
   operand *result;
-  bool needpulx;
-  bool needpulb;
+  bool needpula;
   unsigned int size = getDataSize (IC_RESULT (ic));
-//  int offset;
-//  symbol *tlbl;
+  symbol *tlbl = NULL;
 
   D (emitcode (";     genMinusDec", ""));
-#if 0
   left = IC_LEFT (ic);
   result = IC_RESULT (ic);
 
-  /* will try to generate an increment */
-  /* if the right side is not a literal
-     we cannot */
   if (AOP_TYPE (IC_RIGHT (ic)) != AOP_LIT)
     return false;
 
-  icount = (unsigned int) ulFromVal (AOP (IC_RIGHT (ic))->aopu.aop_lit);
-  if ((IS_AOP_HX (AOP (left)) || IS_AOP_HX (AOP (result)) ||
-    ((AOP_TYPE (left) == AOP_DIR || IS_S08 && AOP_TYPE (left) == AOP_EXT) && (AOP_TYPE (result) == AOP_DIR || IS_S08 && AOP_TYPE (result) == AOP_EXT))) &&
-    (icount >= -127) && (icount <= 128) && (size == 2))
-    {
-      needpulx = pushRegIfSurv (mc6800_reg_x);
-      needpulh = pushRegIfSurv (mc6800_reg_h);
+  icount = (int) ulFromVal (AOP (IC_RIGHT (ic))->aopu.aop_lit);
 
-      loadRegFromAop (mc6800_reg_hx, AOP (left), 0);
-      emitcode ("aix", "#%d", -(int) icount);
-      regalloc_dry_run_cost += 2;
-      mc6800_dirtyReg (mc6800_reg_hx, false);
-      storeRegToAop (mc6800_reg_hx, AOP (result), 0);
-      pullOrFreeReg (mc6800_reg_h, needpulh);
-      pullOrFreeReg (mc6800_reg_x, needpulx);
+  if (IS_AOP_X (AOP (left)) && IS_AOP_X (AOP (result)))
+    {
+      icount = (short) icount;
+      if (abs (icount) > ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6))
+        return false;
+      addConstToX (-icount);
       return true;
     }
 
-  if ((icount > 1) || (icount < 0))
+  if ((icount > 255) || (icount < 1))
     return false;
 
   if (!sameRegs (AOP (left), AOP (result)))
     return false;
 
-  if (size != 1)
+  if (AOP_TYPE (result) == AOP_REG)
+    {
+      if (size != 1 || icount != 1 || !(IS_AOP_A (AOP (result)) || IS_AOP_B (AOP (result))))
+        return false;
+      rmwWithAop ("dec", AOP (result), 0);
+      return true;
+    }
+
+  if (size > 2)
     return false;
 
-  D (emitcode (";     genMinusDec", ""));
+  if (size > 1)
+    tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
 
-  aopOpExtToIdx (AOP (result), AOP (left), NULL);
+  if (icount == 1)
+    {
+      if (size > 1)
+        {
+          if (isOperandVolatile (result, false))
+            return false;
+          rmwWithAop ("tst", AOP (result), 0);
+          emitBranch ("bne", tlbl);
+          rmwWithAop ("dec", AOP (result), 1);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl);
+        }
+      rmwWithAop ("dec", AOP (result), 0);
+      return true;
+    }
 
-  rmwWithAop ("dec", AOP (result), 0);
-#endif
-  return false;
+  needpula = pushRegIfUsed (mc6800_reg_a);
+  loadRegFromAop (mc6800_reg_a, AOP (result), 0);
+  accopWithAop ("suba", AOP (IC_RIGHT (ic)), 0);
+  storeRegToAop (mc6800_reg_a, AOP (result), 0);
+  if (size > 1)
+    {
+      emitBranch ("bcc", tlbl);
+      rmwWithAop ("dec", AOP (result), 1);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl);
+    }
+  pullOrFreeReg (mc6800_reg_a, needpula);
+  return true;
 }
 
 /*-----------------------------------------------------------------*/
