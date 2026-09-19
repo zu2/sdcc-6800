@@ -8581,6 +8581,7 @@ genLeftShift (iCode *ic)
   asmop *aopResult;
   bool needpullcountreg;
   reg_info *countreg = NULL;
+  const char *tmp = NULL;
 
   D (emitcode (";     genLeftShift", ""));
 
@@ -8616,6 +8617,26 @@ genLeftShift (iCode *ic)
   wassertl (!IS_AOP_WITH_X (AOP (result)),
             "left shift by a variable count with the result in x is not supported yet");
 
+  if (!IS_AOP_WITH_B (AOP (result)))
+    countreg = mc6800_reg_b;
+  else if (!IS_AOP_WITH_A (AOP (result)))
+    countreg = mc6800_reg_a;
+
+  if (!countreg)
+    {
+      tmp = allocTemp ();
+      if (AOP_TYPE (right) == AOP_REG)
+        mc6800_emitOp (AOP (right)->aopu.aop_reg[0]->rIdx == A_IDX ? "staa" : "stab", "*%s", tmp);
+      else
+        {
+          needpullcountreg = pushRegIfUsed (mc6800_reg_b);
+          loadRegFromAop (mc6800_reg_b, AOP (right), 0);
+          mc6800_emitOp ("stab", "*%s", tmp);
+          pullOrFreeReg (mc6800_reg_b, needpullcountreg);
+        }
+      regalloc_dry_run_cost += 2;
+    }
+
   /* now move the left to the result if they are not the
      same */
   if (!sameRegs (left->aop, AOP (result)))
@@ -8634,19 +8655,17 @@ genLeftShift (iCode *ic)
   tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-  if (!IS_AOP_WITH_B (AOP (result)))
-    countreg = mc6800_reg_b;
-  else if (!IS_AOP_WITH_A (AOP (result)))
-    countreg = mc6800_reg_a;
-
-  wassertl (countreg, "left shift by a variable count needs a free accumulator");
-
-  needpullcountreg = pushRegIfSurv (countreg);
-  countreg->isFree = false;
-  loadRegFromAop (countreg, AOP (right), 0);
-  emitcode (countreg == mc6800_reg_a ? "tsta" : "tstb", "");
-  regalloc_dry_run_cost++;
-  emitBranch ("beq", tlbl1);
+  if (countreg)
+    {
+      needpullcountreg = pushRegIfSurv (countreg);
+      countreg->isFree = false;
+      loadRegFromAop (countreg, AOP (right), 0);
+      emitcode (countreg == mc6800_reg_a ? "tsta" : "tstb", "");
+      regalloc_dry_run_cost++;
+      emitBranch ("beq", tlbl1);
+    }
+  else
+    emitBranch ("bra", tlbl1);
 
   if (!regalloc_dry_run)
     emitLabel (tlbl);
@@ -8657,13 +8676,23 @@ genLeftShift (iCode *ic)
       rmwWithAop (shift, AOP (result), offset);
       shift = "rol";
     }
-  rmwWithReg ("dec", countreg);
-  emitBranch ("bne", tlbl);
-
-  if (!regalloc_dry_run)
-    emitLabel (tlbl1);
-
-  pullOrFreeReg (countreg, needpullcountreg);
+  if (countreg)
+    {
+      rmwWithReg ("dec", countreg);
+      emitBranch ("bne", tlbl);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl1);
+      pullOrFreeReg (countreg, needpullcountreg);
+    }
+  else
+    {
+      if (!regalloc_dry_run)
+        emitLabel (tlbl1);
+      emitcode ("dec", "%s", tmp);
+      regalloc_dry_run_cost += 3;
+      emitBranch ("bpl", tlbl);
+      freeTemp ();
+    }
 
   if (maskedtopbyte)
     {
@@ -8907,6 +8936,7 @@ genRightShift (iCode * ic)
   bool sign;
   bool needpullcountreg;
   reg_info *countreg = NULL;
+  const char *tmp = NULL;
 
   D (emitcode (";     genRightShift", ""));
 
@@ -8931,6 +8961,26 @@ genRightShift (iCode * ic)
   wassertl (!IS_AOP_WITH_X (AOP (result)),
             "right shift by a variable count with the result in x is not supported yet");
 
+  if (!IS_AOP_WITH_B (AOP (result)))
+    countreg = mc6800_reg_b;
+  else if (!IS_AOP_WITH_A (AOP (result)))
+    countreg = mc6800_reg_a;
+
+  if (!countreg)
+    {
+      tmp = allocTemp ();
+      if (AOP_TYPE (right) == AOP_REG)
+        mc6800_emitOp (AOP (right)->aopu.aop_reg[0]->rIdx == A_IDX ? "staa" : "stab", "*%s", tmp);
+      else
+        {
+          needpullcountreg = pushRegIfUsed (mc6800_reg_b);
+          loadRegFromAop (mc6800_reg_b, AOP (right), 0);
+          mc6800_emitOp ("stab", "*%s", tmp);
+          pullOrFreeReg (mc6800_reg_b, needpullcountreg);
+        }
+      regalloc_dry_run_cost += 2;
+    }
+
   if (!sameRegs (left->aop, AOP (result)))
     {
       size = AOP_SIZE (result);
@@ -8947,19 +8997,17 @@ genRightShift (iCode * ic)
   tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-  if (!IS_AOP_WITH_B (AOP (result)))
-    countreg = mc6800_reg_b;
-  else if (!IS_AOP_WITH_A (AOP (result)))
-    countreg = mc6800_reg_a;
-
-  wassertl (countreg, "right shift by a variable count needs a free accumulator");
-
-  needpullcountreg = pushRegIfSurv (countreg);
-  countreg->isFree = false;
-  loadRegFromAop (countreg, AOP (right), 0);
-  emitcode (countreg == mc6800_reg_a ? "tsta" : "tstb", "");
-  regalloc_dry_run_cost++;
-  emitBranch ("beq", tlbl1);
+  if (countreg)
+    {
+      needpullcountreg = pushRegIfSurv (countreg);
+      countreg->isFree = false;
+      loadRegFromAop (countreg, AOP (right), 0);
+      emitcode (countreg == mc6800_reg_a ? "tsta" : "tstb", "");
+      regalloc_dry_run_cost++;
+      emitBranch ("beq", tlbl1);
+    }
+  else
+    emitBranch ("bra", tlbl1);
 
   if (!regalloc_dry_run)
     emitLabel (tlbl);
@@ -8970,13 +9018,23 @@ genRightShift (iCode * ic)
       rmwWithAop (shift, AOP (result), offset);
       shift = "ror";
     }
-  rmwWithReg ("dec", countreg);
-  emitBranch ("bne", tlbl);
-
-  if (!regalloc_dry_run)
-    emitLabel (tlbl1);
-
-  pullOrFreeReg (countreg, needpullcountreg);
+  if (countreg)
+    {
+      rmwWithReg ("dec", countreg);
+      emitBranch ("bne", tlbl);
+      if (!regalloc_dry_run)
+        emitLabel (tlbl1);
+      pullOrFreeReg (countreg, needpullcountreg);
+    }
+  else
+    {
+      if (!regalloc_dry_run)
+        emitLabel (tlbl1);
+      emitcode ("dec", "%s", tmp);
+      regalloc_dry_run_cost += 3;
+      emitBranch ("bpl", tlbl);
+      freeTemp ();
+    }
 
   freeAsmop (result, NULL, ic, true);
   freeAsmop (right, NULL, ic, true);
