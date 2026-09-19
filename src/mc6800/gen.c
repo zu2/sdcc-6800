@@ -7489,72 +7489,53 @@ static void
 genRRC (iCode * ic)
 {
   operand *left, *result;
-  int size, offset = 0;
-  bool needpula = false;
-  bool resultInA = false;
-  char *shift;
+  int size, offset;
+  bool needpull;
 
   D (emitcode (";     genRRC", ""));
 
-  /* rotate right with carry */
   left = IC_LEFT (ic);
   result = IC_RESULT (ic);
   aopOp (left, ic, false);
   aopOp (result, ic, false);
 
-  if ((AOP_TYPE (result) == AOP_REG) && (AOP (result)->aopu.aop_reg[0]->rIdx == A_IDX))
-    resultInA = true;
-
   size = AOP_SIZE (result);
-  offset = size - 1;
 
-  shift = "lsr";
-  if (sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))))
+  if (size == 2)
     {
-      while (size--)
-        {
-          rmwWithAop (shift, AOP (result), offset--);
-          shift = "ror";
-        }
+      symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
+
+      needpull = pushRegIfSurv (mc6800_reg_d);
+      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+      mc6800_emitOp ("lsra", "");
+      mc6800_emitOp ("rorb", "");
+      regalloc_dry_run_cost += 2;
+      emitBranch ("bcc", tlbl);
+      mc6800_emitOp ("oraa", "#0x80");
+      regalloc_dry_run_cost += 2;
+      if (!regalloc_dry_run)
+        emitLabel (tlbl);
+      mc6800_dirtyReg (mc6800_reg_d, false);
+      storeRegToAop (mc6800_reg_d, AOP (result), 0);
+      pullOrFreeReg (mc6800_reg_d, needpull);
     }
   else
     {
-      while (size--)
+      needpull = pushRegIfSurv (mc6800_reg_a);
+      loadRegFromAop (mc6800_reg_a, AOP (left), 0);
+      mc6800_emitOp ("lsra", "");
+      regalloc_dry_run_cost++;
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      for (offset = size - 1; offset >= 0; offset--)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          rmwWithReg (shift, mc6800_reg_a);
-          storeRegToAop (mc6800_reg_a, AOP (result), offset--);
-          mc6800_freeReg (mc6800_reg_a);
-          shift = "ror";
+          mc6800_emitOp ("rora", "");
+          regalloc_dry_run_cost++;
+          mc6800_dirtyReg (mc6800_reg_a, false);
+          storeRegToAop (mc6800_reg_a, AOP (result), offset);
         }
+      pullOrFreeReg (mc6800_reg_a, needpull);
     }
-
-  if ((!mc6800_reg_a->isFree) || resultInA)
-    {
-      pushReg (mc6800_reg_a, true);
-      needpula = true;
-    }
-
-  /* now we need to put the carry into the
-     highest order byte of the result */
-  offset = AOP_SIZE (result) - 1;
-  emitcode ("clra", "");
-  emitcode ("rora", "");
-  regalloc_dry_run_cost += 2;
-  mc6800_dirtyReg (mc6800_reg_a, false);
-  if (resultInA)
-    {
-      emitcode ("ora", "1,s");
-      pullNull (1);
-      regalloc_dry_run_cost += 3;
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      needpula = false;
-    }
-  else
-    accopWithAop ("ora", AOP (result), offset);
-  storeRegToAop (mc6800_reg_a, AOP (result), offset);
-
-  pullOrFreeReg (mc6800_reg_a, needpula);
 
   freeAsmop (left, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
@@ -7567,70 +7548,47 @@ static void
 genRLC (iCode * ic)
 {
   operand *left, *result;
-  int size, offset = 0;
-  char *shift;
-  bool resultInA = false;
-  bool needpula = false;
+  int size, offset;
+  bool needpull;
 
   D (emitcode (";     genRLC", ""));
 
-  /* rotate right with carry */
   left = IC_LEFT (ic);
   result = IC_RESULT (ic);
   aopOp (left, ic, false);
   aopOp (result, ic, false);
 
-  if ((AOP_TYPE (result) == AOP_REG) && (AOP (result)->aopu.aop_reg[0]->rIdx == A_IDX))
-    resultInA = true;
-
   size = AOP_SIZE (result);
-  offset = 0;
 
-  shift = "lsl";
-  if (sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))))
+  if (size == 2)
     {
-      while (size--)
-        {
-          rmwWithAop (shift, AOP (result), offset++);
-          shift = "rol";
-        }
+      needpull = pushRegIfSurv (mc6800_reg_d);
+      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+      mc6800_emitOp ("aslb", "");
+      mc6800_emitOp ("rola", "");
+      mc6800_emitOp ("adcb", "#0x00");
+      regalloc_dry_run_cost += 4;
+      mc6800_dirtyReg (mc6800_reg_d, false);
+      storeRegToAop (mc6800_reg_d, AOP (result), 0);
+      pullOrFreeReg (mc6800_reg_d, needpull);
     }
   else
     {
-      while (size--)
+      needpull = pushRegIfSurv (mc6800_reg_a);
+      loadRegFromAop (mc6800_reg_a, AOP (left), size - 1);
+      mc6800_emitOp ("asla", "");
+      regalloc_dry_run_cost++;
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      for (offset = 0; offset < size; offset++)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          rmwWithReg (shift, mc6800_reg_a);
-          storeRegToAop (mc6800_reg_a, AOP (result), offset++);
-          mc6800_freeReg (mc6800_reg_a);
-          shift = "rol";
+          mc6800_emitOp ("rola", "");
+          regalloc_dry_run_cost++;
+          mc6800_dirtyReg (mc6800_reg_a, false);
+          storeRegToAop (mc6800_reg_a, AOP (result), offset);
         }
+      pullOrFreeReg (mc6800_reg_a, needpull);
     }
-
-  /* now we need to put the carry into the
-     lowest order byte of the result */
-  if (resultInA)
-    {
-      emitcode ("adc", "#0x00");
-      regalloc_dry_run_cost += 2;
-    }
-  else
-    {
-      if (!mc6800_reg_a->isFree)
-        {
-          pushReg (mc6800_reg_a, true);
-          needpula = true;
-        }
-      offset = 0;
-      emitcode ("clra", "");
-      emitcode ("rola", "");
-      regalloc_dry_run_cost += 2;
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      accopWithAop ("ora", AOP (result), offset);
-      storeRegToAop (mc6800_reg_a, AOP (result), offset);
-    }
-
-  pullOrFreeReg (mc6800_reg_a, needpula);
 
   freeAsmop (left, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
@@ -7778,9 +7736,34 @@ static void
 genSwap (iCode * ic)
 {
   operand *left, *result;
-  bool needpulla;
+  bool needpull;
 
   D (emitcode (";     genSwap", ""));
+
+  left = IC_LEFT (ic);
+  result = IC_RESULT (ic);
+  aopOp (left, ic, false);
+  aopOp (result, ic, false);
+
+  needpull = pushRegIfSurv (mc6800_reg_d);
+  if (IS_AOP_D (AOP (left)))
+    {
+      mc6800_emitOp ("psha", "");
+      mc6800_emitOp ("tba", "");
+      mc6800_emitOp ("pulb", "");
+      regalloc_dry_run_cost += 3;
+    }
+  else
+    {
+      loadRegFromAop (mc6800_reg_a, AOP (left), 0);
+      loadRegFromAop (mc6800_reg_b, AOP (left), 1);
+    }
+  mc6800_dirtyReg (mc6800_reg_d, false);
+  storeRegToAop (mc6800_reg_d, AOP (result), 0);
+  pullOrFreeReg (mc6800_reg_d, needpull);
+
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (result, NULL, ic, true);
 }
 
 /*-----------------------------------------------------------------*/

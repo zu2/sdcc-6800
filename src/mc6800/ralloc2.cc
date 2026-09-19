@@ -139,7 +139,7 @@ static bool ABXinst_ok(const assignment &a, unsigned short int i, const G_t &G, 
     ic->op == ADDRESS_OF ||
     ic->op == CAST ||
     ic->op == DUMMY_READ_VOLATILE ||
-    ic->op == ROT && IS_OP_LITERAL (IC_RIGHT (ic)) && (bitsForType (operandType (IC_LEFT (ic))) == 8 || operandLitValueUll (IC_RIGHT (ic)) * 2 == bitsForType (operandType (IC_LEFT (ic)))))
+    ic->op == ROT && IS_OP_LITERAL (IC_RIGHT (ic)))
     return(true);
 
   if(ic->op == IFX && ic->generated)
