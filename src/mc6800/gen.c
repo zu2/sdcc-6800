@@ -135,16 +135,96 @@ static unsigned int regalloc_dry_run_cost;
 static float regalloc_dry_run_cost_cycles;
 
 static void
-mc6800_emitOp (const char *inst, const char *fmt, ...)
+mc6800_emitOp (const char *inst, int mode, const char *fmt, ...)
 {
   va_list ap;
+  const mc6800opcodedata *opcode = mc6800_getOpcodeData (inst);
 
-  if (!mc6800_getOpcodeData (inst))
-    werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "unknown opcode");
+  if (!opcode
+      || !((mode == MODE_IDX && strstr (fmt, ",x"))
+           || (mode == MODE_IMM && fmt[0] == '#')
+           || (mode == MODE_DIR && fmt[0] == '*')
+           || (mode == MODE_INH && !fmt[0])
+           || (mode == MODE_EXT && fmt[0] && fmt[0] != '#' && fmt[0] != '*' && !strstr (fmt, ",x")))
+      || !opcode->mode[mode].bytes)
+    fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "unknown opcode or invalid addressing mode");
+
+  regalloc_dry_run_cost += opcode->mode[mode].bytes;
+  regalloc_dry_run_cost_cycles += opcode->mode[mode].cycles;
 
   va_start (ap, fmt);
   va_emitcode (inst, fmt, ap);
   va_end (ap);
+}
+
+static void
+mc6800_emitOp_o (const char *inst, asmop *aop, int loffset)
+{
+  int mode;
+  const mc6800opcodedata *opcode = mc6800_getOpcodeData (inst);
+
+  if (loffset > aop->size - 1 && aop->type != AOP_LIT)
+    mode = MODE_IMM;
+  else if (aop->type == AOP_LIT || aop->type == AOP_IMMD)
+    mode = MODE_IMM;
+  else if (aop->type == AOP_DIR)
+    mode = MODE_DIR;
+  else if (aop->type == AOP_EXT)
+    mode = MODE_EXT;
+  else if (aop->type == AOP_SOF || aop->type == AOP_IDX)
+    mode = MODE_IDX;
+  else
+    fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "unsupported operand");
+
+  if (!opcode
+      || !opcode->mode[mode].bytes
+      || !strcmp (inst, "ldx")
+      || !strcmp (inst, "stx")
+      || !strcmp (inst, "cpx")
+      || !strcmp (inst, "lds")
+      || !strcmp (inst, "sts"))
+    fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "unknown opcode or invalid operand");
+
+  regalloc_dry_run_cost += opcode->mode[mode].bytes;
+  regalloc_dry_run_cost_cycles += opcode->mode[mode].cycles;
+
+  emitcode (inst, "%s", aopAdrStr (aop, loffset, false));
+}
+
+static void
+mc6800_emitOpw_o (const char *inst, asmop *aop, int loffset)
+{
+  int mode;
+  const mc6800opcodedata *opcode = mc6800_getOpcodeData (inst);
+
+  if (loffset > aop->size - 1 && aop->type != AOP_LIT)
+    mode = MODE_IMM;
+  else if (loffset + 1 > aop->size - 1 && aop->type != AOP_LIT)
+    fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "operand out of range");
+  else if (aop->type == AOP_LIT || aop->type == AOP_IMMD)
+    mode = MODE_IMM;
+  else if (aop->type == AOP_DIR)
+    mode = MODE_DIR;
+  else if (aop->type == AOP_EXT)
+    mode = MODE_EXT;
+  else if (aop->type == AOP_SOF || aop->type == AOP_IDX)
+    mode = MODE_IDX;
+  else
+    fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "unsupported operand");
+
+  if (!opcode
+      || !opcode->mode[mode].bytes
+      || (strcmp (inst, "ldx")
+          && strcmp (inst, "stx")
+          && strcmp (inst, "cpx")
+          && strcmp (inst, "lds")
+          && strcmp (inst, "sts")))
+    fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "unknown opcode or invalid operand");
+
+  regalloc_dry_run_cost += opcode->mode[mode].bytes;
+  regalloc_dry_run_cost_cycles += opcode->mode[mode].cycles;
+
+  emitcode (inst, "%s", aopAdrStr (aop, loffset, true));
 }
 
 static void
@@ -208,8 +288,7 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
       switch (srcidx)
         {
         case B_IDX:            /* B to A */
-          mc6800_emitOp ("tba", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("tba", MODE_INH, "");
           break;
         default:
           error = 1;
@@ -219,8 +298,7 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
       switch (srcidx)
         {
         case A_IDX:            /* A to B */
-          mc6800_emitOp ("tab", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("tab", MODE_INH, "");
           break;
         default:
           error = 1;
@@ -232,10 +310,9 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
         case D_IDX:            /* D to X */
           {
             const char *tmp = allocTemp ();
-            mc6800_emitOp ("staa", "*%s", tmp);
-            mc6800_emitOp ("stab", "*%s+1", tmp);
-            mc6800_emitOp ("ldx", "*%s", tmp);
-            regalloc_dry_run_cost += 6;
+            mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+            mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+            mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
             freeTemp ();
           }
           break;
@@ -249,10 +326,9 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
         case X_IDX:
           {
             const char *tmp = allocTemp ();
-            mc6800_emitOp ("stx", "*%s", tmp);
-            mc6800_emitOp ("ldaa", "*%s", tmp);
-            mc6800_emitOp ("ldab", "*%s+1", tmp);
-            regalloc_dry_run_cost += 6;
+            mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+            mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+            mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
             freeTemp ();
           }
           break;
@@ -338,30 +414,25 @@ pushReg (reg_info * reg, bool freereg)
   switch (regidx)
     {
     case A_IDX:
-      mc6800_emitOp ("psha", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("psha", MODE_INH, "");
       _G.stackPushes++;
       updateCFA ();
       break;
     case B_IDX:
-      mc6800_emitOp ("pshb", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("pshb", MODE_INH, "");
       _G.stackPushes++;
       updateCFA ();
       break;
     case X_IDX:
       tmp = allocTemp ();
       allocTemp ();
-      mc6800_emitOp ("stx", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
       break;
     case D_IDX:
-      mc6800_emitOp ("psha", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("psha", MODE_INH, "");
       updateCFA ();
       _G.stackPushes++;
-      mc6800_emitOp ("pshb", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("pshb", MODE_INH, "");
       updateCFA ();
       _G.stackPushes++;
       break;
@@ -385,30 +456,25 @@ pullReg (reg_info * reg)
   switch (regidx)
     {
     case A_IDX:
-      mc6800_emitOp ("pula", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("pula", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
       break;
     case B_IDX:
-      mc6800_emitOp ("pulb", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("pulb", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
       break;
     case X_IDX:
       freeTemp ();
       tmp = freeTemp ();
-      mc6800_emitOp ("ldx", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
       break;
     case D_IDX:
-      mc6800_emitOp ("pulb", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("pulb", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
-      mc6800_emitOp ("pula", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("pula", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
       break;
@@ -509,8 +575,7 @@ adjustStack (int n)
   if (n>0)
     {
       for (int i=0; i<n; i++ ){
-        mc6800_emitOp ("ins", "");
-        regalloc_dry_run_cost++;
+        mc6800_emitOp ("ins", MODE_INH, "");
       }
       _G.stackPushes -= n;
       updateCFA ();
@@ -518,8 +583,7 @@ adjustStack (int n)
   else if (n<0)
     {
       for (int i=0; i>n; i-- ){
-        mc6800_emitOp ("des", "");
-        regalloc_dry_run_cost++;
+        mc6800_emitOp ("des", MODE_INH, "");
       }
       _G.stackPushes -= n;
       updateCFA ();
@@ -769,9 +833,8 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", "*%s", tmp);
-          mc6800_emitOp ("ldaa", loffset ? "*%s" : "*%s+1", tmp);
-          regalloc_dry_run_cost += 4;
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("ldaa", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
           freeTemp ();
           mc6800_dirtyReg (reg, false);
           break;
@@ -797,9 +860,8 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", "*%s", tmp);
-          mc6800_emitOp ("ldab", loffset ? "*%s" : "*%s+1", tmp);
-          regalloc_dry_run_cost += 4;
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("ldab", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
           freeTemp ();
           mc6800_dirtyReg (reg, false);
           break;
@@ -961,10 +1023,9 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", "*%s", tmp);
-          mc6800_emitOp ("staa", loffset ? "*%s" : "*%s+1", tmp);
-          mc6800_emitOp ("ldx", "*%s", tmp);
-          regalloc_dry_run_cost += 6;
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("staa", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
           freeTemp ();
           mc6800_dirtyReg (mc6800_reg_x, false);
           break;
@@ -982,10 +1043,9 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", "*%s", tmp);
-          mc6800_emitOp ("stab", loffset ? "*%s" : "*%s+1", tmp);
-          mc6800_emitOp ("ldx", "*%s", tmp);
-          regalloc_dry_run_cost += 6;
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("stab", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
           freeTemp ();
           mc6800_dirtyReg (mc6800_reg_x, false);
           break;
@@ -1014,9 +1074,8 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", "*%s", tmp);
-          mc6800_emitOp (aop->aopu.aop_reg[loffset] == mc6800_reg_a ? "ldaa" : "ldab", "*%s+1", tmp);
-          regalloc_dry_run_cost += 4;
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp (aop->aopu.aop_reg[loffset] == mc6800_reg_a ? "ldaa" : "ldab", MODE_DIR, "*%s+1", tmp);
           freeTemp ();
           mc6800_dirtyReg (aop->aopu.aop_reg[loffset], false);
           break;
@@ -1578,24 +1637,23 @@ accopWithAop (char *accop, asmop *aop, int loffset)
         {
           const char *tmp = allocTemp ();
           allocTemp ();
-          mc6800_emitOp ("stx", "*%s", tmp);
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
           emitcode (accop, (reg->rIdx == XL_IDX) ? "*%s+1" : "*%s", tmp);
-          regalloc_dry_run_cost += 4;
+          regalloc_dry_run_cost += 2;
           freeTemp ();
           freeTemp ();
         }
       else if (reg->rIdx == B_IDX && aop->size == 1
                && (!strcmp (accop, "adda") || !strcmp (accop, "suba") || !strcmp (accop, "cmpa")))
         {
-          mc6800_emitOp (!strcmp (accop, "adda") ? "aba" : !strcmp (accop, "suba") ? "sba" : "cba", "");
-          regalloc_dry_run_cost += 1;
+          mc6800_emitOp (!strcmp (accop, "adda") ? "aba" : !strcmp (accop, "suba") ? "sba" : "cba", MODE_INH, "");
         }
       else if ((reg->rIdx == A_IDX || reg->rIdx == B_IDX) && _G.tempOfs < NUM_TEMP_REGS)
         {
           const char *tmp = allocTemp ();
-          mc6800_emitOp ((reg->rIdx == A_IDX) ? "staa" : "stab", "*%s", tmp);
+          mc6800_emitOp ((reg->rIdx == A_IDX) ? "staa" : "stab", MODE_DIR, "*%s", tmp);
           emitcode (accop, "*%s", tmp);
-          regalloc_dry_run_cost += 4;
+          regalloc_dry_run_cost += 2;
           freeTemp ();
         }
       else
@@ -1603,10 +1661,10 @@ accopWithAop (char *accop, asmop *aop, int loffset)
           wassertl (reg->rIdx == A_IDX || reg->rIdx == B_IDX, "no temporary for register operand");
           wassertl (mc6800_reg_x->isFree && mc6800_reg_x->isDead, "X is not free for register operand");
           pushReg (reg, false);
-          mc6800_emitOp ("tsx", "");
+          mc6800_emitOp ("tsx", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_x, false);
           emitcode (accop, ",x");
-          regalloc_dry_run_cost += 3;
+          regalloc_dry_run_cost += 2;
           pullNull (1);
         }
     }
@@ -1748,14 +1806,12 @@ addConstToX (int n)
     {
       while (n > 0)
         {
-          mc6800_emitOp ("inx", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("inx", MODE_INH, "");
           n--;
         }
       while (n < 0)
         {
-          mc6800_emitOp ("dex", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("dex", MODE_INH, "");
           n++;
         }
       mc6800_dirtyReg (mc6800_reg_x, false);
@@ -1767,15 +1823,14 @@ addConstToX (int n)
   acc = useb ? mc6800_reg_b : mc6800_reg_a;
   allocTemp ();
   needpullacc = pushRegIfUsed (acc);
-  mc6800_emitOp ("stx", "*%s", tmp);
-  mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s+1", tmp);
-  mc6800_emitOp (useb ? "addb" : "adda", "#0x%02x", (unsigned int) n & 0xff);
-  mc6800_emitOp (useb ? "stab" : "staa", "*%s+1", tmp);
-  mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s", tmp);
-  mc6800_emitOp (useb ? "adcb" : "adca", "#0x%02x", ((unsigned int) n >> 8) & 0xff);
-  mc6800_emitOp (useb ? "stab" : "staa", "*%s", tmp);
-  mc6800_emitOp ("ldx", "*%s", tmp);
-  regalloc_dry_run_cost += 16;
+  mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+  mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s+1", tmp);
+  mc6800_emitOp (useb ? "addb" : "adda", MODE_IMM, "#0x%02x", (unsigned int) n & 0xff);
+  mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s+1", tmp);
+  mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s", tmp);
+  mc6800_emitOp (useb ? "adcb" : "adca", MODE_IMM, "#0x%02x", ((unsigned int) n >> 8) & 0xff);
+  mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s", tmp);
+  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
   freeTemp ();
   freeTemp ();
   mc6800_dirtyReg (acc, false);
@@ -1802,18 +1857,15 @@ loadRegIndexed (reg_info * reg, int offset, char * rematOfs)
   switch (reg->rIdx)
     {
     case A_IDX:
-      mc6800_emitOp ("ldaa", "%d,x", offset);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("ldaa", MODE_IDX, "%d,x", offset);
       mc6800_dirtyReg (reg, false);
       break;
     case B_IDX:
-      mc6800_emitOp ("ldab", "%d,x", offset);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("ldab", MODE_IDX, "%d,x", offset);
       mc6800_dirtyReg (reg, false);
       break;
     case X_IDX:
-      mc6800_emitOp ("ldx", "%d,x", offset);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("ldx", MODE_IDX, "%d,x", offset);
       mc6800_dirtyReg (reg, false);
       break;
     case D_IDX:
@@ -1844,16 +1896,13 @@ storeRegIndexed (reg_info * reg, int offset, char * rematOfs)
   switch (reg->rIdx)
     {
     case A_IDX:
-      mc6800_emitOp ("staa", "%d,x", offset);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("staa", MODE_IDX, "%d,x", offset);
       break;
     case B_IDX:
-      mc6800_emitOp ("stab", "%d,x", offset);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("stab", MODE_IDX, "%d,x", offset);
       break;
     case X_IDX:
-      mc6800_emitOp ("stx", "%d,x", offset);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("stx", MODE_IDX, "%d,x", offset);
       break;
     case D_IDX:
       storeRegIndexed (mc6800_reg_a, offset, rematOfs);
@@ -1910,15 +1959,13 @@ adjustX (int diff)
 {
   while (diff > 0)
     {
-      mc6800_emitOp ("inx", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("inx", MODE_INH, "");
       mc6800_reg_x->stackOffset++;
       diff--;
     }
   while (diff < 0)
     {
-      mc6800_emitOp ("dex", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("dex", MODE_INH, "");
       mc6800_reg_x->stackOffset--;
       diff++;
     }
@@ -1935,35 +1982,31 @@ setupTmpFromSP (int stackOffset)
     {
       if (saveb)
         {
-          mc6800_emitOp ("pshb", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("pshb", MODE_INH, "");
         }
-      mc6800_emitOp ("sts", "*%s", tmp);
-      mc6800_emitOp ("ldab", "*%s+1", tmp);
-      mc6800_emitOp ("addb", "#%d", delta & 0xff);
-      mc6800_emitOp ("stab", "*%s+1", tmp);
-      mc6800_emitOp ("ldab", "*%s", tmp);
-      mc6800_emitOp ("adcb", "#%d", (delta >> 8) & 0xff);
-      mc6800_emitOp ("stab", "*%s", tmp);
-      regalloc_dry_run_cost += 14;
+      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp ("addb", MODE_IMM, "#%d", delta & 0xff);
+      mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp ("ldab", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("adcb", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+      mc6800_emitOp ("stab", MODE_DIR, "*%s", tmp);
       if (saveb)
         {
-          mc6800_emitOp ("pulb", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("pulb", MODE_INH, "");
         }
       else
         mc6800_dirtyReg (mc6800_reg_b, false);
     }
   else
     {
-      mc6800_emitOp ("sts", "*%s", tmp);
-      mc6800_emitOp ("ldaa", "*%s+1", tmp);
-      mc6800_emitOp ("adda", "#%d", delta & 0xff);
-      mc6800_emitOp ("staa", "*%s+1", tmp);
-      mc6800_emitOp ("ldaa", "*%s", tmp);
-      mc6800_emitOp ("adca", "#%d", (delta >> 8) & 0xff);
-      mc6800_emitOp ("staa", "*%s", tmp);
-      regalloc_dry_run_cost += 14;
+      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("ldaa", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp ("adda", MODE_IMM, "#%d", delta & 0xff);
+      mc6800_emitOp ("staa", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
     }
   return tmp;
@@ -1974,8 +2017,7 @@ setupXFromSP (int stackOffset)
 {
   const char *tmp = setupTmpFromSP (stackOffset);
 
-  mc6800_emitOp ("ldx", "*%s", tmp);
-  regalloc_dry_run_cost += 2;
+  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
   freeTemp ();
   mc6800_dirtyReg (mc6800_reg_x, false);
   mc6800_reg_x->aop = &tsxaop;
@@ -2850,8 +2892,7 @@ asmopToBool (asmop *aop, bool resultInA)
     {
       loadRegFromAop (mc6800_reg_a, aop, 0);
       rmwWithReg ("neg", mc6800_reg_a);
-      mc6800_emitOp ("ldaa", "#0x00");
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("ldaa", MODE_IMM, "#0x00");
       mc6800_dirtyReg (mc6800_reg_a, false);
       rmwWithReg ("rol", mc6800_reg_a);
       return;
@@ -2868,8 +2909,7 @@ asmopToBool (asmop *aop, bool resultInA)
         }
       else if (IS_AOP_B (aop))
         {
-          mc6800_emitOp ("tstb", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("tstb", MODE_INH, "");
           flagsonly = false;
         }
       else if (IS_AOP_X (aop))
@@ -2907,8 +2947,7 @@ asmopToBool (asmop *aop, bool resultInA)
       loadRegFromAop (mc6800_reg_a, aop, offset--);
       if (isFloat)
         {
-          mc6800_emitOp ("anda", "#0x7F");      //clear sign bit
-          regalloc_dry_run_cost += 2;
+          mc6800_emitOp ("anda", MODE_IMM, "#0x7F");      //clear sign bit
         }
       while (--size)
         accopWithAop ("oraa", aop, offset--);
@@ -2972,8 +3011,7 @@ asmopToBool (asmop *aop, bool resultInA)
           loadRegFromAop (mc6800_reg_a, aop, offset--);
           if (isFloat)
             {
-              mc6800_emitOp ("anda", "#0x7F");
-              regalloc_dry_run_cost += 2;
+              mc6800_emitOp ("anda", MODE_IMM, "#0x7F");
             }
           while (--size)
             accopWithAop ("oraa", aop, offset--);
@@ -3046,16 +3084,15 @@ genCopy (operand *result, operand *source)
           bool pula = pushRegIfUsed (mc6800_reg_a);
 
           if (useb)
-            mc6800_emitOp ("stab", "*%s+1", tmp);
+            mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
           else
             {
               loadRegFromAop (mc6800_reg_a, AOP (source), 0);
-              mc6800_emitOp ("staa", "*%s+1", tmp);
+              mc6800_emitOp ("staa", MODE_DIR, "*%s+1", tmp);
             }
           loadRegFromConst (mc6800_reg_a, 0);
-          mc6800_emitOp ("staa", "*%s", tmp);
-          mc6800_emitOp ("ldx", "*%s", tmp);
-          regalloc_dry_run_cost += 6;
+          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
           freeTemp ();
           pullOrFreeReg (mc6800_reg_a, pula);
           mc6800_dirtyReg (mc6800_reg_x, false);
@@ -3235,8 +3272,7 @@ genNot (iCode * ic)
   needpulla = pushRegIfSurv (mc6800_reg_a);
   asmopToBool (AOP (IC_LEFT (ic)), true);
 
-  mc6800_emitOp ("eora", "%s", one);
-  regalloc_dry_run_cost += 2;
+  mc6800_emitOp ("eora", MODE_IMM, "#0x01");
   storeRegToFullAop (mc6800_reg_a, AOP (IC_RESULT (ic)), false);
   pullOrFreeReg (mc6800_reg_a, needpulla);
 
@@ -3321,8 +3357,7 @@ genUminus (iCode * ic)
       rmwWithReg ("neg", mc6800_reg_b);
       if (maskedtopbyte)
         {
-          mc6800_emitOp ("andb", "#0x%02x", topbytemask);
-          regalloc_dry_run_cost += 2;
+          mc6800_emitOp ("andb", MODE_IMM, "#0x%02x", topbytemask);
         }
       storeRegToAop (mc6800_reg_b, AOP (IC_RESULT (ic)), 0);
       goto release;
@@ -3335,8 +3370,7 @@ genUminus (iCode * ic)
       rmwWithReg ("neg", mc6800_reg_a);
       if (maskedtopbyte)
         {
-          mc6800_emitOp ("anda", "#0x%02x", topbytemask);
-          regalloc_dry_run_cost += 2;
+          mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
         }
       mc6800_freeReg (mc6800_reg_a);
       storeRegToFullAop (mc6800_reg_a, AOP (IC_RESULT (ic)), SPEC_USIGN (operandType (IC_LEFT (ic))));
@@ -3351,8 +3385,7 @@ genUminus (iCode * ic)
       loadRegFromAop (mc6800_reg_d, AOP (IC_LEFT (ic)), 0);
       rmwWithReg ("neg", mc6800_reg_a);
       rmwWithReg ("neg", mc6800_reg_b);
-      mc6800_emitOp ("sbca", "#0x00");
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("sbca", MODE_IMM, "#0x00");
       mc6800_dirtyReg (mc6800_reg_a, false);
       storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
       pullOrFreeReg (mc6800_reg_a, needpula);
@@ -3424,8 +3457,7 @@ genUminus (iCode * ic)
       /* clra clears the carry, so the borrow would be lost */
       if (offset)
         {
-          mc6800_emitOp ("ldaa", "#0x00");
-          regalloc_dry_run_cost += 2;
+          mc6800_emitOp ("ldaa", MODE_IMM, "#0x00");
           mc6800_dirtyReg (mc6800_reg_a, false);
         }
       else
@@ -3618,15 +3650,12 @@ genIpush (iCode * ic)
   if (IS_AOP_X (AOP (IC_LEFT (ic))))
     {
       const char *tmp = allocTemp ();
-      mc6800_emitOp ("stx", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
-      mc6800_emitOp ("ldaa", "*%s+1", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("ldaa", MODE_DIR, "*%s+1", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
       pushReg (mc6800_reg_a, true);
-      mc6800_emitOp ("ldaa", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
       pushReg (mc6800_reg_a, true);
@@ -3841,14 +3870,12 @@ genCall (iCode * ic)
 
   if (IS_LITERAL (etype))
     {
-      mc6800_emitOp ("jsr", "0x%04X", (unsigned int) ulFromVal (OP_VALUE (IC_LEFT (ic))));
-      regalloc_dry_run_cost += 3;
+      mc6800_emitOp ("jsr", MODE_EXT, "0x%04X", (unsigned int) ulFromVal (OP_VALUE (IC_LEFT (ic))));
     }
   else
     {
-      mc6800_emitOp ("jsr", "%s", (OP_SYMBOL (IC_LEFT (ic))->rname[0] ?
+      mc6800_emitOp ("jsr", MODE_EXT, "%s", (OP_SYMBOL (IC_LEFT (ic))->rname[0] ?
                               OP_SYMBOL (IC_LEFT (ic))->rname : OP_SYMBOL (IC_LEFT (ic))->name));
-      regalloc_dry_run_cost += 3;
     }
 
   mc6800_dirtyReg (mc6800_reg_a, false);
@@ -3909,9 +3936,8 @@ genPcall (iCode * ic)
       if (IS_AOP_D (AOP (IC_LEFT (ic))))
         {
           tmp = allocTemp ();
-          mc6800_emitOp ("staa", "*%s", tmp);
-          mc6800_emitOp ("stab", "*%s+1", tmp);
-          regalloc_dry_run_cost += 4;
+          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
           mc6800_freeReg (mc6800_reg_d);
         }
     }
@@ -3928,16 +3954,14 @@ genPcall (iCode * ic)
     {
       if (IS_AOP_D (AOP (IC_LEFT (ic))))
         {
-          mc6800_emitOp ("ldx", "*%s", tmp);
-          regalloc_dry_run_cost += 2;
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
           mc6800_dirtyReg (mc6800_reg_x, false);
           freeTemp ();
         }
       else
         loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (ic)), 0);
       freeAsmop (IC_LEFT (ic), NULL, ic, true);
-      mc6800_emitOp ("jsr", ",x");
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("jsr", MODE_IDX, ",x");
     }
   else
     {
@@ -4119,22 +4143,19 @@ genFunction (iCode * ic)
           /* Function was passed parameters, so make sure A is preserved */
           pushReg (mc6800_reg_a, false);
           pushReg (mc6800_reg_a, false);
-          mc6800_emitOp ("tpa", "");
-          mc6800_emitOp ("tsx", "");
-          mc6800_emitOp ("staa", "1,x");
-          mc6800_emitOp ("sei", "");
-          regalloc_dry_run_cost += 5;
+          mc6800_emitOp ("tpa", MODE_INH, "");
+          mc6800_emitOp ("tsx", MODE_INH, "");
+          mc6800_emitOp ("staa", MODE_IDX, "1,x");
+          mc6800_emitOp ("sei", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
         }
       else
         {
           /* No passed parameters, so A can be freely modified */
-          mc6800_emitOp ("tpa", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("tpa", MODE_INH, "");
           pushReg (mc6800_reg_a, true);
-          mc6800_emitOp ("sei", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("sei", MODE_INH, "");
         }
     }
 }
@@ -4162,10 +4183,9 @@ genEndFunction (iCode * ic)
         {
           /* Function has return value, so make sure A is preserved */
           pushReg (mc6800_reg_a, false);
-          mc6800_emitOp ("tsx", "");
-          mc6800_emitOp ("ldaa", "1,x");
-          mc6800_emitOp ("tap", "");
-          regalloc_dry_run_cost += 4;
+          mc6800_emitOp ("tsx", MODE_INH, "");
+          mc6800_emitOp ("ldaa", MODE_IDX, "1,x");
+          mc6800_emitOp ("tap", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
           pullNull (1);
@@ -4174,8 +4194,7 @@ genEndFunction (iCode * ic)
         {
           /* Function returns void, so A can be freely modified */
           pullReg (mc6800_reg_a);
-          mc6800_emitOp ("tap", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("tap", MODE_INH, "");
         }
     }
 
@@ -4202,8 +4221,7 @@ genEndFunction (iCode * ic)
           debugFile->writeEndFunction (currFunc, ic, 1);
         }
 
-      mc6800_emitOp ("rti", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("rti", MODE_INH, "");
     }
   else
     {
@@ -4213,8 +4231,7 @@ genEndFunction (iCode * ic)
           debugFile->writeEndFunction (currFunc, ic, 1);
         }
 
-      mc6800_emitOp ("rts", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("rts", MODE_INH, "");
     }
 }
 
@@ -4290,8 +4307,7 @@ jumpret:
      if the next is not the return statement */
   if (!(ic->next && ic->next->op == LABEL && IC_LABEL (ic->next) == returnLabel))
     {
-      mc6800_emitOp ("jmp", "%05d$", labelKey2num (returnLabel->key));
-      regalloc_dry_run_cost += 3;
+      mc6800_emitOp ("jmp", MODE_EXT, "%05d$", labelKey2num (returnLabel->key));
     }
 }
 
@@ -4503,21 +4519,20 @@ genPlus16 (iCode *ic)
       pushReg (mc6800_reg_b, false);
       tmp = setupTmpFromSP (_G.stackOfs + stl->aopu.aop_stk);
       pullReg (mc6800_reg_b);
-      mc6800_emitOp ("addb", "*%s+1", tmp);
-      mc6800_emitOp ("stab", "*%s+1", tmp);
+      mc6800_emitOp ("addb", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
       if (other->size > 1)
         {
           pullReg (mc6800_reg_b);
-          mc6800_emitOp ("adcb", "*%s", tmp);
+          mc6800_emitOp ("adcb", MODE_DIR, "*%s", tmp);
         }
       else
         {
-          mc6800_emitOp ("ldab", "*%s", tmp);
-          mc6800_emitOp ("adcb", "#0");
+          mc6800_emitOp ("ldab", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("adcb", MODE_IMM, "#0");
         }
-      mc6800_emitOp ("stab", "*%s", tmp);
-      mc6800_emitOp ("ldx", "*%s", tmp);
-      regalloc_dry_run_cost += 12;
+      mc6800_emitOp ("stab", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
       freeTemp ();
       mc6800_dirtyReg (mc6800_reg_b, false);
       mc6800_dirtyReg (mc6800_reg_x, false);
@@ -4767,14 +4782,12 @@ genMinus8 (iCode *ic)
       if (IS_AOP_A (rightOp) && IS_AOP_B (leftOp))
         {
           needpulla = pushRegIfSurv (mc6800_reg_a);
-          mc6800_emitOp ("nega", "");
-          mc6800_emitOp ("aba", "");
-          regalloc_dry_run_cost += 2;
+          mc6800_emitOp ("nega", MODE_INH, "");
+          mc6800_emitOp ("aba", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_a, false);
           if (maskedtopbyte)
             {
-              mc6800_emitOp ("anda", "#0x%02x", topbytemask);
-              regalloc_dry_run_cost += 2;
+              mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
             }
           storeRegToAop (mc6800_reg_a, result, 0);
           pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -4788,13 +4801,11 @@ genMinus8 (iCode *ic)
         }
       needpulla = pushRegIfSurv (mc6800_reg_a);
       loadRegFromAop (mc6800_reg_a, leftOp, 0);
-      mc6800_emitOp ("sba", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("sba", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
       if (maskedtopbyte)
         {
-          mc6800_emitOp ("anda", "#0x%02x", topbytemask);
-          regalloc_dry_run_cost += 2;
+          mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
         }
       storeRegToAop (mc6800_reg_a, result, 0);
       pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -5928,9 +5939,8 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
         {
           if (AOP_TYPE (left) == AOP_LIT)
             {
-              mc6800_emitOp ((reg == mc6800_reg_b) ? "ldab" : "ldaa", "#0x%02x",
+              mc6800_emitOp ((reg == mc6800_reg_b) ? "ldab" : "ldaa", MODE_IMM, "#0x%02x",
                              (unsigned int) ((ullFromVal (AOP (left)->aopu.aop_lit) >> (8 * offset)) & 0xff));
-              regalloc_dry_run_cost += 2;
             }
           else
             loadRegFromAop (reg, AOP (left), offset);
@@ -6001,10 +6011,9 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
           const char *tmp = allocTemp ();
 
           allocTemp ();
-          mc6800_emitOp ("stx", "*%s", tmp);
-          mc6800_emitOp ("ldaa", "*%s", tmp);
-          mc6800_emitOp ("ldab", "*%s+1", tmp);
-          regalloc_dry_run_cost += 6;
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
           freeTemp ();
           freeTemp ();
         }
@@ -6016,9 +6025,8 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
     {
       unsigned int lim = (unsigned int) ((ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) + 1);
 
-      mc6800_emitOp ("subb", "#0x%02x", lim & 0xff);
-      mc6800_emitOp ("sbca", "#0x%02x", (lim >> 8) & 0xff);
-      regalloc_dry_run_cost += 4;
+      mc6800_emitOp ("subb", MODE_IMM, "#0x%02x", lim & 0xff);
+      mc6800_emitOp ("sbca", MODE_IMM, "#0x%02x", (lim >> 8) & 0xff);
       opcode = (opcode == '>') ? GE_OP : '<';
     }
   else
@@ -6043,8 +6051,7 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
 
           emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl2 : tlbl);
           emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl : tlbl2);
-          mc6800_emitOp ("tstb", "");
-          regalloc_dry_run_cost += 1;
+          mc6800_emitOp ("tstb", MODE_INH, "");
           emitBranch ((opcode == '>') ? "bne" : "beq", tlbl);
           if (!regalloc_dry_run)
             emitLabel (tlbl2);
@@ -6068,8 +6075,7 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
 
           emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl3 : tlbl1);
           emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl1 : tlbl3);
-          mc6800_emitOp ("tstb", "");
-          regalloc_dry_run_cost += 1;
+          mc6800_emitOp ("tstb", MODE_INH, "");
           emitBranch ((opcode == '>') ? "bne" : "beq", tlbl1);
           if (!regalloc_dry_run)
             emitLabel (tlbl3);
@@ -6132,9 +6138,8 @@ genCmpMANY (iCode * ic, iCode * ifx, operand * left, operand * right, int size, 
       if (AOP_TYPE (left) == AOP_LIT)
         {
           lit = ullFromVal (AOP (left)->aopu.aop_lit);
-          mc6800_emitOp ((reg == mc6800_reg_b) ? "ldab" : "ldaa", "#0x%02x",
+          mc6800_emitOp ((reg == mc6800_reg_b) ? "ldab" : "ldaa", MODE_IMM, "#0x%02x",
                          (unsigned int) ((lit >> (8 * offset)) & 0xff));
-          regalloc_dry_run_cost += 2;
         }
       else
         loadRegFromAop (reg, AOP (left), offset);
@@ -6316,22 +6321,18 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       && ((AOP_TYPE (right) == AOP_LIT) || (AOP_TYPE (right) == AOP_IMMD) || ((AOP_TYPE (right) == AOP_DIR || AOP_TYPE (right) == AOP_EXT) && (AOP_SIZE (right) == 2))) && (mc6800_reg_x->isDead || IS_AOP_X (AOP (left))))
     {
       loadRegFromAop (mc6800_reg_x, AOP (left), 0);
-      mc6800_emitOp ("cpx", "%s", aopAdrStr (AOP (right), 0, true));
-      regalloc_dry_run_cost += (AOP_TYPE (right) == AOP_DIR ? 2 : 3);
+      mc6800_emitOpw_o ("cpx", AOP (right), 0);
       mc6800_freeReg (mc6800_reg_x);
     }
   else if (IS_AOP_D (AOP (left)) && IS_AOP_X (AOP (right)))
     {
       const char *tmp = allocTemp ();
-      mc6800_emitOp ("stx", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
-      mc6800_emitOp ("cmpb", "*%s+1", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("cmpb", MODE_DIR, "*%s+1", tmp);
       if (!tlbl_NE && !regalloc_dry_run)
         tlbl_NE = newiTempLabel (NULL);
       emitBranch ("bne", tlbl_NE);
-      mc6800_emitOp ("cmpa", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("cmpa", MODE_DIR, "*%s", tmp);
       freeTemp ();
     }
   else
@@ -6343,13 +6344,11 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
             {
               if (aopIsLitVal (right->aop, offset, 1, 0x00))
                 {
-                  mc6800_emitOp ("tstb", "");
-                  regalloc_dry_run_cost++;
+                  mc6800_emitOp ("tstb", MODE_INH, "");
                 }
               else if (AOP_TYPE (right) == AOP_REG)
                 {
-                  mc6800_emitOp ("cba", "");
-                  regalloc_dry_run_cost++;
+                  mc6800_emitOp ("cba", MODE_INH, "");
                 }
               else
                 accopWithAop ("cmpb", AOP (right), offset);
@@ -6363,13 +6362,11 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
                 }
               if (aopIsLitVal (right->aop, offset, 1, 0x00))
                 {
-                  mc6800_emitOp ("tsta", "");
-                  regalloc_dry_run_cost++;
+                  mc6800_emitOp ("tsta", MODE_INH, "");
                 }
               else if (AOP_TYPE (right) == AOP_REG)
                 {
-                  mc6800_emitOp ("cba", "");
-                  regalloc_dry_run_cost++;
+                  mc6800_emitOp ("cba", MODE_INH, "");
                 }
               else
                 accopWithAop ("cmpa", AOP (right), offset);
@@ -6738,14 +6735,12 @@ genAnd (iCode * ic, iCode * ifx)
           allocTemp ();
           if (IS_AOP_X (AOP (left)))
             {
-              mc6800_emitOp ("stx", "*%s", ltmp);
-              regalloc_dry_run_cost += 2;
+              mc6800_emitOp ("stx", MODE_DIR, "*%s", ltmp);
             }
           else
             {
-              mc6800_emitOp ("staa", "*%s", ltmp);
-              mc6800_emitOp ("stab", "*%s+1", ltmp);
-              regalloc_dry_run_cost += 4;
+              mc6800_emitOp ("staa", MODE_DIR, "*%s", ltmp);
+              mc6800_emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
             }
         }
 
@@ -6755,30 +6750,26 @@ genAnd (iCode * ic, iCode * ifx)
 
       /* this generates ugly code, but meets volatility requirements */
       loadRegFromConst (mc6800_reg_a, 0);
-      mc6800_emitOp ("staa", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
 
       offset = 0;
       while (size--)
         {
           if (ltmp)
             {
-              mc6800_emitOp ("ldaa", offset ? "*%s" : "*%s+1", ltmp);
-              regalloc_dry_run_cost += 2;
+              mc6800_emitOp ("ldaa", MODE_DIR, offset ? "*%s" : "*%s+1", ltmp);
               mc6800_dirtyReg (mc6800_reg_a, false);
               mc6800_useReg (mc6800_reg_a);
             }
           else
             loadRegFromAop (mc6800_reg_a, AOP (left), offset);
           accopWithAop ("anda", AOP (right), offset);
-          mc6800_emitOp ("oraa", "*%s", tmp);
-          mc6800_emitOp ("staa", "*%s", tmp);
-          regalloc_dry_run_cost += 4;
+          mc6800_emitOp ("oraa", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
           offset++;
         }
 
-      mc6800_emitOp ("ldaa", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
       freeTemp ();
@@ -7003,14 +6994,12 @@ genOr (iCode * ic, iCode * ifx)
           allocTemp ();
           if (IS_AOP_X (AOP (left)))
             {
-              mc6800_emitOp ("stx", "*%s", ltmp);
-              regalloc_dry_run_cost += 2;
+              mc6800_emitOp ("stx", MODE_DIR, "*%s", ltmp);
             }
           else
             {
-              mc6800_emitOp ("staa", "*%s", ltmp);
-              mc6800_emitOp ("stab", "*%s+1", ltmp);
-              regalloc_dry_run_cost += 4;
+              mc6800_emitOp ("staa", MODE_DIR, "*%s", ltmp);
+              mc6800_emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
             }
         }
 
@@ -7020,30 +7009,26 @@ genOr (iCode * ic, iCode * ifx)
 
       /* this generates ugly code, but meets volatility requirements */
       loadRegFromConst (mc6800_reg_a, 0);
-      mc6800_emitOp ("staa", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
 
       offset = 0;
       while (size--)
         {
           if (ltmp)
             {
-              mc6800_emitOp ("ldaa", offset ? "*%s" : "*%s+1", ltmp);
-              regalloc_dry_run_cost += 2;
+              mc6800_emitOp ("ldaa", MODE_DIR, offset ? "*%s" : "*%s+1", ltmp);
               mc6800_dirtyReg (mc6800_reg_a, false);
               mc6800_useReg (mc6800_reg_a);
             }
           else
             loadRegFromAop (mc6800_reg_a, AOP (left), offset);
           accopWithAop ("oraa", AOP (right), offset);
-          mc6800_emitOp ("oraa", "*%s", tmp);
-          mc6800_emitOp ("staa", "*%s", tmp);
-          regalloc_dry_run_cost += 4;
+          mc6800_emitOp ("oraa", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
           offset++;
         }
 
-      mc6800_emitOp ("ldaa", "*%s", tmp);
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
       freeTemp ();
@@ -7261,8 +7246,7 @@ genXor (iCode * ic, iCode * ifx)
             {
               if (AOP_TYPE (right) == AOP_LIT && ((ullFromVal (AOP (right)->aopu.aop_lit) >> (offset * 8)) & 0xff) == 0)
                 {
-                  mc6800_emitOp ("tstb", "");
-                  regalloc_dry_run_cost++;
+                  mc6800_emitOp ("tstb", MODE_INH, "");
                 }
               else
                 {
@@ -7513,12 +7497,10 @@ genRRC (iCode * ic)
 
       needpull = pushRegIfSurv (mc6800_reg_d);
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-      mc6800_emitOp ("lsra", "");
-      mc6800_emitOp ("rorb", "");
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("lsra", MODE_INH, "");
+      mc6800_emitOp ("rorb", MODE_INH, "");
       emitBranch ("bcc", tlbl);
-      mc6800_emitOp ("oraa", "#0x80");
-      regalloc_dry_run_cost += 2;
+      mc6800_emitOp ("oraa", MODE_IMM, "#0x80");
       if (!regalloc_dry_run)
         emitLabel (tlbl);
       mc6800_dirtyReg (mc6800_reg_d, false);
@@ -7529,14 +7511,12 @@ genRRC (iCode * ic)
     {
       needpull = pushRegIfSurv (mc6800_reg_a);
       loadRegFromAop (mc6800_reg_a, AOP (left), 0);
-      mc6800_emitOp ("lsra", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("lsra", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
       for (offset = size - 1; offset >= 0; offset--)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          mc6800_emitOp ("rora", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("rora", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_a, false);
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
         }
@@ -7570,10 +7550,9 @@ genRLC (iCode * ic)
     {
       needpull = pushRegIfSurv (mc6800_reg_d);
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-      mc6800_emitOp ("aslb", "");
-      mc6800_emitOp ("rola", "");
-      mc6800_emitOp ("adcb", "#0x00");
-      regalloc_dry_run_cost += 4;
+      mc6800_emitOp ("aslb", MODE_INH, "");
+      mc6800_emitOp ("rola", MODE_INH, "");
+      mc6800_emitOp ("adcb", MODE_IMM, "#0x00");
       mc6800_dirtyReg (mc6800_reg_d, false);
       storeRegToAop (mc6800_reg_d, AOP (result), 0);
       pullOrFreeReg (mc6800_reg_d, needpull);
@@ -7582,14 +7561,12 @@ genRLC (iCode * ic)
     {
       needpull = pushRegIfSurv (mc6800_reg_a);
       loadRegFromAop (mc6800_reg_a, AOP (left), size - 1);
-      mc6800_emitOp ("asla", "");
-      regalloc_dry_run_cost++;
+      mc6800_emitOp ("asla", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
       for (offset = 0; offset < size; offset++)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          mc6800_emitOp ("rola", "");
-          regalloc_dry_run_cost++;
+          mc6800_emitOp ("rola", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_a, false);
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
         }
@@ -7754,10 +7731,9 @@ genSwap (iCode * ic)
   needpull = pushRegIfSurv (mc6800_reg_d);
   if (IS_AOP_D (AOP (left)))
     {
-      mc6800_emitOp ("psha", "");
-      mc6800_emitOp ("tba", "");
-      mc6800_emitOp ("pulb", "");
-      regalloc_dry_run_cost += 3;
+      mc6800_emitOp ("psha", MODE_INH, "");
+      mc6800_emitOp ("tba", MODE_INH, "");
+      mc6800_emitOp ("pulb", MODE_INH, "");
     }
   else
     {
@@ -7784,9 +7760,8 @@ AccRol (int shCount)
     {
       while (shCount--)
         {
-          mc6800_emitOp ("asla", "");
-          mc6800_emitOp ("adca", "#0x00");
-          regalloc_dry_run_cost += 3;
+          mc6800_emitOp ("asla", MODE_INH, "");
+          mc6800_emitOp ("adca", MODE_IMM, "#0x00");
         }
     }
   else
@@ -7795,21 +7770,18 @@ AccRol (int shCount)
         {
           if (optimize.codeSize && !optimize.codeSpeed)
             {
-              mc6800_emitOp ("psha", "");
-              mc6800_emitOp ("lsra", "");
-              mc6800_emitOp ("pula", "");
-              mc6800_emitOp ("rora", "");
-              regalloc_dry_run_cost += 4;
+              mc6800_emitOp ("psha", MODE_INH, "");
+              mc6800_emitOp ("lsra", MODE_INH, "");
+              mc6800_emitOp ("pula", MODE_INH, "");
+              mc6800_emitOp ("rora", MODE_INH, "");
             }
           else
             {
               symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
 
-              mc6800_emitOp ("lsra", "");
-              regalloc_dry_run_cost++;
+              mc6800_emitOp ("lsra", MODE_INH, "");
               emitBranch ("bcc", tlbl);
-              mc6800_emitOp ("oraa", "#0x80");
-              regalloc_dry_run_cost += 2;
+              mc6800_emitOp ("oraa", MODE_IMM, "#0x80");
               if (!regalloc_dry_run)
                 emitLabel (tlbl);
             }
@@ -8606,15 +8578,14 @@ genLeftShift (iCode *ic)
     {
       tmp = allocTemp ();
       if (AOP_TYPE (right) == AOP_REG)
-        mc6800_emitOp (AOP (right)->aopu.aop_reg[0]->rIdx == A_IDX ? "staa" : "stab", "*%s", tmp);
+        mc6800_emitOp (AOP (right)->aopu.aop_reg[0]->rIdx == A_IDX ? "staa" : "stab", MODE_DIR, "*%s", tmp);
       else
         {
           needpullcountreg = pushRegIfUsed (mc6800_reg_b);
           loadRegFromAop (mc6800_reg_b, AOP (right), 0);
-          mc6800_emitOp ("stab", "*%s", tmp);
+          mc6800_emitOp ("stab", MODE_DIR, "*%s", tmp);
           pullOrFreeReg (mc6800_reg_b, needpullcountreg);
         }
-      regalloc_dry_run_cost += 2;
     }
 
   /* now move the left to the result if they are not the
@@ -8950,15 +8921,14 @@ genRightShift (iCode * ic)
     {
       tmp = allocTemp ();
       if (AOP_TYPE (right) == AOP_REG)
-        mc6800_emitOp (AOP (right)->aopu.aop_reg[0]->rIdx == A_IDX ? "staa" : "stab", "*%s", tmp);
+        mc6800_emitOp (AOP (right)->aopu.aop_reg[0]->rIdx == A_IDX ? "staa" : "stab", MODE_DIR, "*%s", tmp);
       else
         {
           needpullcountreg = pushRegIfUsed (mc6800_reg_b);
           loadRegFromAop (mc6800_reg_b, AOP (right), 0);
-          mc6800_emitOp ("stab", "*%s", tmp);
+          mc6800_emitOp ("stab", MODE_DIR, "*%s", tmp);
           pullOrFreeReg (mc6800_reg_b, needpullcountreg);
         }
-      regalloc_dry_run_cost += 2;
     }
 
   if (!sameRegs (left->aop, AOP (result)))
@@ -9037,16 +9007,15 @@ addSPToX (void)
 
   if (savea)
     pushReg (mc6800_reg_a, false);
-  mc6800_emitOp ("stx", "*%s", tmp);
-  mc6800_emitOp ("sts", "*%s", tmp2);
-  mc6800_emitOp ("ldaa", "*%s+1", tmp);
-  mc6800_emitOp ("adda", "*%s+1", tmp2);
-  mc6800_emitOp ("staa", "*%s+1", tmp2);
-  mc6800_emitOp ("ldaa", "*%s", tmp);
-  mc6800_emitOp ("adca", "*%s", tmp2);
-  mc6800_emitOp ("staa", "*%s", tmp2);
-  mc6800_emitOp ("ldx", "*%s", tmp2);
-  regalloc_dry_run_cost += 18;
+  mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+  mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp2);
+  mc6800_emitOp ("ldaa", MODE_DIR, "*%s+1", tmp);
+  mc6800_emitOp ("adda", MODE_DIR, "*%s+1", tmp2);
+  mc6800_emitOp ("staa", MODE_DIR, "*%s+1", tmp2);
+  mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+  mc6800_emitOp ("adca", MODE_DIR, "*%s", tmp2);
+  mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp2);
+  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp2);
   if (savea)
     pullReg (mc6800_reg_a);
   freeTemp ();
@@ -9609,15 +9578,14 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       litOffset = 0;
       allocTemp ();
       needpullacc = pushRegIfUsed (acc);
-      mc6800_emitOp ("stx", "*%s", tmp);
-      mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s+1", tmp);
-      mc6800_emitOp (useb ? "addb" : "adda", "#%s", ofs);
-      mc6800_emitOp (useb ? "stab" : "staa", "*%s+1", tmp);
-      mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s", tmp);
-      mc6800_emitOp (useb ? "adcb" : "adca", "#>%s", ofs);
-      mc6800_emitOp (useb ? "stab" : "staa", "*%s", tmp);
-      mc6800_emitOp ("ldx", "*%s", tmp);
-      regalloc_dry_run_cost += 16;
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp (useb ? "addb" : "adda", MODE_IMM, "#%s", ofs);
+      mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp (useb ? "adcb" : "adca", MODE_IMM, "#>%s", ofs);
+      mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
       freeTemp ();
       freeTemp ();
       mc6800_dirtyReg (acc, false);
@@ -10171,15 +10139,14 @@ genPointerSet (iCode * ic, iCode * pi)
           litOffset = 0;
           allocTemp ();
           needpullacc = pushRegIfUsed (acc);
-          mc6800_emitOp ("stx", "*%s", tmp);
-          mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s+1", tmp);
-          mc6800_emitOp (useb ? "addb" : "adda", "#%s", ofs);
-          mc6800_emitOp (useb ? "stab" : "staa", "*%s+1", tmp);
-          mc6800_emitOp (useb ? "ldab" : "ldaa", "*%s", tmp);
-          mc6800_emitOp (useb ? "adcb" : "adca", "#>%s", ofs);
-          mc6800_emitOp (useb ? "stab" : "staa", "*%s", tmp);
-          mc6800_emitOp ("ldx", "*%s", tmp);
-          regalloc_dry_run_cost += 16;
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s+1", tmp);
+          mc6800_emitOp (useb ? "addb" : "adda", MODE_IMM, "#%s", ofs);
+          mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s+1", tmp);
+          mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp (useb ? "adcb" : "adca", MODE_IMM, "#>%s", ofs);
+          mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
           freeTemp ();
           freeTemp ();
           mc6800_dirtyReg (acc, false);
