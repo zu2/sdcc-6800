@@ -61,6 +61,7 @@ static struct
   short nRegsSaved;
   int stackOfs;
   int stackPushes;
+  int param_offset;
   short regsinuse;
   set *sendSet;
   int tempOfs;
@@ -2111,7 +2112,7 @@ aopForSym (iCode * ic, symbol * sym, bool result)
       sym->aop = aop = newAsmop (AOP_SOF);
 //      aop->aopu.aop_dir = sym->rname;
       aop->size = getSize (sym->type);
-      aop->aopu.aop_stk = sym->stack;
+      aop->aopu.aop_stk = sym->stack + (sym->stack > 0 ? _G.param_offset : 0);
 
       if (!regalloc_dry_run && mc6800_reg_x->isFree && mc6800_reg_x->aop != &tsxaop)
         {
@@ -2132,7 +2133,7 @@ aopForSym (iCode * ic, symbol * sym, bool result)
               if (operandConflictsWithX (IC_RIGHT (ic)))
                 return aop;
             }
-          lo = _G.stackOfs + _G.stackPushes + sym->stack;
+          lo = _G.stackOfs + _G.stackPushes + aop->aopu.aop_stk;
           hi = lo + aop->size - 1;
           shift = 0;
           if (hi > 255)
@@ -3855,37 +3856,28 @@ pushbigreturn (operand *result)
 
   symbol *sym = OP_SYMBOL (result);
   wassert (sym);
-#if 0
+
   if (sym->onStack)
     {
-      /* if it has an offset then we need to compute it */
-      int offset = _G.stackOfs + _G.stackPushes + sym->stack;
-      mc6800_useReg (mc6800_reg_hx);
-      emitcode ("tsx", "");
-      mc6800_dirtyReg (mc6800_reg_hx, false);
-      regalloc_dry_run_cost++;
-      while (offset > 127)
-        {
-          emitcode ("aix", "#127");
-          regalloc_dry_run_cost += 2;
-          offset -= 127;
-        }
-      while (offset < -128)
-        {
-          emitcode ("aix", "#-128");
-          regalloc_dry_run_cost += 2;
-          offset += 128;
-        }
-      if (offset)
-        {
-          emitcode ("aix", "#%d", offset);
-          regalloc_dry_run_cost += 2;
-        }
+      const char *tmp = setupTmpFromSP (_G.stackOfs + sym->stack + (sym->stack > 0 ? _G.param_offset : 0));
+
+      mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      pushReg (mc6800_reg_b, true);
+      mc6800_emitOp ("ldab", MODE_DIR, "*%s", tmp);
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      pushReg (mc6800_reg_b, true);
+      freeTemp ();
     }
   else
-    loadRegFromImm (mc6800_reg_hx, sym->rname);
-  pushReg (mc6800_reg_hx, true);
-#endif
+    {
+      mc6800_emitOp ("ldab", MODE_IMM, "#%s", sym->rname);
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      pushReg (mc6800_reg_b, true);
+      mc6800_emitOp ("ldab", MODE_IMM, "#>%s", sym->rname);
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      pushReg (mc6800_reg_b, true);
+    }
 }
 
 /*-----------------------------------------------------------------*/
@@ -3904,7 +3896,11 @@ genCall (iCode * ic)
 
   dtype = operandType (IC_LEFT (ic));
   etype = getSpec (dtype);
-  wassert (!IS_STRUCT (dtype->next));
+
+  const bool bigreturn = IS_STRUCT (dtype->next);
+
+  if (bigreturn)
+    pushbigreturn (IC_RESULT (ic));
 
   if (_G.sendSet && !regalloc_dry_run)
     {
@@ -3926,8 +3922,9 @@ genCall (iCode * ic)
   mc6800_dirtyReg (mc6800_reg_b, false);
   mc6800_dirtyReg (mc6800_reg_x, true);
 
-  if ((IS_ITEMP (IC_RESULT (ic)) &&
-       (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic)))
+  if (!bigreturn &&
+      ((IS_ITEMP (IC_RESULT (ic)) &&
+       (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic))))
     {
       mc6800_useReg (mc6800_reg_b);
       if (operandSize (IC_RESULT (ic)) > 1)
@@ -3939,8 +3936,8 @@ genCall (iCode * ic)
       freeAsmop (IC_RESULT (ic), NULL, ic, true);
     }
 
-  if (ic->parmBytes)
-    pullNull (ic->parmBytes);
+  if (ic->parmBytes + bigreturn * 2)
+    pullNull (ic->parmBytes + bigreturn * 2);
 
   if (ic->regsSaved && !IFFUNC_CALLEESAVES (dtype))
     unsaveRegisters (ic);
@@ -3963,6 +3960,12 @@ genPcall (iCode * ic)
 
   dtype = operandType (IC_LEFT (ic))->next;
   etype = getSpec (dtype);
+
+  const bool bigreturn = IS_STRUCT (dtype->next);
+
+  if (bigreturn)
+    pushbigreturn (IC_RESULT (ic));
+
   /* if caller saves & we have not saved then */
   if (!ic->regsSaved)
     saveRegisters (ic);
@@ -4018,8 +4021,9 @@ genPcall (iCode * ic)
   mc6800_dirtyReg (mc6800_reg_x, true);
 
   /* if we need assign a result value */
-  if ((IS_ITEMP (IC_RESULT (ic)) &&
-       (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic)))
+  if (!bigreturn &&
+      ((IS_ITEMP (IC_RESULT (ic)) &&
+       (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic))))
     {
       mc6800_useReg (mc6800_reg_b);
       if (operandSize (IC_RESULT (ic)) > 1)
@@ -4034,9 +4038,9 @@ genPcall (iCode * ic)
     }
 
   /* adjust the stack for parameters if required */
-  if (ic->parmBytes)
+  if (ic->parmBytes + bigreturn * 2)
     {
-      pullNull (ic->parmBytes);
+      pullNull (ic->parmBytes + bigreturn * 2);
     }
   /* if we had saved some registers then unsave them */
   if (ic->regsSaved && !IFFUNC_CALLEESAVES (dtype))
@@ -4110,6 +4114,7 @@ genFunction (iCode * ic)
   genLine.lineCurr->isLabel = 1;
   ftype = operandType (IC_LEFT (ic));
 
+  _G.param_offset = IS_STRUCT (ftype->next) ? 2 : 0;
   _G.stackOfs = 0;
   _G.stackPushes = 0;
   if (options.debug && !regalloc_dry_run)
@@ -4302,10 +4307,83 @@ genRet (iCode * ic)
   size = AOP_SIZE (IC_LEFT (ic));
   const bool bigreturn = IS_STRUCT (operandType (IC_LEFT (ic)));
 
-  if (bigreturn) // todo: implement!
+  if (bigreturn)
     {
-      if (!regalloc_dry_run)
-        werror ( E_FUNC_AGGR);
+      const char *dst = allocTemp ();
+      allocTemp ();
+
+      mc6800_useReg (mc6800_reg_x);
+      setupXFromSP (_G.stackOfs + 2);
+      mc6800_emitOp ("ldx", MODE_IDX, "0,x");
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", dst);
+
+      if (size <= 2)
+        {
+          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (ic)), 0);
+          if (size > 1)
+            loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (ic)), 1);
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", dst);
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          mc6800_emitOp ("staa", MODE_IDX, "%d,x", size - 1);
+          if (size > 1)
+            mc6800_emitOp ("stab", MODE_IDX, "0,x");
+        }
+      else if (AOP_TYPE (IC_LEFT (ic)) == AOP_SOF)
+        {
+          const char *src = allocTemp ();
+          allocTemp ();
+
+          setupXFromSP (_G.stackOfs + AOP (IC_LEFT (ic))->aopu.aop_stk);
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", src);
+
+          for (offset = 0; offset < size; offset += 2)
+            {
+              if (size - 1 > 255)
+                {
+                  UNIMPLEMENTED;
+                  break;
+                }
+              mc6800_emitOp ("ldx", MODE_DIR, "*%s", src);
+              mc6800_dirtyReg (mc6800_reg_x, false);
+              mc6800_emitOp ("ldaa", MODE_IDX, "%d,x", size - 1 - offset);
+              if (offset + 1 < size)
+                mc6800_emitOp ("ldab", MODE_IDX, "%d,x", size - 2 - offset);
+              mc6800_emitOp ("ldx", MODE_DIR, "*%s", dst);
+              mc6800_emitOp ("staa", MODE_IDX, "%d,x", size - 1 - offset);
+              if (offset + 1 < size)
+                mc6800_emitOp ("stab", MODE_IDX, "%d,x", size - 2 - offset);
+            }
+          freeTemp ();
+          freeTemp ();
+        }
+      else if (AOP_TYPE (IC_LEFT (ic)) == AOP_DIR || AOP_TYPE (IC_LEFT (ic)) == AOP_EXT)
+        {
+          for (offset = 0; offset < size; offset += 2)
+            {
+              if (size - 1 > 255)
+                {
+                  UNIMPLEMENTED;
+                  break;
+                }
+              loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (ic)), offset);
+              if (offset + 1 < size)
+                loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (ic)), offset + 1);
+              mc6800_emitOp ("ldx", MODE_DIR, "*%s", dst);
+              mc6800_dirtyReg (mc6800_reg_x, false);
+              mc6800_emitOp ("staa", MODE_IDX, "%d,x", size - 1 - offset);
+              if (offset + 1 < size)
+                mc6800_emitOp ("stab", MODE_IDX, "%d,x", size - 2 - offset);
+            }
+        }
+      else
+        UNIMPLEMENTED;
+
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      mc6800_dirtyReg (mc6800_reg_x, true);
+      freeTemp ();
+      freeTemp ();
       goto jumpret;
     }
 
@@ -10098,7 +10176,7 @@ genAddrOf (iCode * ic)
     {
       needpullx = pushRegIfSurv (mc6800_reg_x);
       mc6800_useReg (mc6800_reg_x);
-      setupXFromSP (_G.stackOfs + sym->stack);
+      setupXFromSP (_G.stackOfs + sym->stack + (sym->stack > 0 ? _G.param_offset : 0));
       storeRegToAop (mc6800_reg_x, AOP (IC_RESULT (ic)), 0);
       pullOrFreeReg (mc6800_reg_x, needpullx);
       goto release;
@@ -11063,6 +11141,7 @@ genmc6800iCode (iCode *ic)
       genReceive (ic);
       break;
 
+  _G.param_offset = (currFunc && IS_STRUCT (currFunc->type->next)) ? 2 : 0;
     case SEND:
       if (!regalloc_dry_run)
         addSet (&_G.sendSet, ic);
