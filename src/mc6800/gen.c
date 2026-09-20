@@ -7682,7 +7682,7 @@ genSwap (iCode * ic)
 /* AccRol - rotate left accumulator by known count                 */
 /*-----------------------------------------------------------------*/
 static void
-AccRol (int shCount)
+AccRol (reg_info *reg, int shCount)
 {
   D (emitcode (";     AccRol", ""));
   shCount &= 0x0007;
@@ -7690,8 +7690,8 @@ AccRol (int shCount)
     {
       while (shCount--)
         {
-          mc6800_emitOp ("asla", MODE_INH, "");
-          mc6800_emitOp ("adca", MODE_IMM, "#0x00");
+          mc6800_emitOp (reg == mc6800_reg_a ? "asla" : "aslb", MODE_INH, "");
+          mc6800_emitOp (reg == mc6800_reg_a ? "adca" : "adcb", MODE_IMM, "#0x00");
         }
     }
   else
@@ -7700,31 +7700,31 @@ AccRol (int shCount)
         {
           if (optimize.codeSize && !optimize.codeSpeed)
             {
-              mc6800_emitOp ("psha", MODE_INH, "");
-              mc6800_emitOp ("lsra", MODE_INH, "");
-              mc6800_emitOp ("pula", MODE_INH, "");
-              mc6800_emitOp ("rora", MODE_INH, "");
+              mc6800_emitOp (reg == mc6800_reg_a ? "psha" : "pshb", MODE_INH, "");
+              mc6800_emitOp (reg == mc6800_reg_a ? "lsra" : "lsrb", MODE_INH, "");
+              mc6800_emitOp (reg == mc6800_reg_a ? "pula" : "pulb", MODE_INH, "");
+              mc6800_emitOp (reg == mc6800_reg_a ? "rora" : "rorb", MODE_INH, "");
             }
           else
             {
               symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
 
-              mc6800_emitOp ("lsra", MODE_INH, "");
+              mc6800_emitOp (reg == mc6800_reg_a ? "lsra" : "lsrb", MODE_INH, "");
               emitBranch ("bcc", tlbl);
-              mc6800_emitOp ("oraa", MODE_IMM, "#0x80");
+              mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x80");
               if (!regalloc_dry_run)
                 emitLabel (tlbl);
             }
         }
     }
-  mc6800_dirtyReg (mc6800_reg_a, false);
+  mc6800_dirtyReg (reg, false);
 }
 
 /*-----------------------------------------------------------------*/
 /* AccLsh - left shift accumulator by known count                  */
 /*-----------------------------------------------------------------*/
 static void
-AccLsh (int shCount)
+AccLsh (reg_info *reg, int shCount)
 {
   int i;
 
@@ -7736,24 +7736,27 @@ AccLsh (int shCount)
   switch (shCount)
     {
     case 6:
-      accopWithMisc ("rora", "");
-      accopWithMisc ("rora", "");
-      accopWithMisc ("rora", "");
-      accopWithMisc ("anda", "#0xc0");
+      mc6800_emitOp (reg == mc6800_reg_a ? "rora" : "rorb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "rora" : "rorb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "rora" : "rorb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0xc0");
       /* total: 8 cycles, 5 bytes */
+      mc6800_dirtyReg (reg, false);
       return;
     case 7:
-      accopWithMisc ("rora", "");
-      accopWithMisc ("ldaa", "#0");
-      accopWithMisc ("rora", "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "rora" : "rorb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "ldaa" : "ldab", MODE_IMM, "#0");
+      mc6800_emitOp (reg == mc6800_reg_a ? "rora" : "rorb", MODE_INH, "");
       /* total: 6 cycles, 4 bytes */
+      mc6800_dirtyReg (reg, false);
       return;
     }
 
   /* lsla is only 1 cycle and byte, so an unrolled loop is often  */
   /* the fastest (shCount<6) and shortest (shCount<4).            */
   for (i = 0; i < shCount; i++)
-    accopWithMisc ("asla", "");
+    mc6800_emitOp (reg == mc6800_reg_a ? "asla" : "aslb", MODE_INH, "");
+  mc6800_dirtyReg (reg, false);
 }
 
 
@@ -7761,7 +7764,7 @@ AccLsh (int shCount)
 /* AccSRsh - signed right shift accumulator by known count         */
 /*-----------------------------------------------------------------*/
 static void
-AccSRsh (int shCount)
+AccSRsh (reg_info *reg, int shCount)
 {
   int i;
 
@@ -7769,28 +7772,30 @@ AccSRsh (int shCount)
 
   if (shCount == 7)
     {
-      accopWithMisc ("rola", "");
-      accopWithMisc ("ldaa", zero);
-      accopWithMisc ("sbca", zero);
+      mc6800_emitOp (reg == mc6800_reg_a ? "rola" : "rolb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "ldaa" : "ldab", MODE_IMM, "#0x00");
+      mc6800_emitOp (reg == mc6800_reg_a ? "sbca" : "sbcb", MODE_IMM, "#0x00");
       /* total: 4 cycles, 4 bytes */
+      mc6800_dirtyReg (reg, false);
       return;
     }
 
   for (i = 0; i < shCount; i++)
-    accopWithMisc ("asra", "");
+    mc6800_emitOp (reg == mc6800_reg_a ? "asra" : "asrb", MODE_INH, "");
+  mc6800_dirtyReg (reg, false);
 }
 
 /*-----------------------------------------------------------------*/
 /* AccRsh - right shift accumulator by known count                 */
 /*-----------------------------------------------------------------*/
 static void
-AccRsh (int shCount, bool sign)
+AccRsh (reg_info *reg, int shCount, bool sign)
 {
   int i;
 
   if (sign)
     {
-      AccSRsh (shCount);
+      AccSRsh (reg, shCount);
       return;
     }
 
@@ -7801,40 +7806,28 @@ AccRsh (int shCount, bool sign)
   /* For shift counts of 6 and 7, the unrolled loop is never optimal.      */
   switch (shCount)
     {
-    case 4:
-      if (optimize.codeSpeed)
-        break;
-      accopWithMisc ("nsa", "");
-      accopWithMisc ("and", "#0x0f");
-      /* total: 5 cycles, 3 bytes */
-      return;
-    case 5:
-      if (optimize.codeSpeed)
-        break;
-      accopWithMisc ("nsa", "");
-      accopWithMisc ("and", "#0x0f");
-      accopWithMisc ("lsra", "");
-      /* total: 6 cycles, 4 bytes */
-      return;
     case 6:
-      accopWithMisc ("rola", "");
-      accopWithMisc ("rola", "");
-      accopWithMisc ("rola", "");
-      accopWithMisc ("and", "#0x03");
-      /* total: 5 cycles, 5 bytes */
+      mc6800_emitOp (reg == mc6800_reg_a ? "rola" : "rolb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "rola" : "rolb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "rola" : "rolb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x03");
+      /* total: 8 cycles, 5 bytes */
+      mc6800_dirtyReg (reg, false);
       return;
     case 7:
-      accopWithMisc ("rola", "");
-      accopWithMisc ("clra", "");
-      accopWithMisc ("rola", "");
-      /* total: 3 cycles, 3 bytes */
+      mc6800_emitOp (reg == mc6800_reg_a ? "rola" : "rolb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "rola" : "rolb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x01");
+      /* total: 6 cycles, 3 bytes */
+      mc6800_dirtyReg (reg, false);
       return;
     }
 
-  /* lsra is only 1 cycle and byte, so an unrolled loop is often  */
-  /* the fastest (shCount<6) and shortest (shCount<4).            */
+  /* lsra is only 2 cycle and  1 byte, so an unrolled loop is often  */
+  /* the fastest (shCount<6) and shortest (shCount<4).            */ /* TODO */
   for (i = 0; i < shCount; i++)
-    accopWithMisc ("lsra", "");
+    mc6800_emitOp (reg == mc6800_reg_a ? "lsra" : "lsrb", MODE_INH, "");
+  mc6800_dirtyReg (reg, false);
 }
 
 
@@ -7851,7 +7844,7 @@ shiftL1Left2Result (operand *left, int offl, operand *result, int offr, int shCo
 
   bool needpulla = pushRegIfSurv (mc6800_reg_a);
   loadRegFromAop (mc6800_reg_a, AOP (left), offl);
-  AccLsh (shCount); // Shift left accumulator.
+  AccLsh (mc6800_reg_a, shCount); // Shift left accumulator.
   if (maskedbyte)
     {
       emitcode ("and", "#0x%02x", bytemask);
@@ -7938,7 +7931,7 @@ shiftRLeftOrResult (operand * left, int offl, operand * result, int offr, int sh
 
   loadRegFromAop (mc6800_reg_a, AOP (left), offl);
   /* shift left accumulator */
-  AccRsh (shCount, false);
+  AccRsh (mc6800_reg_a, shCount, false);
   /* or with result */
   accopWithAop ("ora", AOP (result), offr);
   /* back to result */
@@ -7985,7 +7978,7 @@ genlshTwo (operand *result, operand *left, int shCount)
       if (size > 1)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), 0);
-          AccLsh (shCount);
+          AccLsh (mc6800_reg_a, shCount);
           if (maskedtopbyte)
             {
               emitcode ("anda", "#0x%02x", topbytemask);
@@ -8133,7 +8126,7 @@ genRot1 (iCode *ic)
 
   bool needpulla = pushRegIfSurv (mc6800_reg_a);
   loadRegFromAop (mc6800_reg_a, left->aop, 0);
-  AccRol (s);
+  AccRol (mc6800_reg_a, s);
   storeRegToAop (mc6800_reg_a, result->aop, 0);
   pullOrFreeReg (mc6800_reg_a, needpulla);
 
@@ -8376,7 +8369,7 @@ genrshOne (operand * result, operand * left, int shCount, int sign)
   D (emitcode (";     genrshOne", ""));
   needpulla = pushRegIfSurv (mc6800_reg_a);
   loadRegFromAop (mc6800_reg_a, AOP (left), 0);
-  AccRsh (shCount, sign);
+  AccRsh (mc6800_reg_a, shCount, sign);
   storeRegToFullAop (mc6800_reg_a, AOP (result), sign);
   pullOrFreeReg (mc6800_reg_a, needpulla);
 }
@@ -8396,7 +8389,7 @@ genrshTwo (operand * result, operand * left, int shCount, int sign)
     {
       needpulla = pushRegIfSurv (mc6800_reg_a);
       loadRegFromAop (mc6800_reg_a, AOP (left), 1);
-      AccRsh (shCount - 8, sign);
+      AccRsh (mc6800_reg_a, shCount - 8, sign);
       storeRegToFullAop (mc6800_reg_a, AOP (result), sign);
       pullOrFreeReg (mc6800_reg_a, needpulla);
     }
@@ -9003,7 +8996,7 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
       loadRegFromAop (mc6800_reg_a, derefaop, 0);
       if (!ifx)
         {
-          AccRsh (bstr, false);
+          AccRsh (mc6800_reg_a, bstr, false);
           emitcode ("and", "#0x%02x", ((unsigned char) - 1) >> (8 - blen));
           regalloc_dry_run_cost += 2;
           mc6800_dirtyReg (mc6800_reg_a, false);
