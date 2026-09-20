@@ -653,7 +653,16 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
   if (aop->type == AOP_STL)
     {
       setupXFromSP (_G.stackOfs + aop->aopu.aop_stk);
-      if (regidx != X_IDX)
+      if (regidx == A_IDX || regidx == B_IDX)
+        {
+          const char *tmp = allocTemp ();
+
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp (regidx == A_IDX ? "ldaa" : "ldab", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
+          freeTemp ();
+          mc6800_dirtyReg (reg, false);
+        }
+      else if (regidx != X_IDX)
         transferRegReg (mc6800_reg_x, reg, false);
       return;
     }
