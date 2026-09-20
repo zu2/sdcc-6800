@@ -648,6 +648,24 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
 {
   int regidx = reg->rIdx;
 
+  if (aop->type == AOP_SOF && reg != mc6800_reg_x && !mc6800_reg_x->isFree && mc6800_reg_x->aop != &tsxaop)
+    {
+      const char *tmp = allocTemp ();
+      asmop *xaop = mc6800_reg_x->aop;
+      int xaopofs = mc6800_reg_x->aopofs;
+
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      mc6800_reg_x->isFree = true;
+      loadRegFromAop (reg, aop, loffset);
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      mc6800_reg_x->aop = xaop;
+      mc6800_reg_x->aopofs = xaopofs;
+      mc6800_reg_x->isFree = false;
+      freeTemp ();
+      return;
+    }
+
   if (aop->type == AOP_STL)
     {
       setupXFromSP (_G.stackOfs + aop->aopu.aop_stk);
@@ -991,6 +1009,24 @@ static void
 storeRegToAop (reg_info *reg, asmop * aop, int loffset)
 {
   int regidx = reg->rIdx;
+
+  if (aop->type == AOP_SOF && reg != mc6800_reg_x && !mc6800_reg_x->isFree && mc6800_reg_x->aop != &tsxaop)
+    {
+      const char *tmp = allocTemp ();
+      asmop *xaop = mc6800_reg_x->aop;
+      int xaopofs = mc6800_reg_x->aopofs;
+
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      mc6800_reg_x->isFree = true;
+      storeRegToAop (reg, aop, loffset);
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      mc6800_reg_x->aop = xaop;
+      mc6800_reg_x->aopofs = xaopofs;
+      mc6800_reg_x->isFree = false;
+      freeTemp ();
+      return;
+    }
 
   setupXForAop (aop);
 
@@ -9328,6 +9364,49 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       for (i = AOP_SIZE (result) - 1; i >= 0; i--)
         loadRegIndexed (AOP (result)->aopu.aop_reg[i], litOffset + AOP_SIZE (result) - 1 - i, rematOffset);
     }
+  else if (!ifx && AOP_TYPE (result) == AOP_SOF)
+    {
+      const char *srctmp = allocTemp ();
+      const char *dsttmp = NULL;
+      int dstofs;
+
+      needpulla = pushRegIfSurv (mc6800_reg_a);
+      needpullb = pushRegIfSurv (mc6800_reg_b);
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", srctmp);
+      mc6800_freeReg (mc6800_reg_x);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      setupXForAop (AOP (result));
+      if (mc6800_reg_x->stackOffset != -_G.stackPushes)
+        {
+          dsttmp = allocTemp ();
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", dsttmp);
+        }
+      dstofs = mc6800_reg_x->stackOffset;
+      offset = size - 1;
+      while (offset >= 0)
+        {
+          xoffset = litOffset + (AOP_SIZE (result) - offset - 1);
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", srctmp);
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          loadRegIndexed (mc6800_reg_a, xoffset, rematOffset);
+          if (offset)
+            loadRegIndexed (mc6800_reg_b, xoffset + 1, rematOffset);
+          if (dsttmp)
+            {
+              mc6800_emitOp ("ldx", MODE_DIR, "*%s", dsttmp);
+              mc6800_dirtyReg (mc6800_reg_x, false);
+              mc6800_reg_x->aop = &tsxaop;
+              mc6800_reg_x->stackOffset = dstofs;
+            }
+          storeRegToAop (mc6800_reg_a, AOP (result), offset);
+          if (offset)
+            storeRegToAop (mc6800_reg_b, AOP (result), offset - 1);
+          offset -= 2;
+        }
+      if (dsttmp)
+        freeTemp ();
+      freeTemp ();
+    }
   else
     {
       offset = size - 1;
@@ -9872,16 +9951,62 @@ genPointerSet (iCode * ic, iCode * pi)
           litOffset -= litOffset + size - 1 - 0xff;
         }
 
-      offset = size;
-
-      while (offset--)
+      if (AOP_TYPE (right) == AOP_SOF)
         {
-          if (AOP_TYPE (right) == AOP_REG && IS_AOP_WITH_X (AOP (right)))
-            pullReg (mc6800_reg_a);
-          else
-            loadRegFromAop (mc6800_reg_a, AOP (right), offset);
-          storeRegIndexed (mc6800_reg_a, litOffset + size - offset - 1, rematOffset);
-          mc6800_freeReg (mc6800_reg_a);
+          const char *dsttmp = allocTemp ();
+          const char *srctmp = NULL;
+          int srcofs;
+
+          needpullb = pushRegIfSurv (mc6800_reg_b);
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", dsttmp);
+          mc6800_freeReg (mc6800_reg_x);
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          setupXForAop (AOP (right));
+          if (mc6800_reg_x->stackOffset != -_G.stackPushes)
+            {
+              srctmp = allocTemp ();
+              mc6800_emitOp ("stx", MODE_DIR, "*%s", srctmp);
+            }
+          srcofs = mc6800_reg_x->stackOffset;
+          offset = size - 1;
+          while (offset >= 0)
+            {
+              if (srctmp && offset != size - 1)
+                {
+                  mc6800_emitOp ("ldx", MODE_DIR, "*%s", srctmp);
+                  mc6800_dirtyReg (mc6800_reg_x, false);
+                  mc6800_reg_x->aop = &tsxaop;
+                  mc6800_reg_x->stackOffset = srcofs;
+                }
+              loadRegFromAop (mc6800_reg_a, AOP (right), offset);
+              if (offset)
+                loadRegFromAop (mc6800_reg_b, AOP (right), offset - 1);
+              mc6800_emitOp ("ldx", MODE_DIR, "*%s", dsttmp);
+              mc6800_dirtyReg (mc6800_reg_x, false);
+              storeRegIndexed (mc6800_reg_a, litOffset + size - offset - 1, rematOffset);
+              if (offset)
+                storeRegIndexed (mc6800_reg_b, litOffset + size - offset, rematOffset);
+              mc6800_freeReg (mc6800_reg_a);
+              mc6800_freeReg (mc6800_reg_b);
+              offset -= 2;
+            }
+          if (srctmp)
+            freeTemp ();
+          freeTemp ();
+        }
+      else
+        {
+          offset = size;
+
+          while (offset--)
+            {
+              if (AOP_TYPE (right) == AOP_REG && IS_AOP_WITH_X (AOP (right)))
+                pullReg (mc6800_reg_a);
+              else
+                loadRegFromAop (mc6800_reg_a, AOP (right), offset);
+              storeRegIndexed (mc6800_reg_a, litOffset + size - offset - 1, rematOffset);
+              mc6800_freeReg (mc6800_reg_a);
+            }
         }
     }
 
