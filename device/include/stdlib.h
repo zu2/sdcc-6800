@@ -30,7 +30,7 @@
 #ifndef __STDC_VERSION_STDLIB_H__
 #define __STDC_VERSION_STDLIB_H__ 201710L /* TODO: replace by __STDC_VERSION__ when this header becomes C23-compliant! */
 
-#if !defined(__SDCC_mcs51) && !defined(__SDCC_ds390) && !defined(__SDCC_ds400) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) && !defined(__SDCC_mos6502) && !defined(__SDCC_mos65c02) && !defined(__SDCC_pic14) && !defined(__SDCC_pic16) && !defined(__SDCC_pdk13) && !defined(__SDCC_pdk14) && !defined(__SDCC_pdk15)
+#if !defined(__SDCC_mcs51) && !defined(__SDCC_ds390) && !defined(__SDCC_ds400) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) && !defined(__SDCC_mc6800) && !defined(__SDCC_mos6502) && !defined(__SDCC_mos65c02) && !defined(__SDCC_pic14) && !defined(__SDCC_pic16) && !defined(__SDCC_pdk13) && !defined(__SDCC_pdk14) && !defined(__SDCC_pdk15)
 #define __reentrant
 #endif
 
@@ -156,7 +156,7 @@ typedef struct
 	long long int quot;
 	long long int rem;
 } lldiv_t;
-#if !defined(__SDCC_ds390) && !defined(__SDCC_ds390) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) // struct return not yet supported
+#if !defined(__SDCC_ds390) && !defined(__SDCC_ds390) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) && !defined(__SDCC_mc6800) // struct return not yet supported
 div_t div(int numer, int denom);
 ldiv_t ldiv(long int numer, long int denom);
 #if !defined(__SDCC_mos6502) && !defined(__SDCC_mos65c02) // size of struct return is limited to <= 8 
