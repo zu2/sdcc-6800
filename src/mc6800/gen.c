@@ -8714,24 +8714,25 @@ addSPToX (void)
 {
   const char *tmp = allocTemp ();
   const char *tmp2 = allocTemp ();
-  bool savea = !mc6800_reg_a->isFree;
+  reg_info *reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
+  bool savereg = !reg->isFree;
 
-  if (savea)
-    pushReg (mc6800_reg_a, false);
   mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
   mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp2);
-  mc6800_emitOp ("ldaa", MODE_DIR, "*%s+1", tmp);
-  mc6800_emitOp ("adda", MODE_DIR, "*%s+1", tmp2);
-  mc6800_emitOp ("staa", MODE_DIR, "*%s+1", tmp2);
-  mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
-  mc6800_emitOp ("adca", MODE_DIR, "*%s", tmp2);
-  mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp2);
+  if (savereg)
+    pushReg (reg, false);
+  mc6800_emitOp (reg == mc6800_reg_a ? "ldaa" : "ldab", MODE_DIR, "*%s+1", tmp);
+  mc6800_emitOp (reg == mc6800_reg_a ? "adda" : "addb", MODE_DIR, "*%s+1", tmp2);
+  mc6800_emitOp (reg == mc6800_reg_a ? "staa" : "stab", MODE_DIR, "*%s+1", tmp2);
+  mc6800_emitOp (reg == mc6800_reg_a ? "ldaa" : "ldab", MODE_DIR, "*%s", tmp);
+  mc6800_emitOp (reg == mc6800_reg_a ? "adca" : "adcb", MODE_DIR, "*%s", tmp2);
+  mc6800_emitOp (reg == mc6800_reg_a ? "staa" : "stab", MODE_DIR, "*%s", tmp2);
   mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp2);
-  if (savea)
-    pullReg (mc6800_reg_a);
+  if (savereg)
+    pullReg (reg);
   freeTemp ();
   freeTemp ();
-  mc6800_dirtyReg (mc6800_reg_a, false);
+  mc6800_dirtyReg (reg, false);
   mc6800_dirtyReg (mc6800_reg_x, false);
 }
 
@@ -9867,6 +9868,8 @@ genPointerSet (iCode * ic, iCode * pi)
   else
     {
       needpulla = pushRegIfSurv (mc6800_reg_a);
+      if (AOP_TYPE (right) == AOP_REG && (AOP (right)->aopu.aop_reg[0] == mc6800_reg_a || size > 1 && AOP (right)->aopu.aop_reg[1] == mc6800_reg_a))
+        mc6800_useReg (mc6800_reg_a);
       if (AOP_TYPE (right) == AOP_REG && IS_AOP_WITH_X (AOP (right)))
         for (offset = 0; offset < size; offset++)
           {
