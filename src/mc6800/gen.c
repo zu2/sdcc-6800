@@ -135,6 +135,8 @@ static bool regalloc_dry_run;
 static unsigned int regalloc_dry_run_cost;
 static float regalloc_dry_run_cost_cycles;
 
+#define UNIMPLEMENTED do {if (!regalloc_dry_run) fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "Unimplemented"); regalloc_dry_run_cost += 1000; regalloc_dry_run_cost_cycles += 1000;} while(0)
+
 static void
 mc6800_emitOp (const char *inst, int mode, const char *fmt, ...)
 {
@@ -648,24 +650,6 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
 {
   int regidx = reg->rIdx;
 
-  if (aop->type == AOP_SOF && reg != mc6800_reg_x && !mc6800_reg_x->isFree && mc6800_reg_x->aop != &tsxaop)
-    {
-      const char *tmp = allocTemp ();
-      asmop *xaop = mc6800_reg_x->aop;
-      int xaopofs = mc6800_reg_x->aopofs;
-
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-      mc6800_reg_x->isFree = true;
-      loadRegFromAop (reg, aop, loffset);
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      mc6800_reg_x->aop = xaop;
-      mc6800_reg_x->aopofs = xaopofs;
-      mc6800_reg_x->isFree = false;
-      freeTemp ();
-      return;
-    }
-
   if (aop->type == AOP_STL)
     {
       setupXFromSP (_G.stackOfs + aop->aopu.aop_stk);
@@ -1009,24 +993,6 @@ static void
 storeRegToAop (reg_info *reg, asmop * aop, int loffset)
 {
   int regidx = reg->rIdx;
-
-  if (aop->type == AOP_SOF && reg != mc6800_reg_x && !mc6800_reg_x->isFree && mc6800_reg_x->aop != &tsxaop)
-    {
-      const char *tmp = allocTemp ();
-      asmop *xaop = mc6800_reg_x->aop;
-      int xaopofs = mc6800_reg_x->aopofs;
-
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-      mc6800_reg_x->isFree = true;
-      storeRegToAop (reg, aop, loffset);
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      mc6800_reg_x->aop = xaop;
-      mc6800_reg_x->aopofs = xaopofs;
-      mc6800_reg_x->isFree = false;
-      freeTemp ();
-      return;
-    }
 
   setupXForAop (aop);
 
@@ -2071,7 +2037,10 @@ setupXForAop (asmop * aop)
   if (mc6800_reg_x->aop != &tsxaop)
     {
       if (!mc6800_reg_x->isFree)
-        return;
+        {
+          UNIMPLEMENTED;
+          return;
+        }
       mc6800_emitOp ("tsx", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = &tsxaop;
