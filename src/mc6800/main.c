@@ -463,12 +463,7 @@ mc6800_dwarfRegNum (const struct reg_info *reg)
 static bool
 _hasNativeMulFor (iCode *ic, sym_link *left, sym_link *right)
 {
-  wassert (ic->op == '*' || ic->op == '/' || ic->op == '%');
-
-  if (IS_BITINT (OP_SYM_TYPE (IC_RESULT(ic))) && SPEC_BITINTWIDTH (OP_SYM_TYPE (IC_RESULT(ic))) % 8)
-    return false;
-
-  return getSize (left) == 1 && getSize (right) == 1;
+  return false;
 }
 
 typedef struct asmLineNode
