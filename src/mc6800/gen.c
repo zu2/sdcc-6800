@@ -7832,29 +7832,6 @@ AccRsh (reg_info *reg, int shCount, bool sign)
 
 
 /*-----------------------------------------------------------------*/
-/* shiftL1Left2Result - shift left one byte from left to result    */
-/*-----------------------------------------------------------------*/
-static void
-shiftL1Left2Result (operand *left, int offl, operand *result, int offr, int shCount)
-{
-  sym_link *resulttype = operandType (result);
-  unsigned bytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
-    (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedbyte = (bytemask != 0xff);
-
-  bool needpulla = pushRegIfSurv (mc6800_reg_a);
-  loadRegFromAop (mc6800_reg_a, AOP (left), offl);
-  AccLsh (mc6800_reg_a, shCount); // Shift left accumulator.
-  if (maskedbyte)
-    {
-      emitcode ("and", "#0x%02x", bytemask);
-      regalloc_dry_run_cost += 2;
-    }
-  storeRegToAop (mc6800_reg_a, AOP (result), offr);
-  pullOrFreeReg (mc6800_reg_a, needpulla);
-}
-
-/*-----------------------------------------------------------------*/
 /* movLeft2Result - move byte from left to result                  */
 /*-----------------------------------------------------------------*/
 static void
@@ -7946,9 +7923,30 @@ shiftRLeftOrResult (operand * left, int offl, operand * result, int offr, int sh
 static void
 genlshOne (operand * result, operand * left, int shCount)
 {
+  sym_link *resulttype = operandType (result);
+  unsigned bytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
+    (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
+  bool maskedbyte = (bytemask != 0xff);
+  bool needpull;
+  reg_info *reg;
+
   D (emitcode (";     genlshOne", ""));
 
-  shiftL1Left2Result (left, LSB, result, LSB, shCount);
+  if (AOP_TYPE (result) == AOP_REG
+      && (AOP (result)->aopu.aop_reg[0] == mc6800_reg_a || AOP (result)->aopu.aop_reg[0] == mc6800_reg_b))
+    reg = AOP (result)->aopu.aop_reg[0];
+  else if (!mc6800_reg_b->isFree && mc6800_reg_a->isFree)
+    reg = mc6800_reg_a;
+  else
+    reg = mc6800_reg_b;
+
+  needpull = pushRegIfSurv (reg);
+  loadRegFromAop (reg, AOP (left), LSB);
+  AccLsh (reg, shCount); // Shift left accumulator.
+  if (maskedbyte)
+    mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", bytemask);
+  storeRegToAop (reg, AOP (result), LSB);
+  pullOrFreeReg (reg, needpull);
 }
 
 /*-----------------------------------------------------------------*/
@@ -8365,13 +8363,22 @@ genLeftShift (iCode *ic)
 static void
 genrshOne (operand * result, operand * left, int shCount, int sign)
 {
-  bool needpulla;
+  bool needpull;
+  reg_info *reg;
   D (emitcode (";     genrshOne", ""));
-  needpulla = pushRegIfSurv (mc6800_reg_a);
-  loadRegFromAop (mc6800_reg_a, AOP (left), 0);
-  AccRsh (mc6800_reg_a, shCount, sign);
-  storeRegToFullAop (mc6800_reg_a, AOP (result), sign);
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+  if (AOP_TYPE (result) == AOP_REG
+      && (AOP (result)->aopu.aop_reg[0] == mc6800_reg_a || AOP (result)->aopu.aop_reg[0] == mc6800_reg_b))
+    reg = AOP (result)->aopu.aop_reg[0];
+  else if (!mc6800_reg_b->isFree && mc6800_reg_a->isFree)
+    reg = mc6800_reg_a;
+  else
+    reg = mc6800_reg_b;
+
+  needpull = pushRegIfSurv (reg);
+  loadRegFromAop (reg, AOP (left), 0);
+  AccRsh (reg, shCount, sign);
+  storeRegToFullAop (reg, AOP (result), sign);
+  pullOrFreeReg (reg, needpull);
 }
 
 /*-----------------------------------------------------------------*/
