@@ -6627,46 +6627,6 @@ isLiteralBit (unsigned long lit)
 }
 
 /*-----------------------------------------------------------------*/
-/* maskByte - apply bit mask to byte of operand                    */
-/*-----------------------------------------------------------------*/
-static void maskByte (operand *op, int offset, unsigned mask)
-{
-  mask &= 0xff;
-  if (mask == 0xff)
-    return;
-  wassert (offset < op->aop->size);
-  bool in_a = (op->aop->type == AOP_REG && op->aop->aopu.aop_reg[offset]->rIdx == A_IDX);
-  bool in_x = (op->aop->type == AOP_REG && op->aop->aopu.aop_reg[offset]->rIdx == X_IDX);
-  if (in_a)
-    {
-      emitcode ("and", "#0x%02x", mask);
-      regalloc_dry_run_cost += 2;
-    }
-  else if (in_x && mask == 0x7f)
-    {
-      emitcode ("lslx", "");
-      emitcode ("lsrx", "");
-      regalloc_dry_run_cost += 2;
-    }
-  else if (op->aop->type == AOP_DIR && isLiteralBit (~mask & 0xff))
-    {
-      int bitpos = isLiteralBit (~mask & 0xff) - 1;
-      emitcode ("bclr", "#%d,%s", bitpos & 7, aopAdrStr (op->aop, offset, false));
-      regalloc_dry_run_cost += 3;
-    }
-  else
-    {
-      bool needpula = pushRegIfUsed (mc6800_reg_a);
-      loadRegFromAop (mc6800_reg_a, op->aop, offset);
-      emitcode ("and", "#0x%02x", mask);
-      regalloc_dry_run_cost += 2;
-      mc6800_useReg (mc6800_reg_a);
-      storeRegToAop (mc6800_reg_a, op->aop, offset);
-      pullOrFreeReg (mc6800_reg_a, needpula);
-    }
-}
-
-/*-----------------------------------------------------------------*/
 /* genAnd  - code for and                                          */
 /*-----------------------------------------------------------------*/
 static void
