@@ -3924,7 +3924,7 @@ genCall (iCode * ic)
 
   mc6800_dirtyReg (mc6800_reg_a, false);
   mc6800_dirtyReg (mc6800_reg_b, false);
-  mc6800_dirtyReg (mc6800_reg_x, false);
+  mc6800_dirtyReg (mc6800_reg_x, true);
 
   if ((IS_ITEMP (IC_RESULT (ic)) &&
        (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic)))
@@ -4015,7 +4015,7 @@ genPcall (iCode * ic)
 
   mc6800_dirtyReg (mc6800_reg_a, false);
   mc6800_dirtyReg (mc6800_reg_b, false);
-  mc6800_dirtyReg (mc6800_reg_x, false);
+  mc6800_dirtyReg (mc6800_reg_x, true);
 
   /* if we need assign a result value */
   if ((IS_ITEMP (IC_RESULT (ic)) &&
