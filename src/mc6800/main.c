@@ -623,7 +623,7 @@ PORT mc6800_port =
     false,                      /* Emit glue around main */
     MODEL_SMALL | MODEL_LARGE,
     MODEL_LARGE,
-    NULL,                       /* model == target */
+    mc6800_get_model,           /* model == target */
   },
   {
     _asmCmd,
