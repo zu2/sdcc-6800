@@ -15,10 +15,27 @@ override PORTDIR = ../build/mc6800
 
 include $(srcdir)/../incl.mk
 
+MC6800_INT = \
+  _muluchar.c \
+  _mulschar.c \
+  _mulint.c \
+  _divuchar.c \
+  _divschar.c \
+  _divuint.c \
+  _divsint.c \
+  _moduchar.c \
+  _modschar.c \
+  _moduint.c \
+  _modsint.c
+
+MC6800_LONG = $(COMMON_LONG) \
+  _mullong.c \
+  _divulong.c
+
 MC6800_SDCC = _startup.c
 
-MC6800SOURCES = $(addprefix ../,$(MC6800_SDCC))
-MC6800OBJECTS = $(patsubst %.c,%.rel,$(MC6800_SDCC))
+MC6800SOURCES = $(addprefix ../,$(MC6800_INT) $(MC6800_LONG) $(MC6800_SDCC))
+MC6800OBJECTS = $(patsubst %.c,%.rel,$(MC6800_INT) $(MC6800_LONG) $(MC6800_SDCC))
 
 OBJ = __sdcc_regs.rel _ret.rel
 
@@ -69,4 +86,4 @@ distclean: clean
 	rm -f Makefile
 
 Makefile: $(srcdir)/Makefile.in
-	cd $(top_builddir); ./config.status device/lib/hc08/Makefile
+	cd $(top_builddir); ./config.status device/lib/mc6800/Makefile

@@ -586,7 +586,7 @@ mc6800_getInstructionSize (lineNode *line)
 static const char *
 mc6800_get_model (void)
 {
-    return(options.stackAuto ? "mc6800-stack-auto" : "s08");
+    return(options.stackAuto ? "mc6800-stack-auto" : "mc6800");
 }
 
 /** $1 is always the basename.
