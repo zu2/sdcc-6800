@@ -3002,8 +3002,7 @@ asmopToBool (asmop *aop, reg_info *reg)
             }
           else
             {
-              emitcode ("tst", "%s", aopAdrStr (aop, 0, false));
-              regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 : 3);
+              rmwWithAop ("tst", aop, 0);
             }
           break;
         }
@@ -3025,11 +3024,11 @@ asmopToBool (asmop *aop, reg_info *reg)
           else
             {
               tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-              emitcode ("tst", "%s", aopAdrStr (aop, 0, false));
+              rmwWithAop ("tst", aop, 0);
               if (!regalloc_dry_run)
                 emitcode ("bne", "%05d$", labelKey2num (tlbl->key));
-              emitcode ("tst", "%s", aopAdrStr (aop, 1, false));
-              regalloc_dry_run_cost += 4;
+              regalloc_dry_run_cost += 2;
+              rmwWithAop ("tst", aop, 1);
               if (!regalloc_dry_run)
                 emitLabel (tlbl);
               break;
