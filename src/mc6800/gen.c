@@ -7545,7 +7545,8 @@ genGetAbit (iCode * ic)
 {
   operand *left, *right, *result;
   int shCount;
-  bool needpulla;
+  bool needpull;
+  reg_info *reg;
 
   D (emitcode (";     genGetAbit", ""));
 
@@ -7558,61 +7559,30 @@ genGetAbit (iCode * ic)
 
   shCount = (int) ulFromVal (AOP (IC_RIGHT (ic))->aopu.aop_lit);
 
-  needpulla = pushRegIfSurv (mc6800_reg_a);
+  if (AOP_TYPE (result) == AOP_REG
+      && (AOP (result)->aopu.aop_reg[0] == mc6800_reg_a || AOP (result)->aopu.aop_reg[0] == mc6800_reg_b))
+    reg = AOP (result)->aopu.aop_reg[0];
+  else if (!mc6800_reg_b->isFree && mc6800_reg_a->isFree)
+    reg = mc6800_reg_a;
+  else
+    reg = mc6800_reg_b;
 
-  /* get the needed byte into a */
-  loadRegFromAop (mc6800_reg_a, AOP (left), shCount / 8);
+  needpull = pushRegIfSurv (reg);
+
+  /* get the needed byte into Acc */
+  loadRegFromAop (reg, AOP (left), shCount / 8);
   shCount %= 8;
   if (AOP_TYPE (result) == AOP_CRY)
-    {
-      emitcode ("and", "#0x%02x", 1 << shCount);
-      regalloc_dry_run_cost += 2;
-      mc6800_dirtyReg (mc6800_reg_a, false);
-    }
+    mc6800_emitOp (reg == mc6800_reg_a ? "bita" : "bitb", MODE_IMM, "#0x%02x", 1 << shCount);
   else
     {
-      switch (shCount)
-        {
-        case 3:
-          emitcode ("lsra", "");
-          regalloc_dry_run_cost++;
-          //fallthrough
-        case 2:
-          emitcode ("lsra", "");
-          regalloc_dry_run_cost++;
-          //fallthrough
-        case 1:
-          emitcode ("lsra", "");
-          regalloc_dry_run_cost++;
-          //fallthrough
-        case 0:
-          emitcode ("and", "#0x01");
-          regalloc_dry_run_cost += 2;
-          break;
-        case 4:
-          emitcode ("nsa", "");
-          emitcode ("and", "#0x01");
-          regalloc_dry_run_cost += 3;
-          break;
-        case 5:
-          emitcode ("rola", "");
-          regalloc_dry_run_cost++;
-          //fallthrough
-        case 6:
-          emitcode ("rola", "");
-          regalloc_dry_run_cost++;
-          //fallthrough
-        case 7:
-          emitcode ("rola", "");
-          emitcode ("clra", "");
-          emitcode ("rola", "");
-          regalloc_dry_run_cost += 3;
-          break;
-        }
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      storeRegToFullAop (mc6800_reg_a, AOP (result), false);
+      while (shCount--)
+        mc6800_emitOp (reg == mc6800_reg_a ? "lsra" : "lsrb", MODE_INH, "");
+      mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x01");
+      mc6800_dirtyReg (reg, false);
+      storeRegToFullAop (reg, AOP (result), false);
     }
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+  pullOrFreeReg (reg, needpull);
 
   freeAsmop (result, NULL, ic, true);
   freeAsmop (right, NULL, ic, true);
