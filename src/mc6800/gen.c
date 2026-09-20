@@ -94,6 +94,7 @@ freeTemp (void)
 static asmop tsxaop;
 
 extern int mc6800_ptrRegReq;
+extern int mc6800_dry_stack_size;
 extern int mc6800_nRegs;
 extern struct dbuf_s *codeOutBuf;
 static bool operandsEqu (operand * op1, operand * op2);
@@ -2029,19 +2030,19 @@ setupXForAop (asmop * aop)
 {
   int lo, hi, shift, limit;
 
-  if (regalloc_dry_run)
-    return;
   if (aop->type != AOP_SOF)
     return;
   if (mc6800_reg_x->aop != &tsxaop)
     {
       if (!mc6800_reg_x->isFree)
         return;
-      emitcode ("tsx", "");
+      mc6800_emitOp ("tsx", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = &tsxaop;
       mc6800_reg_x->stackOffset = -_G.stackPushes;
     }
+  if (regalloc_dry_run && !mc6800_dry_stack_size)
+    return;
 
   lo = _G.stackOfs - mc6800_reg_x->stackOffset + aop->aopu.aop_stk;
   hi = lo + aop->size - 1;
@@ -2461,7 +2462,12 @@ aopOp (operand *op, iCode * ic, bool result)
           if (options.stackAuto || (currFunc && IFFUNC_ISREENT (currFunc->type)))
             {
               sym->aop = op->aop = aop = newAsmop (AOP_SOF);
-              aop->aopu.aop_stk = 8; /* bogus stack offset, high enough to prevent optimization */
+              if (!mc6800_dry_stack_size)
+                aop->aopu.aop_stk = 8; /* bogus stack offset, high enough to prevent optimization */
+              else if (sym->usl.spillLoc)
+                aop->aopu.aop_stk = sym->usl.spillLoc->stack;
+              else
+                aop->aopu.aop_stk = -getSize (sym->type);
             }
           else
             sym->aop = op->aop = aop = newAsmop (AOP_DIR);
@@ -10715,7 +10721,10 @@ genmc6800iCode (iCode *ic)
         //  emitcode ("", "; %s = %s offset %d", reg->name, aopName (reg->aop), reg->aopofs);
         reg->isFree = true;
         if (regalloc_dry_run)
-          reg->isLitConst = 0;
+          {
+            reg->isLitConst = 0;
+            reg->aop = NULL;
+          }
       }
 
     if (ic->op == IFX)
@@ -10996,6 +11005,7 @@ drymc6800iCode (iCode *ic)
   regalloc_dry_run = true;
   regalloc_dry_run_cost = 0;
   regalloc_dry_run_cost_cycles = 0;
+  _G.stackOfs = mc6800_dry_stack_size;
 
   init_aop_pass();
   

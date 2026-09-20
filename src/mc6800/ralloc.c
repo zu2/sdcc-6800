@@ -58,6 +58,8 @@ _G;
 
 /* Shared with gen.c */
 int mc6800_ptrRegReq;             /* one byte pointer register required */
+int mc6800_dry_stack_size;
+static int mc6800_call_stack_size;
 
 /* 6808 registers */
 reg_info regsmc6800[] =
@@ -1415,6 +1417,8 @@ serialRegMark (eBBlock ** ebbs, int count)
   int i;
   short int max_alloc_bytes = SHRT_MAX; // Byte limit. Set this to a low value to pass only few variables to the register allocator. This can be useful for debugging.
 
+  mc6800_call_stack_size = 0;
+
   /* for all blocks */
   for (i = 0; i < count; i++)
     {
@@ -1429,6 +1433,8 @@ serialRegMark (eBBlock ** ebbs, int count)
       for (ic = ebbs[i]->sch; ic; ic = ic->next)
         {
           updateRegUsage(ic);
+          if ((ic->op == CALL || ic->op == PCALL) && ic->parmBytes + 2 > mc6800_call_stack_size)
+            mc6800_call_stack_size = ic->parmBytes + 2;
 
           /* if this is an ipop that means some live
              range will have to be assigned again */
@@ -1462,6 +1468,11 @@ serialRegMark (eBBlock ** ebbs, int count)
             {
               symbol *sym = OP_SYMBOL (IC_RESULT (ic));
 
+              if (sym->isspilt && sym->usl.spillLoc)
+                {
+                  sym->usl.spillLoc->allocreq--;
+                  sym->isspilt = false;
+                }
               /* Make sure any spill location is definitely allocated */
               if (sym->isspilt && !sym->remat && sym->usl.spillLoc &&
                   !sym->usl.spillLoc->allocreq)
@@ -1524,6 +1535,7 @@ mc6800_ralloc (ebbIndex * ebbi)
   setToNull ((void *) &_G.regAssigned);
   setToNull ((void *) &_G.totRegAssigned);
   mc6800_ptrRegReq = _G.stackExtend = _G.dataExtend = 0;
+  mc6800_dry_stack_size = 0;
   mc6800_nRegs = 8;
   mc6800_reg_a = mc6800_regWithIdx(A_IDX);
   mc6800_reg_b = mc6800_regWithIdx(B_IDX);
@@ -1557,6 +1569,20 @@ mc6800_ralloc (ebbIndex * ebbi)
   ic = mc6800_ralloc2_cc (ebbi);
 
   RegFix (ebbs, count);
+
+  if (currFunc && currFunc->stack + mc6800_call_stack_size > 255)
+    {
+      int stack = currFunc->stack;
+      int stak = SPEC_STAK (currFunc->etype);
+
+      redoStackOffsets ();
+      mc6800_dry_stack_size = currFunc->stack;
+      currFunc->stack = stack;
+      SPEC_STAK (currFunc->etype) = stak;
+      serialRegMark (ebbs, count);
+      ic = mc6800_ralloc2_cc (ebbi);
+      RegFix (ebbs, count);
+    }
 
   /* if stack was extended then tell the user */
   if (_G.stackExtend)
