@@ -746,8 +746,8 @@ PORT mc6800_port =
   false,                        /* little_endian */
   0,                            /* leave lt */
   0,                            /* leave gt */
-  0,                            /* leave <= */
-  0,                            /* leave >= */
+  1,                            /* leave <= */
+  1,                            /* leave >= */
   0,                            /* leave != */
   0,                            /* leave == */
   false,                        /* No array initializer support. */
