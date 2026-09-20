@@ -132,6 +132,7 @@ static void updateiTempRegisterUse (operand * op);
 
 static bool regalloc_dry_run;
 static unsigned int regalloc_dry_run_cost;
+static float regalloc_dry_run_cost_cycles;
 
 static void
 mc6800_emitOp (const char *inst, const char *fmt, ...)
@@ -11323,8 +11324,11 @@ init_aop_pass(void)
 float
 drymc6800iCode (iCode *ic)
 {
+  int byte_cost_weight = 1;
+
   regalloc_dry_run = true;
   regalloc_dry_run_cost = 0;
+  regalloc_dry_run_cost_cycles = 0;
 
   init_aop_pass();
   
@@ -11333,7 +11337,12 @@ drymc6800iCode (iCode *ic)
   destroy_line_list ();
   /*freeTrace (&_G.trace.aops);*/
 
-  return (regalloc_dry_run_cost);
+  if (optimize.codeSize)
+    byte_cost_weight *= 4;
+  if (!optimize.codeSpeed)
+    byte_cost_weight *= 2;
+
+  return ((float)regalloc_dry_run_cost * byte_cost_weight + 4 * regalloc_dry_run_cost_cycles * ic->count);
 }
 
 /*-----------------------------------------------------------------*/
