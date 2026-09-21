@@ -1914,9 +1914,6 @@ storeRegIndexed (reg_info * reg, int offset, char * rematOfs)
     case B_IDX:
       mc6800_emitOp ("stab", MODE_IDX, "%d,x", offset);
       break;
-    case X_IDX:
-      mc6800_emitOp ("stx", MODE_IDX, "%d,x", offset);
-      break;
     case D_IDX:
       storeRegIndexed (mc6800_reg_a, offset, rematOfs);
       storeRegIndexed (mc6800_reg_b, offset + 1, rematOfs);
