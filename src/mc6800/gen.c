@@ -1096,7 +1096,10 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
         {
-          wassertl (aop->type != AOP_SOF, "stx n,x uses X as both the value and the base");
+          if (aop->type == AOP_SOF) {
+            UNIMPLEMENTED;
+            break;
+          }
           emitcode ("stx", "%s", aopAdrStr (aop, loffset, true));
           regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 :3);
         }
