@@ -3770,14 +3770,17 @@ genPointerPush (iCode *ic)
   operand *left = IC_LEFT (ic);
 
   D (emitcode (";     genPointerPush", ""));
-#if 0
+
+  if (!regalloc_dry_run)
+    saveRegisters (ic);
+
   aopOp (left, ic, false);
 
   wassertl (IC_RIGHT (ic), "IPUSH_VALUE_AT_ADDRESS without right operand");
   wassertl (IS_OP_LITERAL (IC_RIGHT (ic)), "IPUSH_VALUE_AT_ADDRESS with non-literal right operand");
   wassertl (!operandLitValue (IC_RIGHT(ic)), "IPUSH_VALUE_AT_ADDRESS with non-zero right operand");
 
-  loadRegFromAop (mc6800_reg_hx, left->aop, 0);
+  loadRegFromAop (mc6800_reg_x, left->aop, 0);
   /* so hx now contains the address */
 
   int size = getSize (operandType (IC_LEFT (ic))->next);
@@ -3786,7 +3789,6 @@ genPointerPush (iCode *ic)
       loadRegIndexed (mc6800_reg_a, size, 0);
       pushReg (mc6800_reg_a, true);
     }
-#endif
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
 }
 
