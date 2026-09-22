@@ -37,7 +37,7 @@ MC6800_SDCC = _startup.c
 MC6800SOURCES = $(addprefix ../,$(MC6800_INT) $(MC6800_LONG) $(MC6800_SDCC))
 MC6800OBJECTS = $(patsubst %.c,%.rel,$(MC6800_INT) $(MC6800_LONG) $(MC6800_SDCC))
 
-OBJ = __sdcc_regs.rel _ret.rel atomic_flag_test_and_set.rel
+OBJ = __sdcc_regs.rel _ret.rel _setjmp.rel atomic_flag_test_and_set.rel
 
 LIB = mc6800.lib
 AS = $(SAS)
