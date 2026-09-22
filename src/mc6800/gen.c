@@ -337,8 +337,8 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
         case D_IDX:            /* D to X */
           {
             const char *tmp = allocTemp ();
-            mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
             mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+            mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
             mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
             freeTemp ();
           }
@@ -354,8 +354,8 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
           {
             const char *tmp = allocTemp ();
             mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-            mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
             mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
+            mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
             freeTemp ();
           }
           break;
@@ -1607,6 +1607,17 @@ transferAopAop (asmop *srcaop, int srcofs, asmop *dstaop, int dstofs)
       keepreg = true;
     }
 
+  if (!reg)
+    {
+      reg_info *held = mc6800_findRegAop (srcaop, srcofs);
+
+      if (held)
+        {
+          reg = held;
+          keepreg = true;
+        }
+    }
+
   afree = mc6800_reg_a->isFree;
 
   if (!reg)
@@ -1911,8 +1922,8 @@ storeRegIndexed (reg_info * reg, int offset, char * rematOfs)
       mc6800_emitOp ("stab", MODE_IDX, "%d,x", offset);
       break;
     case D_IDX:
-      storeRegIndexed (mc6800_reg_a, offset, rematOfs);
       storeRegIndexed (mc6800_reg_b, offset + 1, rematOfs);
+      storeRegIndexed (mc6800_reg_a, offset, rematOfs);
       break;
     default:
       wassert (0);
@@ -3220,7 +3231,7 @@ genCopy (operand *result, operand *source)
      aopOpExtToIdx (AOP (result), NULL, AOP (source));
 
   /* general case */
-  bool need_lsb_to_msb_order = false; // Copy in msb to lsb order, if possible, since some multi-byte hardware registers expect this order.
+  bool need_lsb_to_msb_order = true;
   if ((result->aop->type == AOP_DIR || result->aop->type == AOP_SOF) && // Avoid overwriting still-needed value.
     result->aop->type == source->aop->type)
    {
@@ -3242,13 +3253,12 @@ genCopy (operand *result, operand *source)
        }
      else
        wassert (0);
-     need_lsb_to_msb_order = (overlap && result_at_lower_address);
+     need_lsb_to_msb_order = !overlap || result_at_lower_address;
    }
   printf("result regs: size=%d, nRegs=0x%02x\n", AOP_SIZE(result),result->aop->regmask);
 
   if (need_lsb_to_msb_order)
     {
-      wassert (!IS_OP_VOLATILE (result) && !IS_OP_VOLATILE (source));
       offset = 0;
       while (size)
         {
@@ -4008,8 +4018,8 @@ genPcall (iCode * ic)
       if (IS_AOP_D (AOP (IC_LEFT (ic))))
         {
           tmp = allocTemp ();
-          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
           mc6800_freeReg (mc6800_reg_d);
         }
     }
@@ -4431,13 +4441,15 @@ genRet (iCode * ic)
           pushReg (mc6800_reg_a, true);
         }
 
-      offset = size - 1;
-      while (size--)
+      if (!delayed_x && size > 2 && mc6800_findRegAop (AOP (IC_LEFT (ic)), size - 1))
         {
-          if (!(delayed_x && !offset))
-            transferAopAop (AOP (IC_LEFT (ic)), offset, retaop[offset], 0);
-          offset--;
+          transferAopAop (AOP (IC_LEFT (ic)), size - 1, retaop[size - 1], 0);
+          size--;
         }
+
+      for (offset = 0; offset < size; offset++)
+        if (!(delayed_x && !offset))
+          transferAopAop (AOP (IC_LEFT (ic)), offset, retaop[offset], 0);
 
       if (delayed_x)
         pullReg (mc6800_reg_b);
@@ -6167,8 +6179,8 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
           const char *tmp = allocTemp ();
 
           mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
+          mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
           freeTemp ();
         }
       else
@@ -6852,8 +6864,8 @@ genAnd (iCode * ic, iCode * ifx)
             }
           else
             {
-              mc6800_emitOp ("staa", MODE_DIR, "*%s", ltmp);
               mc6800_emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
+              mc6800_emitOp ("staa", MODE_DIR, "*%s", ltmp);
             }
         }
 
@@ -7109,8 +7121,8 @@ genOr (iCode * ic, iCode * ifx)
             }
           else
             {
-              mc6800_emitOp ("staa", MODE_DIR, "*%s", ltmp);
               mc6800_emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
+              mc6800_emitOp ("staa", MODE_DIR, "*%s", ltmp);
             }
         }
 
@@ -9468,7 +9480,7 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
     {
       int i;
 
-      for (i = AOP_SIZE (result) - 1; i >= 0; i--)
+      for (i = 0; i < AOP_SIZE (result); i++)
         loadRegIndexed (AOP (result)->aopu.aop_reg[i], litOffset + AOP_SIZE (result) - 1 - i, rematOffset);
     }
   else if (!ifx && AOP_TYPE (result) == AOP_SOF)
@@ -9485,18 +9497,18 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
           srctmp = allocTemp ();
           mc6800_emitOp ("stx", MODE_DIR, "*%s", srctmp);
         }
-      offset = size - 1;
-      while (offset >= 0)
+      offset = 0;
+      while (offset < size)
         {
           xoffset = litOffset + (AOP_SIZE (result) - offset - 1);
-          if (offset != size - 1)
+          if (offset != 0)
             {
               mc6800_emitOp ("ldx", MODE_DIR, "*%s", srctmp);
               mc6800_dirtyReg (mc6800_reg_x, false);
             }
-          loadRegIndexed (mc6800_reg_a, xoffset, rematOffset);
-          if (offset)
-            loadRegIndexed (mc6800_reg_b, xoffset + 1, rematOffset);
+          loadRegIndexed (mc6800_reg_b, xoffset, rematOffset);
+          if (offset + 1 < size)
+            loadRegIndexed (mc6800_reg_a, xoffset - 1, rematOffset);
           mc6800_freeReg (mc6800_reg_x);
           mc6800_dirtyReg (mc6800_reg_x, false);
           if (dsttmp)
@@ -9506,16 +9518,16 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
               mc6800_reg_x->aop = &tsxaop;
               mc6800_reg_x->stackOffset = dstofs;
             }
-          storeRegToAop (mc6800_reg_a, AOP (result), offset);
-          if (offset)
-            storeRegToAop (mc6800_reg_b, AOP (result), offset - 1);
-          if (!dsttmp && offset > 1 && mc6800_reg_x->stackOffset != -_G.stackPushes)
+          storeRegToAop (mc6800_reg_b, AOP (result), offset);
+          if (offset + 1 < size)
+            storeRegToAop (mc6800_reg_a, AOP (result), offset + 1);
+          if (!dsttmp && offset + 2 < size && mc6800_reg_x->stackOffset != -_G.stackPushes)
             {
               dsttmp = allocTemp ();
               mc6800_emitOp ("stx", MODE_DIR, "*%s", dsttmp);
               dstofs = mc6800_reg_x->stackOffset;
             }
-          offset -= 2;
+          offset += 2;
         }
       if (keepx)
         {
@@ -9534,13 +9546,20 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
 
       if (!ifx && AOP_TYPE (result) == AOP_REG && AOP_SIZE (result) == 2)
         {
-          loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-          pushReg (mc6800_reg_a, false);
           loadRegIndexed (mc6800_reg_a, litOffset + 1, rematOffset);
-          storeRegToAop (mc6800_reg_a, AOP (result), 0);
-          pullReg (mc6800_reg_a);
+          pushReg (mc6800_reg_a, false);
+          loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
           storeRegToAop (mc6800_reg_a, AOP (result), 1);
+          pullReg (mc6800_reg_a);
+          storeRegToAop (mc6800_reg_a, AOP (result), 0);
         }
+      else if (!ifx && AOP_TYPE (result) != AOP_REG)
+        for (offset = 0; offset < size; offset++)
+          {
+            xoffset = litOffset + (AOP_SIZE (result) - offset - 1);
+            loadRegIndexed (mc6800_reg_a, xoffset, rematOffset);
+            storeRegToAop (mc6800_reg_a, AOP (result), offset);
+          }
       else
         while (size--)
           {
@@ -10089,27 +10108,27 @@ genPointerSet (iCode * ic, iCode * pi)
               mc6800_emitOp ("stx", MODE_DIR, "*%s", srctmp);
             }
           srcofs = mc6800_reg_x->stackOffset;
-          offset = size - 1;
-          while (offset >= 0)
+          offset = 0;
+          while (offset < size)
             {
-              if (srctmp && offset != size - 1)
+              if (srctmp && offset != 0)
                 {
                   mc6800_emitOp ("ldx", MODE_DIR, "*%s", srctmp);
                   mc6800_dirtyReg (mc6800_reg_x, false);
                   mc6800_reg_x->aop = &tsxaop;
                   mc6800_reg_x->stackOffset = srcofs;
                 }
-              loadRegFromAop (mc6800_reg_a, AOP (right), offset);
-              if (offset)
-                loadRegFromAop (mc6800_reg_b, AOP (right), offset - 1);
+              loadRegFromAop (mc6800_reg_b, AOP (right), offset);
+              if (offset + 1 < size)
+                loadRegFromAop (mc6800_reg_a, AOP (right), offset + 1);
               mc6800_emitOp ("ldx", MODE_DIR, "*%s", dsttmp);
               mc6800_dirtyReg (mc6800_reg_x, false);
-              storeRegIndexed (mc6800_reg_a, litOffset + size - offset - 1, rematOffset);
-              if (offset)
-                storeRegIndexed (mc6800_reg_b, litOffset + size - offset, rematOffset);
+              storeRegIndexed (mc6800_reg_b, litOffset + size - offset - 1, rematOffset);
+              if (offset + 1 < size)
+                storeRegIndexed (mc6800_reg_a, litOffset + size - offset - 2, rematOffset);
               mc6800_freeReg (mc6800_reg_a);
               mc6800_freeReg (mc6800_reg_b);
-              offset -= 2;
+              offset += 2;
             }
           if (srctmp)
             freeTemp ();
@@ -10117,17 +10136,40 @@ genPointerSet (iCode * ic, iCode * pi)
         }
       else
         {
-          offset = size;
-
-          while (offset--)
+          if (AOP_TYPE (right) == AOP_REG && IS_AOP_WITH_X (AOP (right)))
             {
-              if (AOP_TYPE (right) == AOP_REG && IS_AOP_WITH_X (AOP (right)))
-                pullReg (mc6800_reg_a);
-              else
-                loadRegFromAop (mc6800_reg_a, AOP (right), offset);
-              storeRegIndexed (mc6800_reg_a, litOffset + size - offset - 1, rematOffset);
+              offset = size;
+
+              while (offset--)
+                {
+                  pullReg (mc6800_reg_a);
+                  storeRegIndexed (mc6800_reg_a, litOffset + size - offset - 1, rematOffset);
+                  mc6800_freeReg (mc6800_reg_a);
+                }
+            }
+          else if (AOP_TYPE (right) == AOP_REG && IS_AOP_D (AOP (right)))
+            {
+              storeRegIndexed (mc6800_reg_d, litOffset, rematOffset);
               mc6800_freeReg (mc6800_reg_a);
             }
+          else if (AOP_TYPE (right) == AOP_REG)
+            {
+              offset = size;
+
+              while (offset--)
+                {
+                  loadRegFromAop (mc6800_reg_a, AOP (right), offset);
+                  storeRegIndexed (mc6800_reg_a, litOffset + size - offset - 1, rematOffset);
+                  mc6800_freeReg (mc6800_reg_a);
+                }
+            }
+          else
+            for (offset = 0; offset < size; offset++)
+              {
+                loadRegFromAop (mc6800_reg_a, AOP (right), offset);
+                storeRegIndexed (mc6800_reg_a, litOffset + size - offset - 1, rematOffset);
+                mc6800_freeReg (mc6800_reg_a);
+              }
         }
     }
 
