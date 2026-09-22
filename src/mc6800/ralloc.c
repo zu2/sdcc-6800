@@ -1157,16 +1157,10 @@ packPointerOp (iCode * ic, eBBlock ** ebpp)
   if (!(dic = hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (pointer)))))
     return;
 
-  if (dic->op == '+' && (IS_OP_LITERAL (IC_RIGHT (dic)) ||
-                        (IS_ITEMP (IC_RIGHT (dic)) && OP_SYMBOL (IC_RIGHT (dic))->remat)))
+  if (dic->op == '+' && IS_OP_LITERAL (IC_RIGHT (dic)) && operandLitValue (IC_RIGHT (dic)) >= 0)
     {
       nonOffsetOp = IC_LEFT (dic);
       offsetOp = IC_RIGHT (dic);
-    }
-  else if (dic->op == '+' && IS_ITEMP (IC_LEFT (dic)) && OP_SYMBOL (IC_LEFT (dic))->remat)
-    {
-      nonOffsetOp = IC_RIGHT (dic);
-      offsetOp = IC_LEFT (dic);
     }
   else
     return;
@@ -1185,12 +1179,16 @@ packPointerOp (iCode * ic, eBBlock ** ebpp)
                 return;
               if (IC_RIGHT (uic) && IS_SYMOP (IC_RIGHT (uic)))
                 return;
+              if (operandLitValue (offsetOp) + getSize (operandType (IC_RESULT (uic))) - 1 > 255)
+                return;
             }
           else if (POINTER_SET (uic))
             {
               if (IC_LEFT (uic) && IS_OP_LITERAL (IC_LEFT (uic)) && operandLitValue (IC_LEFT (uic)) != 0)
                 return;
               if (IC_LEFT (uic) && IS_SYMOP (IC_LEFT (uic)))
+                return;
+              if (operandLitValue (offsetOp) + getSize (operandType (IC_RIGHT (uic))) - 1 > 255)
                 return;
             }
           else
