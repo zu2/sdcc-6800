@@ -9473,31 +9473,32 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
     }
   else if (!ifx && AOP_TYPE (result) == AOP_SOF)
     {
-      const char *srctmp = allocTemp ();
+      const char *srctmp = NULL;
       const char *dsttmp = NULL;
-      int dstofs;
+      int dstofs = 0;
+      bool keepx = IS_AOP_X (AOP (left)) && !mc6800_reg_x->isDead;
 
       needpullb = pushRegIfSurv (mc6800_reg_b);
       needpulla = pushRegIfSurv (mc6800_reg_a);
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", srctmp);
-      mc6800_freeReg (mc6800_reg_x);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      setupXForAop (AOP (result));
-      if (mc6800_reg_x->stackOffset != -_G.stackPushes)
+      if (size > 2 || keepx)
         {
-          dsttmp = allocTemp ();
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", dsttmp);
+          srctmp = allocTemp ();
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", srctmp);
         }
-      dstofs = mc6800_reg_x->stackOffset;
       offset = size - 1;
       while (offset >= 0)
         {
           xoffset = litOffset + (AOP_SIZE (result) - offset - 1);
-          mc6800_emitOp ("ldx", MODE_DIR, "*%s", srctmp);
-          mc6800_dirtyReg (mc6800_reg_x, false);
+          if (offset != size - 1)
+            {
+              mc6800_emitOp ("ldx", MODE_DIR, "*%s", srctmp);
+              mc6800_dirtyReg (mc6800_reg_x, false);
+            }
           loadRegIndexed (mc6800_reg_a, xoffset, rematOffset);
           if (offset)
             loadRegIndexed (mc6800_reg_b, xoffset + 1, rematOffset);
+          mc6800_freeReg (mc6800_reg_x);
+          mc6800_dirtyReg (mc6800_reg_x, false);
           if (dsttmp)
             {
               mc6800_emitOp ("ldx", MODE_DIR, "*%s", dsttmp);
@@ -9508,11 +9509,23 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
           if (offset)
             storeRegToAop (mc6800_reg_b, AOP (result), offset - 1);
+          if (!dsttmp && offset > 1 && mc6800_reg_x->stackOffset != -_G.stackPushes)
+            {
+              dsttmp = allocTemp ();
+              mc6800_emitOp ("stx", MODE_DIR, "*%s", dsttmp);
+              dstofs = mc6800_reg_x->stackOffset;
+            }
           offset -= 2;
+        }
+      if (keepx)
+        {
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", srctmp);
+          mc6800_dirtyReg (mc6800_reg_x, false);
         }
       if (dsttmp)
         freeTemp ();
-      freeTemp ();
+      if (srctmp)
+        freeTemp ();
     }
   else
     {
