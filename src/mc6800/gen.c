@@ -4974,10 +4974,20 @@ genMinus16 (iCode *ic)
   bool needpullb = pushRegIfSurv (mc6800_reg_b);
   bool needpulla = pushRegIfSurv (mc6800_reg_a);
 
-  loadRegFromAop (mc6800_reg_b, leftOp, 0);
-  loadRegFromAop (mc6800_reg_a, leftOp, 1);
-  accopWithAop ("subb", rightOp, 0);
-  accopWithAop ("sbca", rightOp, 1);
+  if (IS_AOP_D (rightOp))
+    {
+      mc6800_emitOp ("coma", MODE_INH, "");
+      mc6800_emitOp ("comb", MODE_INH, "");
+      accopWithAop ("adcb", leftOp, 0);
+      accopWithAop ("adca", leftOp, 1);
+    }
+  else
+    {
+      loadRegFromAop (mc6800_reg_b, leftOp, 0);
+      loadRegFromAop (mc6800_reg_a, leftOp, 1);
+      accopWithAop ("subb", rightOp, 0);
+      accopWithAop ("sbca", rightOp, 1);
+    }
   storeRegToAop (mc6800_reg_b, result, 0);
   storeRegToAop (mc6800_reg_a, result, 1);
 
