@@ -8927,145 +8927,180 @@ static void
 genUnpackBits (operand * result, operand * left, operand * right, iCode * ifx)
 {
   int offset = 0;               /* result byte offset */
-  int rsize;                    /* result size */
   int rlen = 0;                 /* remaining bitfield length */
   sym_link *etype;              /* bitfield type information */
   unsigned blen;                /* bitfield length */
   unsigned bstr;                /* bitfield starting bit within byte */
-  bool needpulla = false;
-  bool needpullb = false;
+  bool needpull = false;
   bool needpullx = false;
   int litOffset = 0;
   char * rematOffset = NULL;
+  reg_info *reg;
+  asmop *tmpaop = NULL;
+  bool delayed = false;
+  bool assigned = false;
 
   D (emitcode (";     genUnpackBits", ""));
-#if 0
-  decodePointerOffset (right, &litOffset, &rematOffset);
+
   etype = getSpec (operandType (result));
-  rsize = getSize (operandType (result));
   blen = SPEC_BLEN (etype);
   bstr = SPEC_BSTR (etype);
 
-  needpulla = pushRegIfSurv (mc6800_reg_a);
+  if (IS_AOP_A (AOP (result)))
+    reg = mc6800_reg_a;
+  else if (IS_AOP_B (AOP (result)))
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_b->isFree)
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_a->isFree)
+    reg = mc6800_reg_a;
+  else
+    reg = mc6800_reg_b;
+  needpull = pushRegIfSurv (reg);
 
-  if (!IS_AOP_HX (AOP (left)))
+  if (blen >= 8)
     {
-      needpullx = pushRegIfSurv (mc6800_reg_x);
-      needpullh = pushRegIfSurv (mc6800_reg_h);
+      tmpaop = newAsmop (AOP_DIR);
+      tmpaop->aopu.aop_dir = (char *) allocTemp ();
+      tmpaop->size = (blen + 7) / 8;
+    }
+  needpullx = pushRegIfSurv (mc6800_reg_x);
+  loadRegFromAop (mc6800_reg_x, AOP (left), 0);
+  if (stackBasedOffset (right))
+    addSPToX ();
+  decodePointerOffset (right, &litOffset, &rematOffset);
+
+  if (rematOffset)
+    {
+      const char *tmp = allocTemp ();
+      char ofs[128];
+
+      if (litOffset)
+        SNPRINTF (ofs, sizeof (ofs), "(%s+%d)", rematOffset, litOffset);
+      else
+        SNPRINTF (ofs, sizeof (ofs), "%s", rematOffset);
+      litOffset = 0;
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp (reg == mc6800_reg_a ? "ldaa" : "ldab", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp (reg == mc6800_reg_a ? "adda" : "addb", MODE_IMM, "#%s", ofs);
+      mc6800_emitOp (reg == mc6800_reg_a ? "staa" : "stab", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp (reg == mc6800_reg_a ? "ldaa" : "ldab", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp (reg == mc6800_reg_a ? "adca" : "adcb", MODE_IMM, "#>%s", ofs);
+      mc6800_emitOp (reg == mc6800_reg_a ? "staa" : "stab", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+      freeTemp ();
+      mc6800_dirtyReg (reg, false);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      rematOffset = NULL;
     }
 
-  /* if the operand is already in hx
-     then we do nothing else we move the value to hx */
-  loadRegFromAop (mc6800_reg_hx, AOP (left), 0);
-  /* so hx now contains the address */
-
-  if (ifx && blen <= 8)
+  if (!rematOffset && litOffset < 0)
     {
-      loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-      if (blen < 8)
-        {
-          emitcode ("and", "#0x%02x", (((unsigned char) - 1) >> (8 - blen)) << bstr);
-          regalloc_dry_run_cost += 2;
-        }
-      pullOrFreeReg (mc6800_reg_h, needpullh);
-      pullOrFreeReg (mc6800_reg_x, needpullx);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-      genIfxJump (ifx, "a");
-      return;
+      addConstToX (litOffset);
+      litOffset = 0;
     }
-  wassert (!ifx);
+  else if (!rematOffset && litOffset + (int) ((blen + 7) / 8) - 1 > 0xff)
+    {
+      addConstToX (litOffset + (int) ((blen + 7) / 8) - 1 - 0xff);
+      litOffset -= litOffset + (int) ((blen + 7) / 8) - 1 - 0xff;
+    }
 
-  /* If the bitfield length is less than a byte */
   if (blen < 8)
     {
-      loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-      AccRsh (bstr, false);
-      emitcode ("and", "#0x%02x", ((unsigned char) - 1) >> (8 - blen));
-      regalloc_dry_run_cost += 2;
+      loadRegIndexed (reg, litOffset, rematOffset);
+      pullOrFreeReg (mc6800_reg_x, needpullx);
+      if (ifx)
+        {
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (((unsigned char) - 1) >> (8 - blen)) << bstr);
+          mc6800_dirtyReg (reg, false);
+          goto finish;
+        }
+      AccRsh (reg, bstr, false);
+      mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen));
+      mc6800_dirtyReg (reg, false);
       if (!SPEC_USIGN (etype) && !IS_BOOLEAN (etype))
         {
-          /* signed bitfield */
           symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-          emitcode ("bit", "#0x%02x", 1 << (blen - 1));
+          mc6800_emitOp (reg == mc6800_reg_a ? "bita" : "bitb", MODE_IMM, "#0x%02x", 1 << (blen - 1));
           if (!regalloc_dry_run)
             emitcode ("beq", "%05d$", labelKey2num (tlbl->key));
-          emitcode ("ora", "#0x%02x", (unsigned char) (0xff << blen));
-          regalloc_dry_run_cost += 6;
+          mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x%02x", (unsigned char) (0xff << blen));
+          regalloc_dry_run_cost += 2;
           if (!regalloc_dry_run)
-            emitLabel (tlbl);
+            mc6800_emitLabel (tlbl);
         }
-      storeRegToAop (mc6800_reg_a, AOP (result), offset++);
+      storeRegToAop (reg, AOP (result), offset);
       goto finish;
     }
 
-  /* Bit field did not fit in a byte. Copy all
-     but the partial byte at the end.  */
+  for (offset = 0; offset < (int) ((blen + 7) / 8); offset++)
+    {
+      loadRegIndexed (reg, litOffset + offset, rematOffset);
+      storeRegToAop (reg, tmpaop, tmpaop->size - offset - 1);
+    }
+  pullOrFreeReg (mc6800_reg_x, needpullx);
+
+  if (ifx)
+    {
+      offset = (int) ((blen + 7) / 8) - 1;
+      loadRegFromAop (reg, tmpaop, tmpaop->size - offset - 1);
+      if (blen % 8)
+        mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen % 8));
+      while (offset--)
+        accopWithAop (reg == mc6800_reg_a ? "oraa" : "orab", tmpaop, tmpaop->size - offset - 1);
+      mc6800_dirtyReg (reg, false);
+      goto finish;
+    }
+
+  offset = 0;
   for (rlen = blen; rlen >= 8; rlen -= 8)
     {
-      loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-      if (rlen > 8 && AOP_TYPE (result) == AOP_REG)
-        pushReg (mc6800_reg_a, true);
-      else
-        storeRegToAop (mc6800_reg_a, AOP (result), offset);
-      offset++;
-      if (rlen > 8)
+      if (assigned && !delayed)
         {
-          litOffset++;
+          pushReg (reg, true);
+          delayed = true;
         }
+      loadRegFromAop (reg, tmpaop, tmpaop->size - offset - 1);
+      storeRegToAop (reg, AOP (result), offset);
+      if (AOP_TYPE (result) == AOP_REG && AOP (result)->aopu.aop_reg[offset]->rIdx == reg->rIdx)
+        assigned = true;
+      offset++;
     }
 
-  /* Handle the partial byte at the end */
   if (rlen)
     {
-      loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-      emitcode ("and", "#0x%02x", ((unsigned char) - 1) >> (8 - rlen));
-      regalloc_dry_run_cost += 3;
+      if (assigned && !delayed)
+        {
+          pushReg (reg, true);
+          delayed = true;
+        }
+      loadRegFromAop (reg, tmpaop, tmpaop->size - offset - 1);
+      mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - rlen));
+      mc6800_dirtyReg (reg, false);
       if (!SPEC_USIGN (etype) && !IS_BOOLEAN (etype))
         {
-          /* signed bitfield */
           symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-          emitcode ("bit", "#0x%02x", 1 << (rlen - 1));
+          mc6800_emitOp (reg == mc6800_reg_a ? "bita" : "bitb", MODE_IMM, "#0x%02x", 1 << (rlen - 1));
           if (!regalloc_dry_run)
             emitcode ("beq", "%05d$", labelKey2num (tlbl->key));
-          emitcode ("ora", "#0x%02x", (unsigned char) (0xff << rlen));
-         regalloc_dry_run_cost += 6;
-         if (!regalloc_dry_run)
-            emitLabel (tlbl);
+          mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x%02x", (unsigned char) (0xff << rlen));
+          regalloc_dry_run_cost += 2;
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl);
         }
-      storeRegToAop (mc6800_reg_a, AOP (result), offset++);
-    }
-  if (blen > 8 && AOP_TYPE (result) == AOP_REG)
-    {
-      pullReg (AOP (result)->aopu.aop_reg[0]);
+      storeRegToAop (reg, AOP (result), offset);
     }
 
 finish:
-  if (offset < rsize)
-    {
-      rsize -= offset;
-      if (SPEC_USIGN (etype) || IS_BOOLEAN (etype))
-        {
-          while (rsize--)
-            storeConstToAop (0, AOP (result), offset++);
-        }
-      else
-        {
-          /* signed bitfield: sign extension with 0x00 or 0xff */
-          emitcode ("rola", "");
-          emitcode ("clra", "");
-          emitcode ("sbc", zero);
-          regalloc_dry_run_cost += 4;
-
-          while (rsize--)
-            storeRegToAop (mc6800_reg_a, AOP (result), offset++);
-        }
-    }
-#endif
-  pullOrFreeReg (mc6800_reg_x, needpullx);
-  pullOrFreeReg (mc6800_reg_b, needpullb);
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+  if (tmpaop)
+    freeTemp ();
+  if (delayed)
+    pullReg (reg);
+  pullOrFreeReg (reg, needpull);
+  if (ifx && !ifx->generated)
+    genIfxJump (ifx, "a");
 }
 
 
@@ -9079,15 +9114,15 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
   int offset = 0;               /* result byte offset */
   int litOffset = 0;
   char * rematOffset = NULL;
-  int rsize;                    /* result size */
   int rlen = 0;                 /* remaining bitfield length */
   sym_link *etype;              /* bitfield type information */
   unsigned blen;                /* bitfield length */
   unsigned bstr;                /* bitfield starting bit within byte */
   asmop *derefaop;
-  bool delayed_a = false;
-  bool assigned_a = false;
-  bool needpulla = false;
+  reg_info *reg;
+  bool delayed = false;
+  bool assigned = false;
+  bool needpull = false;
 
   D (emitcode (";     genUnpackBitsImmed", ""));
 
@@ -9102,98 +9137,63 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
   derefaop->size = size;
 
   etype = getSpec (operandType (result));
-  rsize = getSize (operandType (result));
   blen = SPEC_BLEN (etype);
   bstr = SPEC_BSTR (etype);
 
-  needpulla = pushRegIfSurv (mc6800_reg_a);
+  if (IS_AOP_A (AOP (result)))
+    reg = mc6800_reg_a;
+  else if (IS_AOP_B (AOP (result)))
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_b->isFree)
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_a->isFree)
+    reg = mc6800_reg_a;
+  else
+    reg = mc6800_reg_b;
 
-  /* if the bitfield is a single bit in the direct page */
-  if (blen == 1 && derefaop->type == AOP_DIR)
-    {
-      if (!ifx && bstr)
-        {
-          symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-          loadRegFromConst (mc6800_reg_a, 0);
-          if (!regalloc_dry_run)
-            emitcode ("brclr", "#%d,%s,%05d$", bstr, aopAdrStr (derefaop, 0, false), labelKey2num ((tlbl->key)));
-          regalloc_dry_run_cost += 3;
-          if (SPEC_USIGN (etype))
-            rmwWithReg ("inc", mc6800_reg_a);
-          else
-            rmwWithReg ("dec", mc6800_reg_a);
-          if (!regalloc_dry_run)
-            emitLabel (tlbl);
-          storeRegToAop (mc6800_reg_a, AOP (result), offset);
-          if (AOP_TYPE (result) == AOP_REG && AOP(result)->aopu.aop_reg[offset]->rIdx == A_IDX)
-            assigned_a = true;
-          mc6800_freeReg (mc6800_reg_a);
-          offset++;
-          goto finish;
-        }
-      else if (ifx)
-        {
-          symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-          symbol *jlbl;
-          char *inst;
-
-          if (IC_TRUE (ifx))
-            {
-              jlbl = IC_TRUE (ifx);
-              inst = "brclr";
-            }
-          else
-            {
-              jlbl = IC_FALSE (ifx);
-              inst = "brset";
-            }
-          if (!regalloc_dry_run)
-            emitcode (inst, "#%d,%s,%05d$", bstr, aopAdrStr (derefaop, 0, false), labelKey2num ((tlbl->key)));
-          regalloc_dry_run_cost += 3;
-          emitBranch ("jmp", jlbl);
-          if (!regalloc_dry_run)
-            emitLabel (tlbl);
-          ifx->generated = 1;
-          offset++;
-          goto finish;
-        }
-    }
+  needpull = pushRegIfSurv (reg);
 
   /* If the bitfield length is less than a byte */
   if (blen < 8)
     {
-      loadRegFromAop (mc6800_reg_a, derefaop, 0);
+      loadRegFromAop (reg, derefaop, 0);
       if (!ifx)
         {
-          AccRsh (mc6800_reg_a, bstr, false);
-          emitcode ("and", "#0x%02x", ((unsigned char) - 1) >> (8 - blen));
-          regalloc_dry_run_cost += 2;
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          if (!SPEC_USIGN (etype))
+          AccRsh (reg, bstr, false);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen));
+          mc6800_dirtyReg (reg, false);
+          if (!SPEC_USIGN (etype) && !IS_BOOLEAN (etype))
             {
               /* signed bitfield */
               symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-              emitcode ("bit", "#0x%02x", 1 << (blen - 1));
+              mc6800_emitOp (reg == mc6800_reg_a ? "bita" : "bitb", MODE_IMM, "#0x%02x", 1 << (blen - 1));
               if (!regalloc_dry_run)
                 emitcode ("beq", "%05d$", labelKey2num (tlbl->key));
-              emitcode ("ora", "#0x%02x", (unsigned char) (0xff << blen));
-              regalloc_dry_run_cost += 6;
+              mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x%02x", (unsigned char) (0xff << blen));
+              regalloc_dry_run_cost += 2;
               if (!regalloc_dry_run)
-                emitLabel (tlbl);
+                mc6800_emitLabel (tlbl);
             }
-          storeRegToAop (mc6800_reg_a, AOP (result), offset);
-          if (AOP_TYPE (result) == AOP_REG && AOP(result)->aopu.aop_reg[offset]->rIdx == A_IDX)
-            assigned_a = true;
+          storeRegToAop (reg, AOP (result), offset);
         }
       else
         {
-          emitcode ("and", "#0x%02x", (((unsigned char) - 1) >> (8 - blen)) << bstr);
-          regalloc_dry_run_cost += 2;
-          mc6800_dirtyReg (mc6800_reg_a, false);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (((unsigned char) - 1) >> (8 - blen)) << bstr);
+          mc6800_dirtyReg (reg, false);
         }
-      offset++;
+      goto finish;
+    }
+
+  if (ifx)
+    {
+      offset = (int) ((blen + 7) / 8) - 1;
+      loadRegFromAop (reg, derefaop, size - offset - 1);
+      if (blen % 8)
+        mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen % 8));
+      while (offset--)
+        accopWithAop (reg == mc6800_reg_a ? "oraa" : "orab", derefaop, size - offset - 1);
+      mc6800_dirtyReg (reg, false);
       goto finish;
     }
 
@@ -9201,95 +9201,55 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
      but the partial byte at the end.  */
   for (rlen = blen; rlen >= 8; rlen -= 8)
     {
-      if (assigned_a && !delayed_a)
+      if (assigned && !delayed)
         {
-          pushReg (mc6800_reg_a, true);
-          delayed_a = true;
+          pushReg (reg, true);
+          delayed = true;
         }
-      loadRegFromAop (mc6800_reg_a, derefaop, size - offset - 1);
-      if (!ifx)
-        {
-          storeRegToAop (mc6800_reg_a, AOP (result), offset);
-          if (AOP_TYPE (result) == AOP_REG && AOP(result)->aopu.aop_reg[offset]->rIdx == A_IDX)
-            assigned_a = true;
-        }
-      else
-        {
-          emitcode ("tsta", "");
-          regalloc_dry_run_cost++;
-        }
+      loadRegFromAop (reg, derefaop, size - offset - 1);
+      storeRegToAop (reg, AOP (result), offset);
+      if (AOP_TYPE (result) == AOP_REG && AOP(result)->aopu.aop_reg[offset]->rIdx == reg->rIdx)
+        assigned = true;
       offset++;
     }
 
   /* Handle the partial byte at the end */
   if (rlen)
     {
-      if (assigned_a && !delayed_a)
+      if (assigned && !delayed)
         {
-          pushReg (mc6800_reg_a, true);
-          delayed_a = true;
+          pushReg (reg, true);
+          delayed = true;
         }
-      loadRegFromAop (mc6800_reg_a, derefaop, size - offset - 1);
-      emitcode ("and", "#0x%02x", ((unsigned char) - 1) >> (8 - rlen));
-      regalloc_dry_run_cost += 2;
-      if (!SPEC_USIGN (etype))
+      loadRegFromAop (reg, derefaop, size - offset - 1);
+      mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - rlen));
+      if (!SPEC_USIGN (etype) && !IS_BOOLEAN (etype))
         {
           /* signed bitfield */
           symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-          emitcode ("bit", "#0x%02x", 1 << (rlen - 1));
+          mc6800_emitOp (reg == mc6800_reg_a ? "bita" : "bitb", MODE_IMM, "#0x%02x", 1 << (rlen - 1));
           if (!regalloc_dry_run)
             emitcode ("beq", "%05d$", labelKey2num (tlbl->key));
-          emitcode ("ora", "#0x%02x", (unsigned char) (0xff << rlen));
-          regalloc_dry_run_cost += 6;
+          mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x%02x", (unsigned char) (0xff << rlen));
+          regalloc_dry_run_cost += 2;
           if (!regalloc_dry_run)
-            emitLabel (tlbl);
+            mc6800_emitLabel (tlbl);
         }
-      storeRegToAop (mc6800_reg_a, AOP (result), offset);
-      if (AOP_TYPE (result) == AOP_REG && AOP(result)->aopu.aop_reg[offset]->rIdx == A_IDX)
-        assigned_a = true;
-      offset++;
+      storeRegToAop (reg, AOP (result), offset);
     }
 
 finish:
-  if (offset < rsize)
-    {
-      rsize -= offset;
-      if (SPEC_USIGN (etype))
-        {
-          while (rsize--)
-            storeConstToAop (0, AOP (result), offset++);
-        }
-      else
-        {
-          if (assigned_a && !delayed_a)
-            {
-              pushReg (mc6800_reg_a, true);
-              delayed_a = true;
-            }
-
-          /* signed bitfield: sign extension with 0x00 or 0xff */
-          emitcode ("rola", "");
-          emitcode ("ldaa", "%s", zero);
-          emitcode ("sbca", "%s", zero);
-          regalloc_dry_run_cost += 5;
-
-          while (rsize--)
-            storeRegToAop (mc6800_reg_a, AOP (result), offset++);
-        }
-    }
-
   freeAsmop (NULL, derefaop, ic, true);
   freeAsmop (result, NULL, ic, true);
 
-  if (ifx && !ifx->generated)
-    {
-      genIfxJump (ifx, "a");
-    }
-  if (delayed_a)
-    pullReg (mc6800_reg_a);
+  if (delayed)
+    pullReg (reg);
 
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+  pullOrFreeReg (reg, needpull);
+
+  if (ifx && !ifx->generated)
+    genIfxJump (ifx, "a");
 }
 
 
@@ -9600,154 +9560,190 @@ genPackBits (operand * result, operand * left, sym_link * etype, operand * right
   unsigned char mask;           /* bitmask within current byte */
   int litOffset = 0;
   char *rematOffset = NULL;
-  bool needpulla;
+  bool needpull;
+  reg_info *reg;
+  asmop *tmpaop = NULL;
 
   D (emitcode (";     genPackBits", ""));
 
-#if 0
-  decodePointerOffset (left, &litOffset, &rematOffset);
   blen = SPEC_BLEN (etype);
   bstr = SPEC_BSTR (etype);
 
-  needpulla = pushRegIfSurv (mc6800_reg_a);
-  if (AOP_TYPE (right) == AOP_REG)
-    {
-      /* Not optimal, but works for any register sources. */
-      /* Just push the source values onto the stack and   */
-      /* pull them off any needed. Better optimzed would  */
-      /* be to do some of the shifting/masking now and    */
-      /* push the intermediate result. */
-      if (blen > 8)
-        pushReg (AOP (right)->aopu.aop_reg[1], true);
-      pushReg (AOP (right)->aopu.aop_reg[0], true);
-    }
-  loadRegFromAop (mc6800_reg_hx, AOP (result), 0);
+  if (IS_AOP_A (AOP (right)) && mc6800_reg_a->isDead)
+    reg = mc6800_reg_a;
+  else if (IS_AOP_B (AOP (right)) && mc6800_reg_b->isDead)
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_b->isFree)
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_a->isFree)
+    reg = mc6800_reg_a;
+  else
+    reg = mc6800_reg_b;
 
-  /* If the bitfield length is less than a byte */
+  if (AOP_TYPE (right) != AOP_LIT && blen < 8
+      && !IS_AOP_WITH_A (AOP (result)) && !IS_AOP_WITH_B (AOP (result)))
+    {
+      needpull = pushRegIfSurv (reg);
+      loadRegFromAop (reg, AOP (right), 0);
+      AccLsh (reg, bstr);
+    }
+  else if (AOP_TYPE (right) != AOP_LIT)
+    {
+      tmpaop = newAsmop (AOP_DIR);
+      tmpaop->aopu.aop_dir = (char *) allocTemp ();
+      tmpaop->size = (blen + 7) / 8;
+      for (offset = 0; offset < (int) ((blen + 7) / 8); offset++)
+        transferAopAop (AOP (right), offset, tmpaop, offset);
+      offset = 0;
+    }
+
+  loadRegFromAop (mc6800_reg_x, AOP (result), 0);
+  if (stackBasedOffset (left))
+    addSPToX ();
+  decodePointerOffset (left, &litOffset, &rematOffset);
+
+  if (rematOffset)
+    {
+      const char *tmp = allocTemp ();
+      bool useb = !mc6800_reg_a->isFree && mc6800_reg_b->isFree;
+      reg_info *acc = useb ? mc6800_reg_b : mc6800_reg_a;
+      bool needpullacc;
+      char ofs[128];
+
+      if (litOffset)
+        SNPRINTF (ofs, sizeof (ofs), "(%s+%d)", rematOffset, litOffset);
+      else
+        SNPRINTF (ofs, sizeof (ofs), "%s", rematOffset);
+      litOffset = 0;
+      needpullacc = pushRegIfUsed (acc);
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp (useb ? "addb" : "adda", MODE_IMM, "#%s", ofs);
+      mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp (useb ? "adcb" : "adca", MODE_IMM, "#>%s", ofs);
+      mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+      freeTemp ();
+      mc6800_dirtyReg (acc, false);
+      pullOrFreeReg (acc, needpullacc);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      rematOffset = NULL;
+    }
+
+  if (!rematOffset && litOffset < 0)
+    {
+      addConstToX (litOffset);
+      litOffset = 0;
+    }
+  else if (!rematOffset && litOffset + (int) ((blen + 7) / 8) - 1 > 0xff)
+    {
+      addConstToX (litOffset + (int) ((blen + 7) / 8) - 1 - 0xff);
+      litOffset -= litOffset + (int) ((blen + 7) / 8) - 1 - 0xff;
+    }
+
+  if (AOP_TYPE (right) == AOP_LIT || tmpaop)
+    needpull = pushRegIfSurv (reg);
+
   if (blen < 8)
     {
       mask = ((unsigned char) (0xFF << (blen + bstr)) | (unsigned char) (0xFF >> (8 - bstr)));
 
       if (AOP_TYPE (right) == AOP_LIT)
         {
-          /* Case with a bitfield length <8 and literal source
-           */
           litval = (int) ulFromVal (AOP (right)->aopu.aop_lit);
           litval <<= bstr;
           litval &= (~mask) & 0xff;
 
-          loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
+          loadRegIndexed (reg, litOffset, rematOffset);
           if ((mask | litval) != 0xff)
-            {
-              emitcode ("and", "#0x%02x", mask);
-              regalloc_dry_run_cost += 2;
-            }
+            mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", mask);
           if (litval)
-            {
-              emitcode ("ora", "#0x%02x", litval);
-              regalloc_dry_run_cost += 2;
-            }
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          storeRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-
-          pullOrFreeReg (mc6800_reg_a, needpulla);
-          return;
+            mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x%02x", litval);
+          mc6800_dirtyReg (reg, false);
+          storeRegIndexed (reg, litOffset, rematOffset);
+          goto release;
         }
 
-      /* Case with a bitfield length < 8 and arbitrary source
-       */
-      if (AOP_TYPE (right) == AOP_REG)
-        pullReg (mc6800_reg_a);
+      if (tmpaop)
+        {
+          loadRegFromAop (reg, tmpaop, 0);
+          AccLsh (reg, bstr);
+        }
+      if (isOperandVolatile (result, false) || IS_VOLATILE (etype))
+        {
+          const char *tmp = allocTemp ();
+
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          mc6800_emitOp (reg == mc6800_reg_a ? "staa" : "stab", MODE_DIR, "*%s", tmp);
+          loadRegIndexed (reg, litOffset, rematOffset);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", mask);
+          mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_DIR, "*%s", tmp);
+          freeTemp ();
+        }
       else
-        loadRegFromAop (mc6800_reg_a, AOP (right), 0);
-      /* shift and mask source value */
-      AccLsh (bstr);
-      emitcode ("and", "#0x%02x", (~mask) & 0xff);
-      regalloc_dry_run_cost += 2;
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      pushReg (mc6800_reg_a, true);
-
-      loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-      emitcode ("and", "#0x%02x", mask);
-      emitcode ("ora", "1,s");
-      regalloc_dry_run_cost += 5;
-      storeRegIndexed (mc6800_reg_a, litOffset, rematOffset);
-      pullReg (mc6800_reg_a);
-
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-      return;
+        {
+          mc6800_emitOp (reg == mc6800_reg_a ? "eora" : "eorb", MODE_IDX, "%d,x", litOffset);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          mc6800_emitOp (reg == mc6800_reg_a ? "eora" : "eorb", MODE_IDX, "%d,x", litOffset);
+        }
+      mc6800_dirtyReg (reg, false);
+      storeRegIndexed (reg, litOffset, rematOffset);
+      goto release;
     }
 
-  /* Bit length is greater than 7 bits. In this case, copy  */
-  /* all except the partial byte at the end                 */
   for (rlen = blen; rlen >= 8; rlen -= 8)
     {
-      if (!litOffset && !rematOffset && AOP (right)->type == AOP_DIR)
-        {
-          emitcode ("mov", "%s,x+", aopAdrStr (AOP (right), offset, false));
-          regalloc_dry_run_cost += 2;
-          litOffset--;
-        }
+      if (AOP_TYPE (right) == AOP_LIT)
+        loadRegFromAop (reg, AOP (right), offset);
       else
-        {
-          if (AOP_TYPE (right) == AOP_REG)
-            pullReg (mc6800_reg_a);
-          else
-            loadRegFromAop (mc6800_reg_a, AOP (right), offset);
-          storeRegIndexed (mc6800_reg_a, litOffset+offset, rematOffset);
-        }
+        loadRegFromAop (reg, tmpaop, offset);
+      storeRegIndexed (reg, litOffset + offset, rematOffset);
       offset++;
     }
 
-  /* If there was a partial byte at the end */
   if (rlen)
     {
       mask = (((unsigned char) - 1 << rlen) & 0xff);
 
       if (AOP_TYPE (right) == AOP_LIT)
         {
-          /* Case with partial byte and literal source
-           */
           litval = (int) ulFromVal (AOP (right)->aopu.aop_lit);
           litval >>= (blen - rlen);
           litval &= (~mask) & 0xff;
-          loadRegIndexed (mc6800_reg_a, litOffset+offset, rematOffset);
+          loadRegIndexed (reg, litOffset + offset, rematOffset);
           if ((mask | litval) != 0xff)
-            {
-              emitcode ("and", "#0x%02x", mask);
-              regalloc_dry_run_cost += 2;
-            }
+            mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", mask);
           if (litval)
-            {
-              emitcode ("ora", "#0x%02x", litval);
-              regalloc_dry_run_cost += 2;
-            }
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          storeRegIndexed (mc6800_reg_a, litOffset+offset, rematOffset);
-          pullOrFreeReg (mc6800_reg_a, needpulla);
-          return;
+            mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x%02x", litval);
+          mc6800_dirtyReg (reg, false);
+          storeRegIndexed (reg, litOffset + offset, rematOffset);
+          goto release;
         }
 
-      /* Case with partial byte and arbitrary source
-       */
-      if (AOP_TYPE (right) == AOP_REG)
-        pullReg (mc6800_reg_a);
+      loadRegFromAop (reg, tmpaop, offset);
+      if (isOperandVolatile (result, false) || IS_VOLATILE (etype))
+        {
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          storeRegToAop (reg, tmpaop, offset);
+          loadRegIndexed (reg, litOffset + offset, rematOffset);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", mask);
+          accopWithAop (reg == mc6800_reg_a ? "oraa" : "orab", tmpaop, offset);
+        }
       else
-        loadRegFromAop (mc6800_reg_a, AOP (right), offset);
-      emitcode ("and", "#0x%02x", (~mask) & 0xff);
-      regalloc_dry_run_cost += 2;
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      pushReg (mc6800_reg_a, true);
-
-      loadRegIndexed(mc6800_reg_a, litOffset+offset, rematOffset);
-      emitcode ("and", "#0x%02x", mask);
-      emitcode ("ora", "1,s");
-      regalloc_dry_run_cost += 5;
-      storeRegIndexed (mc6800_reg_a, litOffset+offset, rematOffset);
-      pullReg (mc6800_reg_a);
+        {
+          mc6800_emitOp (reg == mc6800_reg_a ? "eora" : "eorb", MODE_IDX, "%d,x", litOffset + offset);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          mc6800_emitOp (reg == mc6800_reg_a ? "eora" : "eorb", MODE_IDX, "%d,x", litOffset + offset);
+        }
+      mc6800_dirtyReg (reg, false);
+      storeRegIndexed (reg, litOffset + offset, rematOffset);
     }
-#endif
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+
+release:
+  if (tmpaop)
+    freeTemp ();
+  pullOrFreeReg (reg, needpull);
 }
 
 /*-----------------------------------------------------------------*/
@@ -9764,12 +9760,12 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
   unsigned bstr;                /* bitfield starting bit within byte */
   unsigned long long int litval;/* source literal value (if AOP_LIT) */
   unsigned char mask;           /* bitmask within current byte */
-  bool needpulla;
+  bool needpull;
   int litOffset = 0;
   char *rematOffset = NULL;
+  reg_info *reg;
 
   D (emitcode (";     genPackBitsImmed", ""));
-#if 0
   blen = SPEC_BLEN (etype);
   bstr = SPEC_BSTR (etype);
 
@@ -9782,153 +9778,118 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
   freeAsmop (result, NULL, ic, true);
   derefaop->size = size;
 
-  /* if the bitfield is a single bit in the direct page */
-  if (blen == 1 && derefaop->type == AOP_DIR)
-    {
-      if (AOP_TYPE (right) == AOP_LIT)
-        {
-          litval = ullFromVal (AOP (right)->aopu.aop_lit);
+  if (IS_AOP_A (AOP (right)) && mc6800_reg_a->isDead)
+    reg = mc6800_reg_a;
+  else if (IS_AOP_B (AOP (right)) && mc6800_reg_b->isDead)
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_b->isFree)
+    reg = mc6800_reg_b;
+  else if (mc6800_reg_a->isFree)
+    reg = mc6800_reg_a;
+  else
+    reg = mc6800_reg_b;
 
-          emitcode ((litval & 1) ? "bset" : "bclr", "#%d,%s", bstr, aopAdrStr (derefaop, 0, false));
-          regalloc_dry_run_cost += 2;
-        }
-      else
-        {
-          symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-          symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-          needpulla = pushRegIfSurv (mc6800_reg_a);
-          loadRegFromAop (mc6800_reg_a, AOP (right), 0);
-          emitcode ("lsra", "");
-          regalloc_dry_run_cost++;
-          emitBranch ("bcs", tlbl1);
-          emitcode ("bclr", "#%d,%s", bstr, aopAdrStr (derefaop, 0, false));
-          regalloc_dry_run_cost += 2;
-          emitBranch ("bra", tlbl2);
-          if (!regalloc_dry_run)
-            emitLabel (tlbl1);
-          emitcode ("bset", "#%d,%s", bstr, aopAdrStr (derefaop, 0, false));
-          regalloc_dry_run_cost += 2;
-          if (!regalloc_dry_run)
-            emitLabel (tlbl2);
-          pullOrFreeReg (mc6800_reg_a, needpulla);
-        }
-      goto release;
-    }
-
-  /* If the bitfield length is less than a byte */
   if (blen < 8)
     {
       mask = ((unsigned char) (0xFF << (blen + bstr)) | (unsigned char) (0xFF >> (8 - bstr)));
 
       if (AOP_TYPE (right) == AOP_LIT)
         {
-          /* Case with a bitfield length <8 and literal source
-           */
           litval = ullFromVal (AOP (right)->aopu.aop_lit);
           litval <<= bstr;
           litval &= (~mask) & 0xff;
 
-          needpulla = pushRegIfSurv (mc6800_reg_a);
-          loadRegFromAop (mc6800_reg_a, derefaop, 0);
+          needpull = pushRegIfSurv (reg);
+          loadRegFromAop (reg, derefaop, 0);
           if ((mask | litval) != 0xff)
-            {
-              emitcode ("and", "#0x%02x", mask);
-              regalloc_dry_run_cost += 2;
-            }
+            mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", mask);
           if (litval)
-            {
-              emitcode ("ora", "#0x%02llx", litval);
-              regalloc_dry_run_cost += 2;
-            }
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          storeRegToAop (mc6800_reg_a, derefaop, 0);
+            mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x%02llx", litval);
+          mc6800_dirtyReg (reg, false);
+          storeRegToAop (reg, derefaop, 0);
 
-          pullOrFreeReg (mc6800_reg_a, needpulla);
+          pullOrFreeReg (reg, needpull);
           goto release;
         }
 
-      /* Case with a bitfield length < 8 and arbitrary source
-       */
-      needpulla = pushRegIfSurv (mc6800_reg_a);
-      loadRegFromAop (mc6800_reg_a, AOP (right), 0);
-      /* shift and mask source value */
-      AccLsh (bstr);
-      emitcode ("and", "#0x%02x", (~mask) & 0xff);
-      regalloc_dry_run_cost += 2;
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      pushReg (mc6800_reg_a, true);
+      needpull = pushRegIfSurv (reg);
+      loadRegFromAop (reg, AOP (right), 0);
+      AccLsh (reg, bstr);
+      if (isOperandVolatile (result, false) || IS_VOLATILE (etype))
+        {
+          const char *tmp = allocTemp ();
 
-      loadRegFromAop (mc6800_reg_a, derefaop, 0);
-      emitcode ("and", "#0x%02x", mask);
-      emitcode ("ora", "1,s");
-      regalloc_dry_run_cost += 5;
-      storeRegToAop (mc6800_reg_a, derefaop, 0);
-      pullReg (mc6800_reg_a);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          mc6800_emitOp (reg == mc6800_reg_a ? "staa" : "stab", MODE_DIR, "*%s", tmp);
+          loadRegFromAop (reg, derefaop, 0);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", mask);
+          mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_DIR, "*%s", tmp);
+          freeTemp ();
+        }
+      else
+        {
+          accopWithAop (reg == mc6800_reg_a ? "eora" : "eorb", derefaop, 0);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          accopWithAop (reg == mc6800_reg_a ? "eora" : "eorb", derefaop, 0);
+        }
+      mc6800_dirtyReg (reg, false);
+      storeRegToAop (reg, derefaop, 0);
 
-      pullOrFreeReg (mc6800_reg_a, needpulla);
+      pullOrFreeReg (reg, needpull);
       goto release;
     }
 
-  /* Bit length is greater than 7 bits. In this case, copy  */
-  /* all except the partial byte at the end                 */
   for (rlen = blen; rlen >= 8; rlen -= 8)
     {
       transferAopAop (AOP (right), offset, derefaop, size - offset - 1);
       offset++;
     }
 
-  /* If there was a partial byte at the end */
   if (rlen)
     {
       mask = (((unsigned char) - 1 << rlen) & 0xff);
 
       if (AOP_TYPE (right) == AOP_LIT)
         {
-          /* Case with partial byte and literal source
-           */
           litval = (int) ulFromVal (AOP (right)->aopu.aop_lit);
           litval >>= (blen - rlen);
           litval &= (~mask) & 0xff;
-          needpulla = pushRegIfSurv (mc6800_reg_a);
-          loadRegFromAop (mc6800_reg_a, derefaop, size - offset - 1);
+          needpull = pushRegIfSurv (reg);
+          loadRegFromAop (reg, derefaop, size - offset - 1);
           if ((mask | litval) != 0xff)
-            {
-              emitcode ("and", "#0x%02x", mask);
-              regalloc_dry_run_cost += 2;
-            }
+            mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", mask);
           if (litval)
-            {
-              emitcode ("ora", "#0x%02llx", litval);
-              regalloc_dry_run_cost += 2;
-            }
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          storeRegToAop (mc6800_reg_a, derefaop, size - offset - 1);
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          pullOrFreeReg (mc6800_reg_a, needpulla);
+            mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x%02llx", litval);
+          mc6800_dirtyReg (reg, false);
+          storeRegToAop (reg, derefaop, size - offset - 1);
+          pullOrFreeReg (reg, needpull);
           goto release;
         }
 
-      /* Case with partial byte and arbitrary source
-       */
-      needpulla = pushRegIfSurv (mc6800_reg_a);
-      loadRegFromAop (mc6800_reg_a, AOP (right), offset);
-      emitcode ("and", "#0x%02x", (~mask) & 0xff);
-      regalloc_dry_run_cost += 2;
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      pushReg (mc6800_reg_a, true);
+      needpull = pushRegIfSurv (reg);
+      loadRegFromAop (reg, AOP (right), offset);
+      if (isOperandVolatile (result, false) || IS_VOLATILE (etype))
+        {
+          const char *tmp = allocTemp ();
 
-      loadRegFromAop (mc6800_reg_a, derefaop, size - offset - 1);
-      emitcode ("and", "#0x%02x", mask);
-      emitcode ("ora", "1,s");
-      regalloc_dry_run_cost += 5;
-      storeRegToAop (mc6800_reg_a, derefaop, size - offset - 1);
-      pullReg (mc6800_reg_a);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          mc6800_emitOp (reg == mc6800_reg_a ? "staa" : "stab", MODE_DIR, "*%s", tmp);
+          loadRegFromAop (reg, derefaop, size - offset - 1);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", mask);
+          mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_DIR, "*%s", tmp);
+          freeTemp ();
+        }
+      else
+        {
+          accopWithAop (reg == mc6800_reg_a ? "eora" : "eorb", derefaop, size - offset - 1);
+          mc6800_emitOp (reg == mc6800_reg_a ? "anda" : "andb", MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          accopWithAop (reg == mc6800_reg_a ? "eora" : "eorb", derefaop, size - offset - 1);
+        }
+      mc6800_dirtyReg (reg, false);
+      storeRegToAop (reg, derefaop, size - offset - 1);
+      pullOrFreeReg (reg, needpull);
+      goto release;
     }
-
-#endif
-  mc6800_freeReg (mc6800_reg_a);
 
 release:
   freeAsmop (right, NULL, ic, true);
