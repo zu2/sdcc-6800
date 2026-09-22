@@ -1004,7 +1004,8 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
 {
   int regidx = reg->rIdx;
 
-  setupXForAop (aop);
+  if (regidx != X_IDX)
+    setupXForAop (aop);
 
   D (emitcode (";     storeRegToAop", ""));
   DD (emitcode ("", ";     storeRegToAop (%s, %s, %d), stacked=%d",
@@ -1097,6 +1098,7 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
         {
+          wassertl (aop->type != AOP_SOF, "stx n,x uses X as both the value and the base");
           emitcode ("stx", "%s", aopAdrStr (aop, loffset, true));
           regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 :3);
         }
@@ -4627,35 +4629,40 @@ genPlus16 (iCode *ic)
       asmop *stl = (leftOp->type == AOP_STL) ? leftOp : rightOp;
       asmop *other = (leftOp->type == AOP_STL) ? rightOp : leftOp;
       const char *tmp;
+      int delta;
 
       wassertl (other->type != AOP_STL, "both operands on the stack");
       if (other->size > 1)
         {
-          loadRegFromAop (mc6800_reg_b, other, 1);
-          pushReg (mc6800_reg_b, false);
-        }
-      loadRegFromAop (mc6800_reg_b, other, 0);
-      pushReg (mc6800_reg_b, false);
-      tmp = setupTmpFromSP (_G.stackOfs + stl->aopu.aop_stk);
-      pullReg (mc6800_reg_b);
-      mc6800_emitOp ("addb", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
-      if (other->size > 1)
-        {
-          pullReg (mc6800_reg_b);
-          mc6800_emitOp ("adcb", MODE_DIR, "*%s", tmp);
+          loadRegFromAop (mc6800_reg_d, other, 0);
         }
       else
         {
-          mc6800_emitOp ("ldab", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("adcb", MODE_IMM, "#0");
+          loadRegFromAop (mc6800_reg_b, other, 0);
+          mc6800_emitOp ("clra", MODE_INH, "");
         }
-      mc6800_emitOp ("stab", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
-      freeTemp ();
+      tmp = allocTemp ();
+      delta = 1 + _G.stackOfs + stl->aopu.aop_stk + _G.stackPushes;
+      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("addb", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp ("adca", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("addb", MODE_IMM, "#%d", delta & 0xff);
+      mc6800_emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+      mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_dirtyReg (mc6800_reg_b, false);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      storeRegToAop (mc6800_reg_x, result, 0);
+      if (IS_AOP_X (result))
+        {
+          mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          freeTemp ();
+        }
+      else
+        {
+          freeTemp ();
+          storeRegToAop (mc6800_reg_d, result, 0);
+        }
       pullOrFreeReg (mc6800_reg_a, needpulla);
       pullOrFreeReg (mc6800_reg_b, needpullb);
       return;
@@ -10170,13 +10177,33 @@ genAddrOf (iCode * ic)
   /* if the operand is on the stack then we
      need to get the stack offset of this
      variable */
-  if (sym->onStack)
+  if (sym->onStack && IS_AOP_X (aopr))
     {
       needpullx = pushRegIfSurv (mc6800_reg_x);
       mc6800_useReg (mc6800_reg_x);
       setupXFromSP (_G.stackOfs + sym->stack + (sym->stack > 0 ? _G.param_offset : 0));
       storeRegToAop (mc6800_reg_x, AOP (IC_RESULT (ic)), 0);
       pullOrFreeReg (mc6800_reg_x, needpullx);
+      goto release;
+    }
+  if (sym->onStack)
+    {
+      bool needpullb = pushRegIfSurv (mc6800_reg_b);
+      bool needpulla = pushRegIfSurv (mc6800_reg_a);
+      const char *tmp = allocTemp ();
+      int delta = 1 + _G.stackOfs + sym->stack + (sym->stack > 0 ? _G.param_offset : 0) + _G.stackPushes;
+
+      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("addb", MODE_IMM, "#%d", delta & 0xff);
+      mc6800_emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+      freeTemp ();
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      mc6800_dirtyReg (mc6800_reg_b, false);
+      storeRegToAop (mc6800_reg_d, aopr, 0);
+      pullOrFreeReg (mc6800_reg_a, needpulla);
+      pullOrFreeReg (mc6800_reg_b, needpullb);
       goto release;
     }
 
