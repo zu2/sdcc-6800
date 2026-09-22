@@ -433,10 +433,10 @@ pushReg (reg_info * reg, bool freereg)
       mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
       break;
     case D_IDX:
-      mc6800_emitOp ("psha", MODE_INH, "");
+      mc6800_emitOp ("pshb", MODE_INH, "");
       updateCFA ();
       _G.stackPushes++;
-      mc6800_emitOp ("pshb", MODE_INH, "");
+      mc6800_emitOp ("psha", MODE_INH, "");
       updateCFA ();
       _G.stackPushes++;
       break;
@@ -475,10 +475,10 @@ pullReg (reg_info * reg)
       mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
       break;
     case D_IDX:
-      mc6800_emitOp ("pulb", MODE_INH, "");
+      mc6800_emitOp ("pula", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
-      mc6800_emitOp ("pula", MODE_INH, "");
+      mc6800_emitOp ("pulb", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
       break;
@@ -9448,8 +9448,8 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       const char *dsttmp = NULL;
       int dstofs;
 
-      needpulla = pushRegIfSurv (mc6800_reg_a);
       needpullb = pushRegIfSurv (mc6800_reg_b);
+      needpulla = pushRegIfSurv (mc6800_reg_a);
       mc6800_emitOp ("stx", MODE_DIR, "*%s", srctmp);
       mc6800_freeReg (mc6800_reg_x);
       mc6800_dirtyReg (mc6800_reg_x, false);
@@ -9975,6 +9975,8 @@ genPointerSet (iCode * ic, iCode * pi)
     }
   else
     {
+      if (AOP_TYPE (right) == AOP_SOF)
+        needpullb = pushRegIfSurv (mc6800_reg_b);
       needpulla = pushRegIfSurv (mc6800_reg_a);
       if (AOP_TYPE (right) == AOP_REG && (AOP (right)->aopu.aop_reg[0] == mc6800_reg_a || size > 1 && AOP (right)->aopu.aop_reg[1] == mc6800_reg_a))
         mc6800_useReg (mc6800_reg_a);
@@ -10037,7 +10039,6 @@ genPointerSet (iCode * ic, iCode * pi)
           const char *srctmp = NULL;
           int srcofs;
 
-          needpullb = pushRegIfSurv (mc6800_reg_b);
           mc6800_emitOp ("stx", MODE_DIR, "*%s", dsttmp);
           mc6800_freeReg (mc6800_reg_x);
           mc6800_dirtyReg (mc6800_reg_x, false);
