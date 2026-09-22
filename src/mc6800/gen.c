@@ -429,7 +429,6 @@ pushReg (reg_info * reg, bool freereg)
       break;
     case X_IDX:
       tmp = allocTemp ();
-      allocTemp ();
       mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
       break;
     case D_IDX:
@@ -470,7 +469,6 @@ pullReg (reg_info * reg)
       updateCFA ();
       break;
     case X_IDX:
-      freeTemp ();
       tmp = freeTemp ();
       mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
       break;
@@ -1836,7 +1834,6 @@ addConstToX (int n)
   tmp = allocTemp ();
   useb = !mc6800_reg_a->isFree && mc6800_reg_b->isFree;
   acc = useb ? mc6800_reg_b : mc6800_reg_a;
-  allocTemp ();
   needpullacc = pushRegIfUsed (acc);
   mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
   mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s+1", tmp);
@@ -1846,7 +1843,6 @@ addConstToX (int n)
   mc6800_emitOp (useb ? "adcb" : "adca", MODE_IMM, "#0x%02x", ((unsigned int) n >> 8) & 0xff);
   mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s", tmp);
   mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
-  freeTemp ();
   freeTemp ();
   mc6800_dirtyReg (acc, false);
   pullOrFreeReg (acc, needpullacc);
@@ -4309,7 +4305,6 @@ genRet (iCode * ic)
   if (bigreturn)
     {
       const char *dst = allocTemp ();
-      allocTemp ();
 
       mc6800_useReg (mc6800_reg_x);
       setupXFromSP (_G.stackOfs + 2);
@@ -4331,7 +4326,6 @@ genRet (iCode * ic)
       else if (AOP_TYPE (IC_LEFT (ic)) == AOP_SOF)
         {
           const char *src = allocTemp ();
-          allocTemp ();
 
           setupXFromSP (_G.stackOfs + AOP (IC_LEFT (ic))->aopu.aop_stk);
           mc6800_emitOp ("stx", MODE_DIR, "*%s", src);
@@ -4353,7 +4347,6 @@ genRet (iCode * ic)
               if (offset + 1 < size)
                 mc6800_emitOp ("stab", MODE_IDX, "%d,x", size - 2 - offset);
             }
-          freeTemp ();
           freeTemp ();
         }
       else if (AOP_TYPE (IC_LEFT (ic)) == AOP_DIR || AOP_TYPE (IC_LEFT (ic)) == AOP_EXT)
@@ -4381,7 +4374,6 @@ genRet (iCode * ic)
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_dirtyReg (mc6800_reg_b, false);
       mc6800_dirtyReg (mc6800_reg_x, true);
-      freeTemp ();
       freeTemp ();
       goto jumpret;
     }
@@ -6136,11 +6128,9 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
         {
           const char *tmp = allocTemp ();
 
-          allocTemp ();
           mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
-          freeTemp ();
           freeTemp ();
         }
       else
@@ -6818,7 +6808,6 @@ genAnd (iCode * ic, iCode * ifx)
       if (size == 2 && (IS_AOP_D (AOP (left)) || IS_AOP_X (AOP (left))))
         {
           ltmp = allocTemp ();
-          allocTemp ();
           if (IS_AOP_X (AOP (left)))
             {
               mc6800_emitOp ("stx", MODE_DIR, "*%s", ltmp);
@@ -6861,7 +6850,6 @@ genAnd (iCode * ic, iCode * ifx)
       freeTemp ();
       if (ltmp)
         {
-          freeTemp ();
           freeTemp ();
         }
       emitcode ("tsta", "");
@@ -7077,7 +7065,6 @@ genOr (iCode * ic, iCode * ifx)
       if (size == 2 && (IS_AOP_D (AOP (left)) || IS_AOP_X (AOP (left))))
         {
           ltmp = allocTemp ();
-          allocTemp ();
           if (IS_AOP_X (AOP (left)))
             {
               mc6800_emitOp ("stx", MODE_DIR, "*%s", ltmp);
@@ -7120,7 +7107,6 @@ genOr (iCode * ic, iCode * ifx)
       freeTemp ();
       if (ltmp)
         {
-          freeTemp ();
           freeTemp ();
         }
       emitcode ("tsta", "");
@@ -9403,7 +9389,6 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       else
         SNPRINTF (ofs, sizeof (ofs), "%s", rematOffset);
       litOffset = 0;
-      allocTemp ();
       needpullacc = pushRegIfUsed (acc);
       mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
       mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s+1", tmp);
@@ -9413,7 +9398,6 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       mc6800_emitOp (useb ? "adcb" : "adca", MODE_IMM, "#>%s", ofs);
       mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s", tmp);
       mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
-      freeTemp ();
       freeTemp ();
       mc6800_dirtyReg (acc, false);
       pullOrFreeReg (acc, needpullacc);
@@ -10011,7 +9995,6 @@ genPointerSet (iCode * ic, iCode * pi)
           else
             SNPRINTF (ofs, sizeof (ofs), "%s", rematOffset);
           litOffset = 0;
-          allocTemp ();
           needpullacc = pushRegIfUsed (acc);
           mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
           mc6800_emitOp (useb ? "ldab" : "ldaa", MODE_DIR, "*%s+1", tmp);
@@ -10021,7 +10004,6 @@ genPointerSet (iCode * ic, iCode * pi)
           mc6800_emitOp (useb ? "adcb" : "adca", MODE_IMM, "#>%s", ofs);
           mc6800_emitOp (useb ? "stab" : "staa", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
-          freeTemp ();
           freeTemp ();
           mc6800_dirtyReg (acc, false);
           pullOrFreeReg (acc, needpullacc);
