@@ -106,6 +106,10 @@ static void setupXForAop (asmop * aop);
 static void setupXFromSP (int stackOffset);
 static const char *setupTmpFromSP (int stackOffset);
 static void updateiTempRegisterUse (operand * op);
+static bool sameRegs (asmop *aop1, asmop *aop2);
+static reg_info *mc6800_findRegAop (asmop *aop, int loffset);
+static void mc6800_dirtyRegAop (asmop *aop, int loffset);
+static void mc6800_emitLabel (symbol *tlbl);
 #define RESULTONSTACK(x) \
                          (IC_RESULT(x) && IC_RESULT(x)->aop && \
                          IC_RESULT(x)->aop->type == AOP_STK )
@@ -155,6 +159,14 @@ mc6800_emitOp (const char *inst, int mode, const char *fmt, ...)
 
   regalloc_dry_run_cost += opcode->mode[mode].bytes;
   regalloc_dry_run_cost_cycles += opcode->mode[mode].cycles;
+  if (opcode->change & M_A)
+    mc6800_dirtyReg (mc6800_reg_a, false);
+  if (opcode->change & M_B)
+    mc6800_dirtyReg (mc6800_reg_b, false);
+  if (opcode->write && (mode == MODE_IDX || mode == MODE_EXT))
+    mc6800_dirtyRegAop (NULL, 0);
+  if (!strcmp (inst, "jsr") || !strcmp (inst, "bsr") || !strcmp (inst, "swi"))
+    mc6800_dirtyRegAop (NULL, 0);
 
   va_start (ap, fmt);
   va_emitcode (inst, fmt, ap);
@@ -191,6 +203,12 @@ mc6800_emitOp_o (const char *inst, asmop *aop, int loffset)
 
   regalloc_dry_run_cost += opcode->mode[mode].bytes;
   regalloc_dry_run_cost_cycles += opcode->mode[mode].cycles;
+  if (opcode->change & M_A)
+    mc6800_dirtyReg (mc6800_reg_a, false);
+  if (opcode->change & M_B)
+    mc6800_dirtyReg (mc6800_reg_b, false);
+  if (opcode->write)
+    mc6800_dirtyRegAop (aop, loffset);
 
   emitcode (inst, "%s", aopAdrStr (aop, loffset, false));
 }
@@ -227,6 +245,11 @@ mc6800_emitOpw_o (const char *inst, asmop *aop, int loffset)
 
   regalloc_dry_run_cost += opcode->mode[mode].bytes;
   regalloc_dry_run_cost_cycles += opcode->mode[mode].cycles;
+  if (opcode->write)
+    {
+      mc6800_dirtyRegAop (aop, loffset);
+      mc6800_dirtyRegAop (aop, loffset + 1);
+    }
 
   emitcode (inst, "%s", aopAdrStr (aop, loffset, true));
 }
@@ -350,11 +373,20 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
   if (freesrc)
     mc6800_freeReg (sreg);
 
-  dreg->aop = sreg->aop;
-  dreg->aopofs = sreg->aopofs;
   dreg->isFree = false;
   mc6800_dirtyReg (dreg, false);
   mc6800_useReg (dreg);
+  if (sreg->isLitConst)
+    {
+      dreg->isLitConst = sreg->isLitConst;
+      dreg->litConst = sreg->litConst;
+    }
+  else
+    {
+      dreg->aop = sreg->aop;
+      dreg->aopofs = sreg->aopofs;
+      dreg->stackOffset = sreg->stackOffset;
+    }
 }
 
 /*--------------------------------------------------------------------------*/
@@ -648,6 +680,7 @@ static void
 loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
 {
   int regidx = reg->rIdx;
+  reg_info *holder = mc6800_findRegAop (aop, loffset);
 
   if (aop->type == AOP_STL)
     {
@@ -840,6 +873,8 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
   switch (regidx)
     {
     case A_IDX:
+      if (holder == reg)
+        break;
       if (aop->type == AOP_REG && IS_AOP_X (aop) && loffset < aop->size)
         {
           const char *tmp = allocTemp ();
@@ -859,14 +894,23 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         }
       else if (aop->type == AOP_LIT)
         loadRegFromConst (reg, byteOfVal (aop->aopu.aop_lit, loffset));
+      else if (holder)
+        transferRegReg (holder, reg, false);
       else
         {
-          emitcode ("ldaa", "%s", aopAdrStr (aop, loffset, false));
-          regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 : 3);
+          mc6800_emitOp_o ("ldaa", aop, loffset);
           mc6800_dirtyReg (reg, false);
+          if ((aop->type == AOP_DIR || aop->type == AOP_EXT || aop->type == AOP_SOF)
+              && aop->op && !isOperandVolatile (aop->op, false))
+            {
+              reg->aop = aop;
+              reg->aopofs = loffset;
+            }
         }
       break;
     case B_IDX:
+      if (holder == reg)
+        break;
       if (aop->type == AOP_REG && IS_AOP_X (aop) && loffset < aop->size)
         {
           const char *tmp = allocTemp ();
@@ -886,11 +930,18 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         }
       else if (aop->type == AOP_LIT)
         loadRegFromConst (reg, byteOfVal (aop->aopu.aop_lit, loffset));
+      else if (holder)
+        transferRegReg (holder, reg, false);
       else
         {
-          emitcode ("ldab", "%s", aopAdrStr (aop, loffset, false));
-          regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 : 3);
+          mc6800_emitOp_o ("ldab", aop, loffset);
           mc6800_dirtyReg (reg, false);
+          if ((aop->type == AOP_DIR || aop->type == AOP_EXT || aop->type == AOP_SOF)
+              && aop->op && !isOperandVolatile (aop->op, false))
+            {
+              reg->aop = aop;
+              reg->aopofs = loffset;
+            }
         }
       break;
     case X_IDX:
@@ -908,8 +959,7 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
           break;
         }
       wassertl (aop->type != AOP_REG, "cannot load x from a register");
-      emitcode ("ldx", "%s", aopAdrStr (aop, loffset, true));
-      regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 : 3);
+      mc6800_emitOpw_o ("ldx", aop, loffset);
       mc6800_dirtyReg (reg, false);
       break;
     case D_IDX:
@@ -1046,8 +1096,7 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
         {
-          emitcode ("staa", "%s", aopAdrStr (aop, loffset, false));
-          regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 :3);
+          mc6800_emitOp_o ("staa", aop, loffset);
         }
       break;
     case B_IDX:
@@ -1066,8 +1115,7 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
         {
-          emitcode ("stab", "%s", aopAdrStr (aop, loffset, false));
-          regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 :3);
+          mc6800_emitOp_o ("stab", aop, loffset);
         }
       break;
     case X_IDX:
@@ -1100,8 +1148,7 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
             UNIMPLEMENTED;
             break;
           }
-          emitcode ("stx", "%s", aopAdrStr (aop, loffset, true));
-          regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 :3);
+          mc6800_emitOpw_o ("stx", aop, loffset);
         }
       break;
     case D_IDX:
@@ -1114,36 +1161,13 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
       wassert (0);
     }
 
-  /* Disable the register tracking for now */
-#if 0
-  //if (!reg->aop || (reg->aop && (reg->aop != aop)))
-  {
-    //if (reg->aop!=aop)
-    for (otheridx = 0; otheridx < mc6800_nRegs; otheridx++)
-      {
-        otherreg = mc6800_regWithIdx (otheridx);
-        if (otherreg && otherreg->aop
-            && otherreg->aop->op && aop->op && operandsEqu (otherreg->aop->op, aop->op) && (otherreg->aopofs == loffset))
-          {
-            DD (emitcode ("", "; marking %s stale", otherreg->name));
-            otherreg->aop = NULL;
-          }
-      }
-    if ((!mc6800_reg_x->aop || !mc6800_reg_h->aop) && mc6800_reg_hx->aop)
-      {
-        mc6800_reg_hx->aop = NULL;
-        DD (emitcode ("", "; marking hx stale"));
-      }
-    if ((!mc6800_reg_x->aop || !mc6800_reg_a->aop) && mc6800_reg_xa->aop)
-      {
-        mc6800_reg_xa->aop = NULL;
-        DD (emitcode ("", "; marking xa stale"));
-      }
-
-    reg->aop = aop;
-    reg->aopofs = loffset;
-  }
-#endif
+  if ((regidx == A_IDX || regidx == B_IDX)
+      && (aop->type == AOP_DIR || aop->type == AOP_EXT || aop->type == AOP_SOF)
+      && aop->op && !isOperandVolatile (aop->op, false))
+    {
+      reg->aop = aop;
+      reg->aopofs = loffset;
+    }
 }
 
 /*--------------------------------------------------------------------------*/
@@ -1354,6 +1378,7 @@ storeConstToAop (int c, asmop * aop, int loffset)
             adr++;
           /* clr dst : 3 bytes, 6 cycles */
           emitcode ("clr", "%s", adr);
+          mc6800_dirtyRegAop (aop, loffset);
           regalloc_dry_run_cost += 3;
           break;
         }
@@ -1416,6 +1441,7 @@ storeImmToAop (char *c, asmop * aop, int loffset)
             adr++;
           /* clr dst : 3 bytes, 6 cycles */
           emitcode ("clr", "%s", adr);
+          mc6800_dirtyRegAop (aop, loffset);
           regalloc_dry_run_cost += 3;
           break;
         }
@@ -1604,24 +1630,6 @@ transferAopAop (asmop *srcaop, int srcofs, asmop *dstaop, int dstofs)
 
 
 /*--------------------------------------------------------------------------*/
-/* accopWithMisc - Emit accumulator modifying instruction accop with the    */
-/*                 parameter param.                                         */
-/*--------------------------------------------------------------------------*/
-static void
-accopWithMisc (char *accop, char *param)
-{
-  const mc6800opcodedata *opcode = mc6800_getOpcodeData (accop);
-
-  assert (opcode);
-  emitcode (accop, "%s", param);
-  regalloc_dry_run_cost += ((!param[0] || !strcmp(param, ",x")) ? 1 : ((param[0]=='#' || param[0]=='*') ? 2 : 3));
-  if (opcode->change & M_A)
-    mc6800_dirtyReg (mc6800_reg_a, false);
-  if (opcode->change & M_B)
-    mc6800_dirtyReg (mc6800_reg_b, false);
-}
-
-/*--------------------------------------------------------------------------*/
 /* accopWithAop - Emit accumulator modifying instruction accop with the     */
 /*                byte at logical offset loffset of asmop aop.              */
 /*                Supports: adc, add, and, bit, cmp, eor, ora, sbc, sub     */
@@ -1629,9 +1637,6 @@ accopWithMisc (char *accop, char *param)
 static void
 accopWithAop (char *accop, asmop *aop, int loffset)
 {
-  const mc6800opcodedata *opcode = mc6800_getOpcodeData (accop);
-
-  assert (opcode);
   setupXForAop (aop);
 
   if (aop->stacked && aop->stk_aop[loffset])
@@ -1649,14 +1654,11 @@ accopWithAop (char *accop, asmop *aop, int loffset)
     {
       reg_info *reg = aop->aopu.aop_reg[loffset];
 
-      if ((reg->rIdx == XL_IDX || reg->rIdx == XH_IDX) && _G.tempOfs + 2 <= NUM_TEMP_REGS)
+      if ((reg->rIdx == XL_IDX || reg->rIdx == XH_IDX) && _G.tempOfs + 1 <= NUM_TEMP_REGS)
         {
           const char *tmp = allocTemp ();
-          allocTemp ();
           mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          emitcode (accop, (reg->rIdx == XL_IDX) ? "*%s+1" : "*%s", tmp);
-          regalloc_dry_run_cost += 2;
-          freeTemp ();
+          mc6800_emitOp (accop, MODE_DIR, (reg->rIdx == XL_IDX) ? "*%s+1" : "*%s", tmp);
           freeTemp ();
         }
       else if (reg->rIdx == B_IDX && aop->size == 1
@@ -1668,8 +1670,7 @@ accopWithAop (char *accop, asmop *aop, int loffset)
         {
           const char *tmp = allocTemp ();
           mc6800_emitOp ((reg->rIdx == A_IDX) ? "staa" : "stab", MODE_DIR, "*%s", tmp);
-          emitcode (accop, "*%s", tmp);
-          regalloc_dry_run_cost += 2;
+          mc6800_emitOp (accop, MODE_DIR, "*%s", tmp);
           freeTemp ();
         }
       else
@@ -1679,30 +1680,19 @@ accopWithAop (char *accop, asmop *aop, int loffset)
           pushReg (reg, false);
           mc6800_emitOp ("tsx", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_x, false);
-          emitcode (accop, ",x");
-          regalloc_dry_run_cost += 2;
+          mc6800_emitOp (accop, MODE_IDX, "0,x");
           pullNull (1);
         }
     }
     else
       {
-        emitcode (accop, "#0");
-        regalloc_dry_run_cost += 2;
+        mc6800_emitOp (accop, MODE_IMM, "#0");
       }
     }
   else
     {
-      emitcode (accop, "%s", aopAdrStr (aop, loffset, false));
-      if (aop->type == AOP_DIR || aop->type == AOP_LIT)
-        regalloc_dry_run_cost +=2;
-      else
-        regalloc_dry_run_cost += 3;
+      mc6800_emitOp_o (accop, aop, loffset);
     }
-
-  if (opcode->change & M_A)
-    mc6800_dirtyReg (mc6800_reg_a, false);
-  if (opcode->change & M_B)
-    mc6800_dirtyReg (mc6800_reg_b, false);
 }
 
 
@@ -1799,6 +1789,7 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
       }
     default:
       emitcode (rmwop, "%s", aopAdrStr (aop, loffset, false));
+      mc6800_dirtyRegAop (aop, loffset);
       regalloc_dry_run_cost += ((aop->type == AOP_DIR || aop->type == AOP_IMMD) ? 2 : 3);
     }
 
@@ -2355,6 +2346,38 @@ sameRegs (asmop *aop1, asmop *aop2)
     }
 
   return false;
+}
+
+static reg_info *
+mc6800_findRegAop (asmop *aop, int loffset)
+{
+  if (mc6800_reg_a->aop && sameRegs (mc6800_reg_a->aop, aop) && mc6800_reg_a->aopofs == loffset)
+    return mc6800_reg_a;
+  if (mc6800_reg_b->aop && sameRegs (mc6800_reg_b->aop, aop) && mc6800_reg_b->aopofs == loffset)
+    return mc6800_reg_b;
+  return NULL;
+}
+
+static void
+mc6800_dirtyRegAop (asmop *aop, int loffset)
+{
+  if (!aop)
+    {
+      mc6800_reg_a->aop = NULL;
+      mc6800_reg_b->aop = NULL;
+      return;
+    }
+  if (mc6800_reg_a->aop && sameRegs (mc6800_reg_a->aop, aop) && mc6800_reg_a->aopofs == loffset)
+    mc6800_reg_a->aop = NULL;
+  if (mc6800_reg_b->aop && sameRegs (mc6800_reg_b->aop, aop) && mc6800_reg_b->aopofs == loffset)
+    mc6800_reg_b->aop = NULL;
+}
+
+static void
+mc6800_emitLabel (symbol *tlbl)
+{
+  emitLabel (tlbl);
+  mc6800_dirtyRegAop (NULL, 0);
 }
 
 /*-----------------------------------------------------------------*/
@@ -2945,7 +2968,7 @@ asmopToBool (asmop *aop, reg_info *reg)
           emitcode ("tsta", "");
           regalloc_dry_run_cost += 4;
           if (!regalloc_dry_run)
-            emitLabel (tlbl);
+            mc6800_emitLabel (tlbl);
         }
       else
         {
@@ -3029,7 +3052,7 @@ asmopToBool (asmop *aop, reg_info *reg)
               regalloc_dry_run_cost += 2;
               rmwWithAop ("tst", aop, 1);
               if (!regalloc_dry_run)
-                emitLabel (tlbl);
+                mc6800_emitLabel (tlbl);
               break;
             }
         }
@@ -3071,7 +3094,7 @@ asmopToBool (asmop *aop, reg_info *reg)
           loadRegFromConst (reg, 0);
           emitBranch ("bra", tlbl);
           if (!regalloc_dry_run)
-            emitLabel (tlbl1);
+            mc6800_emitLabel (tlbl1);
           mc6800_dirtyReg (reg, false);
           loadRegFromConst (reg, 1);
         }
@@ -3081,7 +3104,7 @@ asmopToBool (asmop *aop, reg_info *reg)
           loadRegFromConst (reg, 1);
         }
       if (!regalloc_dry_run)
-        emitLabel (tlbl);
+        mc6800_emitLabel (tlbl);
       mc6800_dirtyReg (reg, false);
       mc6800_useReg (reg);
     }
@@ -4455,7 +4478,7 @@ genLabel (iCode * ic)
   if (options.debug && !regalloc_dry_run)
     debugFile->writeLabel (IC_LABEL (ic), ic);
 
-  emitLabel (IC_LABEL (ic));
+  mc6800_emitLabel (IC_LABEL (ic));
 
 }
 
@@ -4545,7 +4568,7 @@ genPlusIncr (iCode * ic)
         emitBranch ("bne", tlbl);
     }
   if (size > 1 && !regalloc_dry_run)
-    emitLabel (tlbl);
+    mc6800_emitLabel (tlbl);
   pullOrFreeReg (mc6800_reg_a, needpula);
   return true;
 }
@@ -4833,7 +4856,7 @@ genMinusDec (iCode * ic)
           emitBranch ("bne", tlbl);
           rmwWithAop ("dec", AOP (result), 1);
           if (!regalloc_dry_run)
-            emitLabel (tlbl);
+            mc6800_emitLabel (tlbl);
         }
       rmwWithAop ("dec", AOP (result), 0);
       return true;
@@ -4848,7 +4871,7 @@ genMinusDec (iCode * ic)
       emitBranch ("bcc", tlbl);
       rmwWithAop ("dec", AOP (result), 1);
       if (!regalloc_dry_run)
-        emitLabel (tlbl);
+        mc6800_emitLabel (tlbl);
     }
   pullOrFreeReg (mc6800_reg_a, needpula);
   return true;
@@ -5175,7 +5198,7 @@ genMultOneByte (operand * left, operand * right, operand * result)
           emitBranch ("bcc", tlbl4);
           rmwWithReg ("inc", mc6800_reg_x);
           if (!regalloc_dry_run)
-            emitLabel (tlbl4);
+            mc6800_emitLabel (tlbl4);
           rmwWithReg ("neg", mc6800_reg_x);
         }
 
@@ -5204,7 +5227,7 @@ genMultOneByte (operand * left, operand * right, operand * result)
       rmwWithReg ("neg", mc6800_reg_a);
       regalloc_dry_run_cost++;
       if (!regalloc_dry_run)
-        emitLabel (tlbl1);
+        mc6800_emitLabel (tlbl1);
     }
 
   if (AOP_TYPE (right) == AOP_LIT && !rUnsigned)
@@ -5239,7 +5262,7 @@ genMultOneByte (operand * left, operand * right, operand * result)
           rmwWithReg ("neg", mc6800_reg_x);
           regalloc_dry_run_cost++;
           if (!regalloc_dry_run)
-            emitLabel (tlbl2);
+            mc6800_emitLabel (tlbl2);
         }
     }
 
@@ -5260,11 +5283,11 @@ genMultOneByte (operand * left, operand * right, operand * result)
   emitBranch ("bcc", tlbl4);
   rmwWithReg ("inc", mc6800_reg_x);
   if (!regalloc_dry_run)
-    emitLabel (tlbl4);
+    mc6800_emitLabel (tlbl4);
   rmwWithReg ("neg", mc6800_reg_x);
 
   if (!regalloc_dry_run)
-    emitLabel (tlbl3);
+    mc6800_emitLabel (tlbl3);
   adjustStack (1);
   storeRegToFullAop (mc6800_reg_xa, AOP (result), true);
 #endif  
@@ -5458,7 +5481,7 @@ genDivOneByte (operand * left, operand * right, operand * result)
           regalloc_dry_run_cost += 3;
           rmwWithReg ("neg", mc6800_reg_x);
           if (!regalloc_dry_run)
-            emitLabel (tlbl1);
+            mc6800_emitLabel (tlbl1);
         }
     }
 
@@ -5493,7 +5516,7 @@ genDivOneByte (operand * left, operand * right, operand * result)
           regalloc_dry_run_cost += 3;
           rmwWithReg ("neg", mc6800_reg_a);
           if (!regalloc_dry_run)
-            emitLabel (tlbl2);
+            mc6800_emitLabel (tlbl2);
         }
     }
 
@@ -5518,7 +5541,7 @@ genDivOneByte (operand * left, operand * right, operand * result)
           if (size > 1)
             rmwWithReg ("dec", mc6800_reg_x);
           if (!regalloc_dry_run)
-            emitLabel (tlbl3);
+            mc6800_emitLabel (tlbl3);
           /* signed result now in A or XA */
           if (size == 1)
             storeRegToAop (mc6800_reg_a, AOP (result), 0);
@@ -5678,7 +5701,7 @@ genModOneByte (operand * left, operand * right, operand * result)
           emitBranch ("bpl", tlbl1);
           rmwWithReg ("neg", mc6800_reg_x);
           if (!regalloc_dry_run)
-            emitLabel (tlbl1);
+            mc6800_emitLabel (tlbl1);
         }
     }
 
@@ -5729,7 +5752,7 @@ genModOneByte (operand * left, operand * right, operand * result)
           regalloc_dry_run_cost += 3;
           rmwWithReg ("neg", mc6800_reg_a);
           if (!regalloc_dry_run)
-            emitLabel (tlbl2);
+            mc6800_emitLabel (tlbl2);
         }
     }
 
@@ -5755,7 +5778,7 @@ genModOneByte (operand * left, operand * right, operand * result)
           if (size > 1)
             rmwWithReg ("dec", mc6800_reg_x);
           if (!regalloc_dry_run)
-            emitLabel (tlbl3);
+            mc6800_emitLabel (tlbl3);
           /* signed result now in A or XA */
           if (size == 1)
             storeRegToAop (mc6800_reg_a, AOP (result), 0);
@@ -5858,7 +5881,7 @@ genIfxJump (iCode * ic, char *jval)
   emitBranch (inst, tlbl);
   emitBranch ("jmp", jlbl);
   if (!regalloc_dry_run)
-    emitLabel (tlbl);
+    mc6800_emitLabel (tlbl);
 
   /* mark the icode as generated */
   ic->generated = 1;
@@ -6015,7 +6038,7 @@ genCmp1 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
       emitBranch (branchInstCmp (opcode, sign), tlbl);
       emitBranch ("jmp", jlbl);
       if (!regalloc_dry_run)
-        emitLabel (tlbl);
+        mc6800_emitLabel (tlbl);
 
       ifx->generated = 1;
     }
@@ -6034,11 +6057,11 @@ genCmp1 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
       loadRegFromConst (reg, 0);
       emitBranch ("bra", tlbl2);
       if (!regalloc_dry_run)
-        emitLabel (tlbl1);
+        mc6800_emitLabel (tlbl1);
       mc6800_dirtyReg (reg, false);
       loadRegFromConst (reg, 1);
       if (!regalloc_dry_run)
-        emitLabel (tlbl2);
+        mc6800_emitLabel (tlbl2);
       mc6800_dirtyReg (reg, false);
       storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
       pullOrFreeReg (reg, needpull);
@@ -6094,7 +6117,7 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
           emitBranch (branchInstCmp (opcode, sign), tlbl);
           emitBranch ("jmp", jlbl);
           if (!regalloc_dry_run)
-            emitLabel (tlbl);
+            mc6800_emitLabel (tlbl);
 
           ifx->generated = 1;
         }
@@ -6113,11 +6136,11 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
           loadRegFromConst (reg, 0);
           emitBranch ("bra", tlbl2);
           if (!regalloc_dry_run)
-            emitLabel (tlbl1);
+            mc6800_emitLabel (tlbl1);
           mc6800_dirtyReg (reg, false);
           loadRegFromConst (reg, 1);
           if (!regalloc_dry_run)
-            emitLabel (tlbl2);
+            mc6800_emitLabel (tlbl2);
           mc6800_dirtyReg (reg, false);
           storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
           pullOrFreeReg (reg, needpull);
@@ -6183,13 +6206,13 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
           mc6800_emitOp ("tstb", MODE_INH, "");
           emitBranch ((opcode == '>') ? "bne" : "beq", tlbl);
           if (!regalloc_dry_run)
-            emitLabel (tlbl2);
+            mc6800_emitLabel (tlbl2);
         }
       else
         emitBranch (branchInstCmp (opcode, sign), tlbl);
       emitBranch ("jmp", jlbl);
       if (!regalloc_dry_run)
-        emitLabel (tlbl);
+        mc6800_emitLabel (tlbl);
 
       ifx->generated = 1;
     }
@@ -6207,18 +6230,18 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
           mc6800_emitOp ("tstb", MODE_INH, "");
           emitBranch ((opcode == '>') ? "bne" : "beq", tlbl1);
           if (!regalloc_dry_run)
-            emitLabel (tlbl3);
+            mc6800_emitLabel (tlbl3);
         }
       else
         emitBranch (branchInstCmp (opcode, sign), tlbl1);
       loadRegFromConst (reg, 0);
       emitBranch ("bra", tlbl2);
       if (!regalloc_dry_run)
-        emitLabel (tlbl1);
+        mc6800_emitLabel (tlbl1);
       mc6800_dirtyReg (reg, false);
       loadRegFromConst (reg, 1);
       if (!regalloc_dry_run)
-        emitLabel (tlbl2);
+        mc6800_emitLabel (tlbl2);
       mc6800_dirtyReg (reg, false);
       storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
       pullOrFreeReg (reg, needpull);
@@ -6290,7 +6313,7 @@ genCmpMANY (iCode * ic, iCode * ifx, operand * left, operand * right, int size, 
       emitBranch (branchInstCmp (opcode, sign), tlbl);
       emitBranch ("jmp", jlbl);
       if (!regalloc_dry_run)
-        emitLabel (tlbl);
+        mc6800_emitLabel (tlbl);
 
       ifx->generated = 1;
     }
@@ -6309,11 +6332,11 @@ genCmpMANY (iCode * ic, iCode * ifx, operand * left, operand * right, int size, 
       loadRegFromConst (reg, 0);
       emitBranch ("bra", tlbl2);
       if (!regalloc_dry_run)
-        emitLabel (tlbl1);
+        mc6800_emitLabel (tlbl1);
       mc6800_dirtyReg (reg, false);
       loadRegFromConst (reg, 1);
       if (!regalloc_dry_run)
-        emitLabel (tlbl2);
+        mc6800_emitLabel (tlbl2);
       mc6800_dirtyReg (reg, false);
       storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
       pullOrFreeReg (reg, needpull);
@@ -6529,10 +6552,10 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
             tlbl_EQ = newiTempLabel (NULL);
           emitBranch ("beq", tlbl_EQ);
           if (tlbl_NE)
-            emitLabel (tlbl_NE);
+            mc6800_emitLabel (tlbl_NE);
           emitBranch ("jmp", jlbl);
           if (!regalloc_dry_run)
-            emitLabel (tlbl_EQ);
+            mc6800_emitLabel (tlbl_EQ);
         }
       else
         {
@@ -6541,7 +6564,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
           emitBranch ("bne", tlbl_NE);
           emitBranch ("jmp", jlbl);
           if (!regalloc_dry_run)
-            emitLabel (tlbl_NE);
+            mc6800_emitLabel (tlbl_NE);
         }
 
       /* mark the icode as generated */
@@ -6559,12 +6582,12 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
             tlbl_EQ = newiTempLabel (NULL);
           emitBranch ("beq", tlbl_EQ);
           if (tlbl_NE)
-            emitLabel (tlbl_NE);
+            mc6800_emitLabel (tlbl_NE);
           mc6800_dirtyReg (mc6800_reg_a, false);
           loadRegFromConst (mc6800_reg_a, 0);
           emitBranch ("bra", tlbl);
           if (!regalloc_dry_run)
-            emitLabel (tlbl_EQ);
+            mc6800_emitLabel (tlbl_EQ);
           mc6800_dirtyReg (mc6800_reg_a, false);
           loadRegFromConst (mc6800_reg_a, 1);
         }
@@ -6576,13 +6599,13 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
           loadRegFromConst (mc6800_reg_a, 0);
           emitBranch ("bra", tlbl);
           if (!regalloc_dry_run)
-            emitLabel (tlbl_NE);
+            mc6800_emitLabel (tlbl_NE);
           mc6800_dirtyReg (mc6800_reg_a, false);
           loadRegFromConst (mc6800_reg_a, 1);
         }
 
       if (!regalloc_dry_run)
-        emitLabel (tlbl);
+        mc6800_emitLabel (tlbl);
       mc6800_dirtyReg (mc6800_reg_a, false);
       storeRegToFullAop (mc6800_reg_a, AOP (result), false);
       pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -6664,11 +6687,11 @@ genAndOp (iCode * ic)
   loadRegFromConst (mc6800_reg_a, 1);
   emitBranch ("bra", tlbl);
   if (!regalloc_dry_run)
-    emitLabel (tlbl0);
+    mc6800_emitLabel (tlbl0);
   mc6800_dirtyReg (mc6800_reg_a, false);
   loadRegFromConst (mc6800_reg_a, 0);
   if (!regalloc_dry_run)
-    emitLabel (tlbl);
+    mc6800_emitLabel (tlbl);
   mc6800_dirtyReg (mc6800_reg_a, false);
 
   mc6800_useReg (mc6800_reg_a);
@@ -6713,11 +6736,11 @@ genOrOp (iCode * ic)
   loadRegFromConst (mc6800_reg_a, 0);
   emitBranch ("bra", tlbl);
   if (!regalloc_dry_run)
-    emitLabel (tlbl0);
+    mc6800_emitLabel (tlbl0);
   mc6800_dirtyReg (mc6800_reg_a, false);
   loadRegFromConst (mc6800_reg_a, 1);
   if (!regalloc_dry_run)
-    emitLabel (tlbl);
+    mc6800_emitLabel (tlbl);
   mc6800_dirtyReg (mc6800_reg_a, false);
 
   mc6800_useReg (mc6800_reg_a);
@@ -6945,7 +6968,7 @@ genAnd (iCode * ic, iCode * ifx)
           offset++;
         }
       if (tlbl)
-        emitLabel (tlbl);
+        mc6800_emitLabel (tlbl);
 
       pullOrFreeReg (mc6800_reg_a, needpulla);
 
@@ -7181,7 +7204,7 @@ genOr (iCode * ic, iCode * ifx)
           offset++;
         }
       if (tlbl)
-        emitLabel (tlbl);
+        mc6800_emitLabel (tlbl);
 
       pullOrFreeReg (mc6800_reg_b, needpullb);
       pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -7362,7 +7385,7 @@ genXor (iCode * ic, iCode * ifx)
                * and we can't genIfxJump, if there is none
                */
               if (!regalloc_dry_run)
-                emitLabel (tlbl);
+                mc6800_emitLabel (tlbl);
               pullOrFreeReg (mc6800_reg_b, needpullb);
               pullOrFreeReg (mc6800_reg_a, needpulla);
               if (ifx)
@@ -7587,7 +7610,7 @@ genRRC (iCode * ic)
       emitBranch ("bcc", tlbl);
       mc6800_emitOp ("oraa", MODE_IMM, "#0x80");
       if (!regalloc_dry_run)
-        emitLabel (tlbl);
+        mc6800_emitLabel (tlbl);
       mc6800_dirtyReg (mc6800_reg_d, false);
       storeRegToAop (mc6800_reg_d, AOP (result), 0);
       pullOrFreeReg (mc6800_reg_d, needpull);
@@ -7838,7 +7861,7 @@ AccRol (reg_info *reg, int shCount)
               emitBranch ("bcc", tlbl);
               mc6800_emitOp (reg == mc6800_reg_a ? "oraa" : "orab", MODE_IMM, "#0x80");
               if (!regalloc_dry_run)
-                emitLabel (tlbl);
+                mc6800_emitLabel (tlbl);
             }
         }
     }
@@ -8435,7 +8458,7 @@ genLeftShift (iCode *ic)
     emitBranch ("bra", tlbl1);
 
   if (!regalloc_dry_run)
-    emitLabel (tlbl);
+    mc6800_emitLabel (tlbl);
 
   shift = "asl";
   for (offset = 0; offset < size; offset++)
@@ -8448,13 +8471,13 @@ genLeftShift (iCode *ic)
       rmwWithReg ("dec", countreg);
       emitBranch ("bne", tlbl);
       if (!regalloc_dry_run)
-        emitLabel (tlbl1);
+        mc6800_emitLabel (tlbl1);
       pullOrFreeReg (countreg, needpullcountreg);
     }
   else
     {
       if (!regalloc_dry_run)
-        emitLabel (tlbl1);
+        mc6800_emitLabel (tlbl1);
       emitcode ("dec", "%s", tmp);
       regalloc_dry_run_cost += 3;
       emitBranch ("bpl", tlbl);
@@ -8785,7 +8808,7 @@ genRightShift (iCode * ic)
     emitBranch ("bra", tlbl1);
 
   if (!regalloc_dry_run)
-    emitLabel (tlbl);
+    mc6800_emitLabel (tlbl);
 
   shift = sign ? "asr" : "lsr";
   for (offset = size - 1; offset >= 0; offset--)
@@ -8798,13 +8821,13 @@ genRightShift (iCode * ic)
       rmwWithReg ("dec", countreg);
       emitBranch ("bne", tlbl);
       if (!regalloc_dry_run)
-        emitLabel (tlbl1);
+        mc6800_emitLabel (tlbl1);
       pullOrFreeReg (countreg, needpullcountreg);
     }
   else
     {
       if (!regalloc_dry_run)
-        emitLabel (tlbl1);
+        mc6800_emitLabel (tlbl1);
       emitcode ("dec", "%s", tmp);
       regalloc_dry_run_cost += 3;
       emitBranch ("bpl", tlbl);
@@ -10493,14 +10516,14 @@ genJumpTab (iCode * ic)
 
   /* now generate the jump labels */
   if (!regalloc_dry_run)
-    emitLabel (jtablo);
+    mc6800_emitLabel (jtablo);
   for (jtab = setFirstItem (IC_JTLABELS (ic)); jtab; jtab = setNextItem (IC_JTLABELS (ic)))
     {
       emitcode (".db", "%05d$", labelKey2num (jtab->key));
       regalloc_dry_run_cost++;
     }
   if (!regalloc_dry_run)
-    emitLabel (jtabhi);
+    mc6800_emitLabel (jtabhi);
   for (jtab = setFirstItem (IC_JTLABELS (ic)); jtab; jtab = setNextItem (IC_JTLABELS (ic)))
     {
       emitcode (".db", ">%05d$", labelKey2num (jtab->key));
@@ -10559,7 +10582,7 @@ genCast (iCode * ic)
             }
           emitcode ("oraa", "#0x%02x", ~topbytemask & 0xff);
           regalloc_dry_run_cost += 6;
-          emitLabel (tlbl);
+          mc6800_emitLabel (tlbl);
         }
       storeRegToAop (mc6800_reg_a, result->aop, result->aop->size - 1);
       if (save_a)
@@ -10622,9 +10645,9 @@ genCast (iCode * ic)
                   {
                     loadRegFromAop (mc6800_reg_a, AOP (right), 0);
                   }
-                accopWithMisc ("rola", "");
-                accopWithMisc ("ldaa", zero);
-                accopWithMisc ("sbca", zero);
+                mc6800_emitOp ("rola", MODE_INH, "");
+                mc6800_emitOp ("ldaa", MODE_IMM, "#0x00");
+                mc6800_emitOp ("sbca", MODE_IMM, "#0x00");
                 if (masktopbyte)
                   {
                     emitcode ("anda", "#0x%02x", topbytemask);
@@ -10692,9 +10715,9 @@ genCast (iCode * ic)
     }
     else if (size)
       {
-        accopWithMisc ("rola", "");
-        accopWithMisc ("ldaa", zero);
-        accopWithMisc ("sbca", zero);
+        mc6800_emitOp ("rola", MODE_INH, "");
+        mc6800_emitOp ("ldaa", MODE_IMM, "#0x00");
+        mc6800_emitOp ("sbca", MODE_IMM, "#0x00");
         while (size--)
           {
             if (!size && masktopbyte)
