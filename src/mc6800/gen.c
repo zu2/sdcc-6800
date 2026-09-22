@@ -1453,11 +1453,11 @@ storeImmToAop (char *c, asmop * aop, int loffset)
           storeRegToAop (mc6800_reg_a, aop, loffset);
           mc6800_freeReg (mc6800_reg_a);
         }
-      else if (mc6800_reg_x->isFree)
+      else if (mc6800_reg_b->isFree)
         {
-          loadRegFromImm (mc6800_reg_x, c);
-          storeRegToAop (mc6800_reg_x, aop, loffset);
-          mc6800_freeReg (mc6800_reg_x);
+          loadRegFromImm (mc6800_reg_b, c);
+          storeRegToAop (mc6800_reg_b, aop, loffset);
+          mc6800_freeReg (mc6800_reg_b);
         }
       else
         {
