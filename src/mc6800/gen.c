@@ -1154,6 +1154,10 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
     case D_IDX:
       if ((aop->type == AOP_REG) && IS_AOP_D (aop))
         break;
+      if (aop->type == AOP_REG && IS_AOP_X (aop) && loffset == 0) {
+        transferRegReg (reg, mc6800_reg_x, false);
+        break;
+      }
       storeRegToAop (mc6800_reg_b, aop, loffset);
       storeRegToAop (mc6800_reg_a, aop, loffset + 1);
       break;
@@ -4690,8 +4694,7 @@ genPlus16 (iCode *ic)
   loadRegFromAop (mc6800_reg_a, leftOp, 1);
   accopWithAop ("addb", rightOp, 0);
   accopWithAop ("adca", rightOp, 1);
-  storeRegToAop (mc6800_reg_b, result, 0);
-  storeRegToAop (mc6800_reg_a, result, 1);
+  storeRegToAop (mc6800_reg_d, result, 0);
   
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -5014,8 +5017,7 @@ genMinus16 (iCode *ic)
       accopWithAop ("subb", rightOp, 0);
       accopWithAop ("sbca", rightOp, 1);
     }
-  storeRegToAop (mc6800_reg_b, result, 0);
-  storeRegToAop (mc6800_reg_a, result, 1);
+  storeRegToAop (mc6800_reg_d, result, 0);
 
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -10809,6 +10811,12 @@ genReceive (iCode * ic)
   if (ic->argreg)
     {
       wassert (size <= 2);
+      if (size == 2 && ic->argreg == 1 && IS_AOP_X (AOP (IC_RESULT (ic)))) {
+        storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
+        mc6800_freeReg (mc6800_reg_b);
+        mc6800_freeReg (mc6800_reg_a);
+        size = 0;
+      }
       while (size--)
         {
           transferAopAop (mc6800_aop_pass[offset + (ic->argreg - 1)], 0, AOP (IC_RESULT (ic)), offset);

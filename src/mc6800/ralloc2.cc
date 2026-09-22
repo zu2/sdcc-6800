@@ -538,6 +538,7 @@ static bool assignment_hopeless(const assignment &a, unsigned short int i, const
   const i_assignment_t &ia = a.i_assignment;
 
   if((ia.registers[REG_XL][1] >= 0 && ia.registers[REG_XH][1] >= 0) &&
+      (ia.registers[REG_XL][0] >= 0) == (ia.registers[REG_XH][0] >= 0) &&
       !Xinst_ok(a, i, G, I))
     return(true);
 
