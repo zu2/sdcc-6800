@@ -1015,58 +1015,6 @@ loadRegHXAfromAop(asmop * aopH, int ofsH, asmop * aopX, int ofsX, asmop * aopA, 
   printf("; loadRegHXAfromAop\n");
 }
 
-/*--------------------------------------------------------------------------*/
-/* forceStackedAop - Reserve space on the stack for asmop aop; when         */
-/*                   freeAsmop is called with aop, the stacked data will    */
-/*                   be copied to the original aop location.                */
-/*--------------------------------------------------------------------------*/
-static asmop *
-forceStackedAop (asmop * aop, bool copyOrig)
-{
-  reg_info *reg;
-  int loffset;
-  asmop *newaop = newAsmop (aop->type);
-  memcpy (newaop, aop, sizeof (*newaop));
-
-  DD (emitcode ("", "; forcedStackAop %s", aopName (aop)));
-
-#if 0
-  if (copyOrig && mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
-  else if (copyOrig && mc6800_reg_x->isFree)
-    reg = mc6800_reg_x;
-  else
-    reg = NULL;
-
-  for (loffset = 0; loffset < newaop->size; loffset++)
-    {
-      asmop *aopsof = newAsmop (AOP_SOF);
-      aopsof->size = 1;
-      if (copyOrig && reg)
-        {
-          loadRegFromAop (reg, aop, loffset);
-          aopsof->aopu.aop_stk = pushReg (reg, false);
-        }
-      else
-        {
-          aopsof->aopu.aop_stk = pushReg (mc6800_reg_a, false);
-        }
-      aopsof->op = aop->op;
-      newaop->stk_aop[loffset] = aopsof;
-    }
-  newaop->stacked = 1;
-
-  if (!reg && copyOrig)
-    {
-      for (loffset = 0; loffset < newaop->size; loffset++)
-        {
-          transferAopAop (aop, loffset, newaop, loffset);
-        }
-    }
-#endif
-  return newaop;
-}
-
 
 /*--------------------------------------------------------------------------*/
 /* storeRegToAop - Store register reg to logical offset loffset of aop.     */
@@ -8117,53 +8065,6 @@ movLeft2Result (operand * left, int offl, operand * result, int offr, int sign)
 }
 
 
-/*-----------------------------------------------------------------*/
-/* shiftL2Left2Result - shift left two bytes from left to result   */
-/*-----------------------------------------------------------------*/
-static void
-shiftL2Left2Result (operand *left, int offl, operand *result, int offr, int shCount)
-{
-  int i;
-  bool needpula;
-  bool needpulx;
-
-  D (emitcode (";     shiftL2Left2Result", ""));
-
-#if 0
-  if (!IS_AOP_D (AOP (left)) && !IS_AOP_A (AOP (left)))
-    needpula = pushRegIfUsed (mc6800_reg_a);
-  else
-    needpula = false;
-  if (!IS_AOP_D (AOP (left)))
-    needpulx = pushRegIfUsed (mc6800_reg_x);
-  else
-    needpulx = false;
-
-  loadRegFromAop (mc6800_reg_xa, AOP (left), offl);
-
-  switch (shCount)
-    {
-    case 7:
-      rmwWithReg ("lsr", mc6800_reg_x);
-      rmwWithReg ("ror", mc6800_reg_a);
-      transferRegReg (mc6800_reg_a, mc6800_reg_x, false);
-      rmwWithReg ("clr", mc6800_reg_a);
-      rmwWithReg ("ror", mc6800_reg_a);
-      break;
-    default:
-      for (i = 0; i < shCount; i++)
-        {
-          rmwWithReg ("lsl", mc6800_reg_a);
-          rmwWithReg ("rol", mc6800_reg_x);
-        }
-    }
-  storeRegToAop (mc6800_reg_xa, AOP (result), offr);
-
-  pullOrFreeReg (mc6800_reg_x, needpulx);
-  pullOrFreeReg (mc6800_reg_a, needpula);
-#endif
-}
-
 
 
 /*-----------------------------------------------------------------*/
@@ -8281,52 +8182,6 @@ genlshTwo (operand *result, operand *left, int shCount)
       pullOrFreeReg (mc6800_reg_b, needpullb);
       pullOrFreeReg (mc6800_reg_a, needpulla);
     }
-}
-
-/*-----------------------------------------------------------------*/
-/* shiftLLong - shift left one long from left to result            */
-/* offr = LSB or MSB16                                             */
-/*-----------------------------------------------------------------*/
-static void
-shiftLLong (operand * left, operand * result, int offr)
-{
-//  char *l;
-//  int size = AOP_SIZE (result);
-
-  bool needpula = false;
-  bool needpulx = false;
-
-  D (emitcode (";     shiftLLong", ""));
-
-#if 0
-  needpula = pushRegIfUsed (mc6800_reg_a);
-  needpulx = pushRegIfUsed (mc6800_reg_x);
-
-  loadRegFromAop (mc6800_reg_xa, AOP (left), LSB);
-  rmwWithReg ("lsl", mc6800_reg_a);
-  rmwWithReg ("rol", mc6800_reg_x);
-
-  if (offr == LSB)
-    {
-      storeRegToAop (mc6800_reg_xa, AOP (result), offr);
-      loadRegFromAop (mc6800_reg_xa, AOP (left), MSB24);
-      rmwWithReg ("rol", mc6800_reg_a);
-      rmwWithReg ("rol", mc6800_reg_x);
-      storeRegToAop (mc6800_reg_xa, AOP (result), offr + 2);
-    }
-  else if (offr == MSB16)
-    {
-      storeRegToAop (mc6800_reg_a, AOP (result), offr);
-      loadRegFromAop (mc6800_reg_a, AOP (left), MSB24);
-      storeRegToAop (mc6800_reg_x, AOP (result), offr + 1);
-      rmwWithReg ("rol", mc6800_reg_a);
-      storeRegToAop (mc6800_reg_a, AOP (result), offr + 2);
-      storeConstToAop (0, AOP (result), 0);
-    }
-
-  pullOrFreeReg (mc6800_reg_x, needpulx);
-  pullOrFreeReg (mc6800_reg_a, needpula);
-#endif
 }
 
 /*-----------------------------------------------------------------*/
@@ -8702,63 +8557,6 @@ genrshTwo (operand * result, operand * left, int shCount, int sign)
       pullOrFreeReg (mc6800_reg_b, needpullb);
       pullOrFreeReg (mc6800_reg_a, needpulla);
     }
-}
-
-/*-----------------------------------------------------------------*/
-/* shiftRLong - shift right one long from left to result           */
-/* offl = LSB or MSB16                                             */
-/*-----------------------------------------------------------------*/
-static void
-shiftRLong (operand * left, int offl, operand * result, int sign)
-{
-  bool needpula = pushRegIfSurv (mc6800_reg_a);
-  bool needpulx = pushRegIfSurv (mc6800_reg_x);
-
-  D (emitcode (";     shiftRLong", ""));
-
-#if 0
-  if (offl == LSB)
-    {
-      loadRegFromAop (mc6800_reg_xa, AOP (left), MSB24);
-      if (sign)
-        rmwWithReg ("asr", mc6800_reg_x);
-      else
-        rmwWithReg ("lsr", mc6800_reg_x);
-      rmwWithReg ("ror", mc6800_reg_a);
-      storeRegToAop (mc6800_reg_xa, AOP (result), MSB24);
-      loadRegFromAop (mc6800_reg_xa, AOP (left), LSB);
-    }
-  else if (offl == MSB16)
-    {
-      loadRegFromAop (mc6800_reg_a, AOP (left), MSB32);
-      if (sign)
-        rmwWithReg ("asr", mc6800_reg_a);
-      else
-        rmwWithReg ("lsr", mc6800_reg_a);
-      loadRegFromAop (mc6800_reg_x, AOP (left), MSB24);
-      storeRegToAop (mc6800_reg_a, AOP (result), MSB24);
-      loadRegFromAop (mc6800_reg_a, AOP (left), MSB16);
-    }
-
-  rmwWithReg ("ror", mc6800_reg_x);
-  rmwWithReg ("ror", mc6800_reg_a);
-  storeRegToAop (mc6800_reg_xa, AOP (result), LSB);
-
-  if (offl == MSB16)
-    {
-      if (sign)
-        {
-          loadRegFromAop (mc6800_reg_a, AOP (left), MSB24);
-          storeRegSignToUpperAop (mc6800_reg_a, AOP (result), MSB32, sign);
-        }
-      else
-        {
-          storeConstToAop (0, AOP (result), MSB32);
-        }
-    }
-  pullOrFreeReg (mc6800_reg_x, needpulx);
-  pullOrFreeReg (mc6800_reg_a, needpula);
-#endif
 }
 
 /*-----------------------------------------------------------------*/
