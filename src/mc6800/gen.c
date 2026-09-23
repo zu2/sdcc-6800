@@ -10886,48 +10886,109 @@ release:
 static int
 genDjnz (iCode * ic, iCode * ifx)
 {
+  operand *left = IC_LEFT (ic);
+  operand *result = IC_RESULT (ic);
+
   if (!ifx)
+    return 0;
+  if (!IS_OP_LITERAL (IC_RIGHT (ic)) || operandLitValue (IC_RIGHT (ic)) != 1)
     return 0;
 
   D (emitcode (";     genDjnz", ""));
 
-#if 0
-  /* if the minus is not of the form
-     a = a - 1 */
-  if (!isOperandEqual (IC_RESULT (ic), IC_LEFT (ic)) || !IS_OP_LITERAL (IC_RIGHT (ic)))
+  aopOp (left, ic, false);
+  aopOp (result, ic, true);
+
+  if (AOP_SIZE (left) != AOP_SIZE (result))
     return 0;
 
-  if (operandLitValue (IC_RIGHT (ic)) != 1)
-    return 0;
-
-  /* if the size of this greater than one then no
-     saving, unless it's already in HX  */
-  aopOp (IC_RESULT (ic), ic, false);
-  if (AOP_SIZE (IC_RESULT (ic)) > 1 && !IS_AOP_HX (AOP (IC_RESULT (ic))))
+  if ((IS_AOP_A (AOP (left)) || IS_AOP_B (AOP (left))) && !sameRegs (AOP (left), AOP (result)))
     {
-      freeAsmop (IC_RESULT (ic), NULL, ic, true);
-      return 0;
+      mc6800_emitOp (IS_AOP_A (AOP (left)) ? "cmpa" : "cmpb", MODE_IMM, "#1");
+      genIfxJump (ifx, "a");
     }
-
-  /* Trying to use dbnz directly requires some convoluted branch/jumps */
-  /* to handle the cases where the target is far away. The peepholer   */
-  /* is left to clean it up for the simple cases. However, this leaves */
-  /* a needlessly high dry run cost. So we do not use dbnz and instead */
-  /* generate simpler (and less constly) code that the peepholer can   */
-  /* easily transform to dbnz if the target is close enough. Thus the  */
-  /* register allocator gets a better idea of the true cost. */
-  if (IS_AOP_HX (AOP (IC_RESULT (ic))))
+  else if (IS_AOP_X (AOP (left)) && !sameRegs (AOP (left), AOP (result)))
     {
-      emitcode ("aix", "#-1");
-      mc6800_dirtyReg (mc6800_reg_hx, false);
-      emitcode ("cphx", "#0");
-      regalloc_dry_run_cost += 5;
+      mc6800_emitOp ("cpx", MODE_IMM, "#1");
+      genIfxJump (ifx, "a");
+    }
+  else if (IS_AOP_D (AOP (left)) && !sameRegs (AOP (left), AOP (result)))
+    {
+      symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+      symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+      mc6800_emitOp ("cmpb", MODE_IMM, "#1");
+      if (IC_TRUE (ifx))
+        {
+          emitBranch ("bne", tlbl1);
+          mc6800_emitOp ("tsta", MODE_INH, "");
+          emitBranch ("beq", tlbl2);
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl1);
+          emitBranch ("jmp", IC_TRUE (ifx));
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl2);
+        }
+      else
+        {
+          emitBranch ("bne", tlbl2);
+          mc6800_emitOp ("tsta", MODE_INH, "");
+          emitBranch ("bne", tlbl2);
+          emitBranch ("jmp", IC_FALSE (ifx));
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl2);
+        }
+      ifx->generated = 1;
+    }
+  else if (IS_AOP_A (AOP (result)) || IS_AOP_B (AOP (result)))
+    {
+      loadRegFromAop (AOP (result)->aopu.aop_reg[0], AOP (left), 0);
+      mc6800_emitOp (IS_AOP_A (AOP (result)) ? "deca" : "decb", MODE_INH, "");
+      genIfxJump (ifx, "a");
+    }
+  else if (IS_AOP_X (AOP (result)))
+    {
+      loadRegFromAop (mc6800_reg_x, AOP (left), 0);
+      mc6800_emitOp ("dex", MODE_INH, "");
+      genIfxJump (ifx, "a");
+    }
+  else if (IS_AOP_D (AOP (result)))
+    {
+      symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+      symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+      mc6800_emitOp ("subb", MODE_IMM, "#1");
+      emitBranch ("bne", tlbl1);
+      mc6800_emitOp ("tsta", MODE_INH, "");
+      if (IC_TRUE (ifx))
+        {
+          emitBranch ("beq", tlbl2);
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl1);
+          mc6800_emitOp ("sbca", MODE_IMM, "#0");
+          emitBranch ("jmp", IC_TRUE (ifx));
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl2);
+        }
+      else
+        {
+          emitBranch ("bne", tlbl2);
+          emitBranch ("jmp", IC_FALSE (ifx));
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl1);
+          mc6800_emitOp ("sbca", MODE_IMM, "#0");
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl2);
+        }
+      mc6800_dirtyReg (mc6800_reg_d, false);
+      ifx->generated = 1;
     }
   else
-    rmwWithAop ("dec", AOP (IC_RESULT (ic)), 0);
-  genIfxJump (ifx, "a");
-#endif
-  freeAsmop (IC_RESULT (ic), NULL, ic, true);
+    return 0;
+
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (result, NULL, ic, true);
   return 1;
 }
 
