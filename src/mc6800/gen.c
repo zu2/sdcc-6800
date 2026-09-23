@@ -2745,83 +2745,6 @@ aopDerefAop (asmop * aop, int offset)
 
 
 /*-----------------------------------------------------------------*/
-/* aopOpExtToIdx - attempt to convert AOP_EXT to AOP_IDX           */
-/*-----------------------------------------------------------------*/
-static void
-aopOpExtToIdx(asmop * result, asmop *left, asmop *right)
-{
-  int accesses=0;
-  int resultAccesses=0;
-  int leftAccesses=0;
-  int rightAccesses=0;
-  asmop * winner;
-  int winnerAccesses;
-
-  D (emitcode (";     aopOpExtToIdx", ""));
-#if 0
-  if (!mc6800_reg_x->isFree || !mc6800_reg_h->isFree)
-    return;
-
-  /* Need to replace at least two extended mode accesses with indexed */
-  /* to break even with the extra cost of loading HX. Do a quick check */
-  /* to see if anything is using extended mode at all. */
-  if (result && result->type == AOP_EXT)
-    accesses += result->size;
-  if (left && left->type == AOP_EXT)
-    accesses += left->size;
-  if (right && right->type == AOP_EXT)
-    accesses += right->size;
-  if (accesses<2)
-    return;
-  
-  /* Decide which is the best asmop to make indexed. */
-  if (result && result->type == AOP_EXT)
-    {
-      resultAccesses = result->size;
-      if (result->op && left && left->op && result->op->key == left->op->key)
-        resultAccesses += result->size;
-      if (result->op && right && right->op && result->op->key == right->op->key)
-        resultAccesses += result->size;
-    }
-  if (left && left->type == AOP_EXT)
-    {
-      leftAccesses = left->size;
-      if (left->op && right && right->op && left->op->key == right->op->key)
-        leftAccesses += left->size;
-    }
-  if (right && right->type == AOP_EXT)
-    {
-      rightAccesses = right->size;
-    }
-
-  winner = result; winnerAccesses = resultAccesses;
-  if (leftAccesses > winnerAccesses)
-    {
-      winnerAccesses = leftAccesses;
-      winner = left;
-    }
-  if (rightAccesses > winnerAccesses)
-    {
-      winnerAccesses = rightAccesses;
-      winner = right;
-    }
-
-  /* Make sure there were enough accesses of a single variable to be worthwhile. */ 
-  if (winnerAccesses < 2)
-    return;
-
-  if (winner->op && result && result->op && winner->op->key == result->op->key)
-    result->type = AOP_IDX;
-  if (winner->op && left && left->op && winner->op->key == left->op->key)
-    left->type = AOP_IDX;
-  if (winner->op && right && right->op && winner->op->key == right->op->key)
-    right->type = AOP_IDX;
-  loadRegFromImm (mc6800_reg_d, winner->aopu.aop_dir);
-#endif
-}
-
-
-/*-----------------------------------------------------------------*/
 /* aopAdrStr - for referencing the address of the aop              */
 /*-----------------------------------------------------------------*/
 /* loffset seems to have a weird meaning here. It seems to be nonzero in some places where one would expect an offset to be zero */
@@ -3264,9 +3187,6 @@ genCopy (operand *result, operand *source)
       return;
     }
 
-  if (IS_MC6800 && (size > 2) && size == srcsize /* todo: load adjusted value into x when srcsize > size to generate better code */)
-     aopOpExtToIdx (AOP (result), NULL, AOP (source));
-
   /* general case */
   bool need_lsb_to_msb_order = true;
   if ((result->aop->type == AOP_DIR || result->aop->type == AOP_SOF) && // Avoid overwriting still-needed value.
@@ -3311,18 +3231,7 @@ genCopy (operand *result, operand *source)
             }
           else
             {
-              if (AOP_TYPE (source) == AOP_IDX && AOP_TYPE (result) == AOP_DIR)
-                {
-                  emitcode ("mov", ",x+,%s", aopAdrStr (AOP (result), offset, false));
-                  regalloc_dry_run_cost += 2;
-                }
-              else if (AOP_TYPE (source) == AOP_DIR && AOP_TYPE (result) == AOP_IDX)
-                {
-                  emitcode ("mov", "%s,x+", aopAdrStr (AOP (source), offset, false));
-                  regalloc_dry_run_cost += 2;
-                }
-              else
-                transferAopAop (AOP (source), offset, AOP (result), offset);
+              transferAopAop (AOP (source), offset, AOP (result), offset);
               offset++;
               size--;
             }
@@ -3344,20 +3253,7 @@ genCopy (operand *result, operand *source)
             }
           else
             {
-              if (AOP_TYPE (source) == AOP_IDX && AOP_TYPE (result) == AOP_DIR)
-                {
-                  emitcode ("mov", ",x+,%s", aopAdrStr (AOP (result), offset, false));
-                  regalloc_dry_run_cost += 2;
-                }
-              else if (AOP_TYPE (source) == AOP_DIR && AOP_TYPE (result) == AOP_IDX)
-                {
-                  emitcode ("mov", "%s,x+", aopAdrStr (AOP (source), offset, false));
-                  regalloc_dry_run_cost += 2;
-                }
-              else
-                {
-                  transferAopAop (AOP (source), offset, AOP (result), offset);
-                }
+              transferAopAop (AOP (source), offset, AOP (result), offset);
               offset--;
               size--;
             }
@@ -4824,8 +4720,6 @@ genPlus (iCode *ic)
   DD (emitcode ("", ";  right size = %d", getDataSize (IC_RIGHT (ic))));
   DD (emitcode ("", ";  result size = %d", getDataSize (IC_RESULT (ic))));
 
-  aopOpExtToIdx (AOP (IC_RESULT (ic)), AOP (IC_LEFT (ic)), AOP (IC_RIGHT (ic)));
-
   size = getDataSize (IC_RESULT (ic));
 
   leftOp = AOP (IC_LEFT (ic));
@@ -5169,8 +5063,6 @@ genMinus (iCode * ic)
      of subtract then GOOD for ME */
   if (!maskedtopbyte && genMinusDec (ic))
     goto release;
-
-  aopOpExtToIdx (AOP (IC_RESULT (ic)), AOP (IC_LEFT (ic)), AOP (IC_RIGHT (ic)));
 
   size = getDataSize (IC_RESULT (ic));
 
@@ -10528,9 +10420,6 @@ genAssignLit (operand * result, operand * right)
   if (!remaining)
     return true;
 
-  if (remaining > 2)
-    aopOpExtToIdx (AOP (result), NULL, NULL);
-  
   /* Assign bytes that are already in A and/or X */
   for (offset=size-1; offset>=0; offset--)
     {
