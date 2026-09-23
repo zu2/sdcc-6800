@@ -3644,6 +3644,7 @@ genIpush (iCode * ic)
           loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (ic)), offset++);
           pushReg (mc6800_reg_a, true);
         }
+      freeAsmop (IC_LEFT (ic), NULL, ic, true);
       return;
     }
 
