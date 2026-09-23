@@ -8533,7 +8533,12 @@ genLeftShift (iCode *ic)
   wassertl (!IS_AOP_WITH_X (AOP (result)),
             "left shift by a variable count with the result in x is not supported yet");
 
-  if (!IS_AOP_WITH_B (AOP (result)))
+  if (IS_AOP_X (AOP (right)))
+    countreg = (AOP_TYPE (left) != AOP_SOF && AOP_TYPE (result) != AOP_SOF) ? mc6800_reg_x : NULL;
+  else if (AOP_TYPE (right) == AOP_REG && AOP_TYPE (result) == AOP_REG
+      && (AOP (right)->regmask & AOP (result)->regmask))
+    countreg = NULL;
+  else if (!IS_AOP_WITH_B (AOP (result)))
     countreg = mc6800_reg_b;
   else if (!IS_AOP_WITH_A (AOP (result)))
     countreg = mc6800_reg_a;
@@ -8541,7 +8546,9 @@ genLeftShift (iCode *ic)
   if (!countreg)
     {
       tmp = allocTemp ();
-      if (AOP_TYPE (right) == AOP_REG)
+      if (IS_AOP_X (AOP (right)))
+        mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      else if (AOP_TYPE (right) == AOP_REG)
         mc6800_emitOp (AOP (right)->aopu.aop_reg[0]->rIdx == A_IDX ? "staa" : "stab", MODE_DIR, "*%s", tmp);
       else
         {
@@ -8575,8 +8582,13 @@ genLeftShift (iCode *ic)
       needpullcountreg = pushRegIfSurv (countreg);
       countreg->isFree = false;
       loadRegFromAop (countreg, AOP (right), 0);
-      emitcode (countreg == mc6800_reg_a ? "tsta" : "tstb", "");
-      regalloc_dry_run_cost++;
+      if (countreg == mc6800_reg_x)
+        mc6800_emitOp ("cpx", MODE_IMM, "#0");
+      else
+        {
+          emitcode (countreg == mc6800_reg_a ? "tsta" : "tstb", "");
+          regalloc_dry_run_cost++;
+        }
       emitBranch ("beq", tlbl1);
     }
   else
@@ -8593,7 +8605,10 @@ genLeftShift (iCode *ic)
     }
   if (countreg)
     {
-      rmwWithReg ("dec", countreg);
+      if (countreg == mc6800_reg_x)
+        mc6800_emitOp ("dex", MODE_INH, "");
+      else
+        rmwWithReg ("dec", countreg);
       emitBranch ("bne", tlbl);
       if (!regalloc_dry_run)
         mc6800_emitLabel (tlbl1);
@@ -8603,7 +8618,7 @@ genLeftShift (iCode *ic)
     {
       if (!regalloc_dry_run)
         mc6800_emitLabel (tlbl1);
-      emitcode ("dec", "%s", tmp);
+      emitcode ("dec", IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
       regalloc_dry_run_cost += 3;
       emitBranch ("bpl", tlbl);
       freeTemp ();
@@ -8885,7 +8900,12 @@ genRightShift (iCode * ic)
   wassertl (!IS_AOP_WITH_X (AOP (result)),
             "right shift by a variable count with the result in x is not supported yet");
 
-  if (!IS_AOP_WITH_B (AOP (result)))
+  if (IS_AOP_X (AOP (right)))
+    countreg = (AOP_TYPE (left) != AOP_SOF && AOP_TYPE (result) != AOP_SOF) ? mc6800_reg_x : NULL;
+  else if (AOP_TYPE (right) == AOP_REG && AOP_TYPE (result) == AOP_REG
+      && (AOP (right)->regmask & AOP (result)->regmask))
+    countreg = NULL;
+  else if (!IS_AOP_WITH_B (AOP (result)))
     countreg = mc6800_reg_b;
   else if (!IS_AOP_WITH_A (AOP (result)))
     countreg = mc6800_reg_a;
@@ -8893,7 +8913,9 @@ genRightShift (iCode * ic)
   if (!countreg)
     {
       tmp = allocTemp ();
-      if (AOP_TYPE (right) == AOP_REG)
+      if (IS_AOP_X (AOP (right)))
+        mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      else if (AOP_TYPE (right) == AOP_REG)
         mc6800_emitOp (AOP (right)->aopu.aop_reg[0]->rIdx == A_IDX ? "staa" : "stab", MODE_DIR, "*%s", tmp);
       else
         {
@@ -8925,8 +8947,13 @@ genRightShift (iCode * ic)
       needpullcountreg = pushRegIfSurv (countreg);
       countreg->isFree = false;
       loadRegFromAop (countreg, AOP (right), 0);
-      emitcode (countreg == mc6800_reg_a ? "tsta" : "tstb", "");
-      regalloc_dry_run_cost++;
+      if (countreg == mc6800_reg_x)
+        mc6800_emitOp ("cpx", MODE_IMM, "#0");
+      else
+        {
+          emitcode (countreg == mc6800_reg_a ? "tsta" : "tstb", "");
+          regalloc_dry_run_cost++;
+        }
       emitBranch ("beq", tlbl1);
     }
   else
@@ -8943,7 +8970,10 @@ genRightShift (iCode * ic)
     }
   if (countreg)
     {
-      rmwWithReg ("dec", countreg);
+      if (countreg == mc6800_reg_x)
+        mc6800_emitOp ("dex", MODE_INH, "");
+      else
+        rmwWithReg ("dec", countreg);
       emitBranch ("bne", tlbl);
       if (!regalloc_dry_run)
         mc6800_emitLabel (tlbl1);
@@ -8953,7 +8983,7 @@ genRightShift (iCode * ic)
     {
       if (!regalloc_dry_run)
         mc6800_emitLabel (tlbl1);
-      emitcode ("dec", "%s", tmp);
+      emitcode ("dec", IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
       regalloc_dry_run_cost += 3;
       emitBranch ("bpl", tlbl);
       freeTemp ();

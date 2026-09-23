@@ -277,6 +277,7 @@ static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, co
   if((operand_in_reg(IC_LEFT(ic), REG_XL, ia, i, G) || operand_in_reg(IC_RIGHT(ic), REG_XL, ia, i, G) || operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G)) &&
     !(ic->op == '=' || ic->op == GET_VALUE_AT_ADDRESS || ic->op == ADDRESS_OF || ic->op == EQ_OP || ic->op == NE_OP || ic->op == IFX ||
     ic->op == CALL || ic->op == PCALL || ic->op == RETURN || ic->op == SEND || ic->op == RECEIVE || ic->op == IPUSH ||
+    (ic->op == LEFT_OP || ic->op == RIGHT_OP) && !operand_in_reg(IC_LEFT(ic), REG_XL, ia, i, G) && !operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G) ||
     ic->op == CAST && getSize(operandType(IC_RESULT(ic))) == getSize(operandType(IC_RIGHT(ic))) ||
     (ic->op == '+' || ic->op == '-') && IS_OP_LITERAL(IC_RIGHT(ic)) && abs((int)operandLitValue(IC_RIGHT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6) ||
     ic->op == '+' && IS_OP_LITERAL(IC_LEFT(ic)) && abs((int)operandLitValue(IC_LEFT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6)))
