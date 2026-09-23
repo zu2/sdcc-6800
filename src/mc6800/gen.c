@@ -10605,75 +10605,71 @@ static void
 genJumpTab (iCode * ic)
 {
   symbol *jtab;
-  symbol *jtablo = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-  symbol *jtabhi = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+  symbol *jtablbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+  const char *tmp;
+  bool needpullb, needpulla;
 
   D (emitcode (";     genJumpTab", ""));
-#if 0
+
   aopOp (IC_JTCOND (ic), ic, false);
 
-  if (mc6800_reg_x->isFree && mc6800_reg_h->isFree)
+  if (elementsInSet (IC_JTLABELS (ic)) <= 4 && mc6800_reg_b->isDead)
     {
-      /* get the condition into x */
-      loadRegFromAop (mc6800_reg_x, AOP (IC_JTCOND (ic)), 0);
-      freeAsmop (IC_JTCOND (ic), NULL, ic, true);
-      loadRegFromConst (mc6800_reg_h, 0);
+      int count = elementsInSet (IC_JTLABELS (ic));
 
-      if (!regalloc_dry_run)
+      loadRegFromAop (mc6800_reg_b, AOP (IC_JTCOND (ic)), 0);
+      freeAsmop (IC_JTCOND (ic), NULL, ic, true);
+      mc6800_emitOp ("tstb", MODE_INH, "");
+      for (jtab = setFirstItem (IC_JTLABELS (ic)); jtab; jtab = setNextItem (IC_JTLABELS (ic)))
         {
-          emitcode ("lda", "%05d$,x", labelKey2num (jtabhi->key));
-          emitcode ("ldx", "%05d$,x", labelKey2num (jtablo->key));
+          symbol *tlbl;
+
+          if (--count == 0)
+            {
+              emitBranch ("jmp", jtab);
+              break;
+            }
+          if (count + 1 < elementsInSet (IC_JTLABELS (ic)))
+            mc6800_emitOp ("decb", MODE_INH, "");
+          tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+          emitBranch ("bne", tlbl);
+          emitBranch ("jmp", jtab);
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl);
         }
-      regalloc_dry_run_cost += 6;
-      transferRegReg (mc6800_reg_a, mc6800_reg_h, true);
-      emitcode ("jmp", ",x");
-      regalloc_dry_run_cost++;
-
-      mc6800_dirtyReg (mc6800_reg_a, true);
-      mc6800_dirtyReg (mc6800_reg_b, true);
-      mc6800_dirtyReg (mc6800_reg_x, true);
-    }
-  else
-    {
-      adjustStack (-2);
-      pushReg (mc6800_reg_x, true);
-
-      /* get the condition into x */
-      loadRegFromAop (mc6800_reg_x, AOP (IC_JTCOND (ic)), 0);
-      freeAsmop (IC_JTCOND (ic), NULL, ic, true);
-      loadRegFromConst (mc6800_reg_h, 0);
-
-      if (!regalloc_dry_run)
-        emitcode ("lda", "%05d$,x", labelKey2num (jtabhi->key));
-      emitcode ("sta", "3,s");
-      if (!regalloc_dry_run)
-        emitcode ("lda", "%05d$,x", labelKey2num (jtablo->key));
-      emitcode ("sta", "4,s");
-      regalloc_dry_run_cost += 12;
-
-      pullReg (mc6800_reg_hx);
-      emitcode ("rts", "");
-      regalloc_dry_run_cost++;
-      _G.stackPushes -= 2;
-      updateCFA ();
+      return;
     }
 
-  /* now generate the jump labels */
+  if (!mc6800_reg_x->isDead)
+    UNIMPLEMENTED;
+
+  needpullb = pushRegIfSurv (mc6800_reg_b);
+  needpulla = pushRegIfSurv (mc6800_reg_a);
+  loadRegFromAop (mc6800_reg_b, AOP (IC_JTCOND (ic)), 0);
+  freeAsmop (IC_JTCOND (ic), NULL, ic, true);
+  tmp = allocTemp ();
+  mc6800_emitOp ("clra", MODE_INH, "");
+  mc6800_emitOp ("aslb", MODE_INH, "");
+  mc6800_emitOp ("rola", MODE_INH, "");
+  mc6800_emitOp ("addb", MODE_IMM, "#<%05d$", regalloc_dry_run ? 0 : labelKey2num (jtablbl->key));
+  mc6800_emitOp ("adca", MODE_IMM, "#>%05d$", regalloc_dry_run ? 0 : labelKey2num (jtablbl->key));
+  mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+  mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+  mc6800_emitOp ("ldx", MODE_IDX, "0,x");
+  freeTemp ();
+  pullOrFreeReg (mc6800_reg_a, needpulla);
+  pullOrFreeReg (mc6800_reg_b, needpullb);
+  mc6800_emitOp ("jmp", MODE_IDX, "0,x");
+
   if (!regalloc_dry_run)
-    mc6800_emitLabel (jtablo);
+    mc6800_emitLabel (jtablbl);
   for (jtab = setFirstItem (IC_JTLABELS (ic)); jtab; jtab = setNextItem (IC_JTLABELS (ic)))
     {
-      emitcode (".db", "%05d$", labelKey2num (jtab->key));
-      regalloc_dry_run_cost++;
+      if (!regalloc_dry_run)
+        emitcode (".dw", "%05d$", labelKey2num (jtab->key));
+      regalloc_dry_run_cost += 2;
     }
-  if (!regalloc_dry_run)
-    mc6800_emitLabel (jtabhi);
-  for (jtab = setFirstItem (IC_JTLABELS (ic)); jtab; jtab = setNextItem (IC_JTLABELS (ic)))
-    {
-      emitcode (".db", ">%05d$", labelKey2num (jtab->key));
-      regalloc_dry_run_cost++;
-    }
-#endif
 }
 
 /*-----------------------------------------------------------------*/
