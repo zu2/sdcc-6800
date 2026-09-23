@@ -2236,7 +2236,7 @@ aopForRemat (symbol * sym)
   if (ic->op == ADDRESS_OF && OP_SYMBOL (IC_LEFT (ic))->onStack)
     {
       aop = newAsmop (AOP_STL);
-      aop->aopu.aop_stk = OP_SYMBOL (IC_LEFT (ic))->stack + val;
+      aop->aopu.aop_stk = OP_SYMBOL (IC_LEFT (ic))->stack + (OP_SYMBOL (IC_LEFT (ic))->stack > 0 ? _G.param_offset : 0) + val;
     }
   else if (ic->op == ADDRESS_OF)
     {
@@ -4286,6 +4286,7 @@ genRet (iCode * ic)
       mc6800_emitOp ("ldx", MODE_IDX, "0,x");
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_emitOp ("stx", MODE_DIR, "*%s", dst);
+      mc6800_freeReg (mc6800_reg_x);
 
       if (size <= 2)
         {
@@ -4350,6 +4351,7 @@ genRet (iCode * ic)
       mc6800_dirtyReg (mc6800_reg_b, false);
       mc6800_dirtyReg (mc6800_reg_x, true);
       freeTemp ();
+      freeAsmop (IC_LEFT (ic), NULL, ic, true);
       goto jumpret;
     }
 
