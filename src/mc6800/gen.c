@@ -1118,7 +1118,25 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
       else
         {
           if (aop->type == AOP_SOF) {
-            UNIMPLEMENTED;
+            const char *tmp = allocTemp ();
+            bool needpulla;
+            bool xfree = mc6800_reg_x->isFree;
+
+            mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+            mc6800_freeReg (mc6800_reg_x);
+            needpulla = pushRegIfUsed (mc6800_reg_a);
+            mc6800_emitOp ("ldaa", MODE_DIR, "*%s+1", tmp);
+            storeRegToAop (mc6800_reg_a, aop, loffset);
+            if (loffset + 1 < aop->size)
+              {
+                mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+                storeRegToAop (mc6800_reg_a, aop, loffset + 1);
+              }
+            pullOrFreeReg (mc6800_reg_a, needpulla);
+            mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+            mc6800_dirtyReg (mc6800_reg_x, false);
+            mc6800_reg_x->isFree = xfree;
+            freeTemp ();
             break;
           }
           mc6800_emitOpw_o ("stx", aop, loffset);
