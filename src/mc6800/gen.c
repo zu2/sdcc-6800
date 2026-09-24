@@ -73,10 +73,10 @@ static asmop *mc6800_aop_ret[8];
 
 static const char *tempname[NUM_TEMP_REGS] =
   {
-    "___SDCC_mc6800_tmp0", "___SDCC_mc6800_tmp1",
-    "___SDCC_mc6800_tmp2", "___SDCC_mc6800_tmp3",
-    "___SDCC_mc6800_tmp4", "___SDCC_mc6800_tmp5",
-    "___SDCC_mc6800_tmp6", "___SDCC_mc6800_tmp7"
+    "REGTEMP0", "REGTEMP1",
+    "REGTEMP2", "REGTEMP3",
+    "REGTEMP4", "REGTEMP5",
+    "REGTEMP6", "REGTEMP7"
   };
 
 static const char *
