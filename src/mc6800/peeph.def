@@ -1,19 +1,37 @@
 replace {
 	pula
 	psha
-	lda	%1
+	ldaa	%1
 } by {
 	; Peephole 1a	- removed redundant pula/psha
-	lda	%1
+	ldaa	%1
+}
+
+replace {
+	pulb
+	pshb
+	ldab	%1
+} by {
+	; Peephole 1a'	- removed redundant pulb/pshb
+	ldab	%1
 }
 
 replace {
 	pula
 	psha
-	lda	%1,s
+	ldaa	%1,x
 } by {
 	; Peephole 1b	- removed redundant pula/psha
-	lda	%1,s
+	ldaa	%1,x
+}
+
+replace {
+	pulb
+	pshb
+	ldab	%1,x
+} by {
+	; Peephole 1b'	- removed redundant pulb/pshb
+	ldab	%1,x
 }
 
 replace {
@@ -23,6 +41,15 @@ replace {
 } by {
 	; Peephole 1c	- removed redundant pula/psha
 	clra
+}
+
+replace {
+	pulb
+	pshb
+	clrb
+} by {
+	; Peephole 1c'	- removed redundant pulb/pshb
+	clrb
 }
 
 
@@ -63,26 +90,6 @@ replace {
 } by {
 	; Peephole 2d	- eliminated jmp
 	beq	%5
-%1:
-} if labelInRange(%5), labelRefCountChange(%1 -1)
-
-replace {
-	brclr	%3,%2,%1
-	jmp	%5
-%1:
-} by {
-	; Peephole 2e	- eliminated jmp
-	brset	%3,%2,%5
-%1:
-} if labelInRange(%5), labelRefCountChange(%1 -1)
-
-replace {
-	brset	%3,%2,%1
-	jmp	%5
-%1:
-} by {
-	; Peephole 2f	- eliminated jmp
-	brclr	%3,%2,%5
 %1:
 } if labelInRange(%5), labelRefCountChange(%1 -1)
 
@@ -174,20 +181,70 @@ replace restart {
 } if labelInRange(%5)
 
 replace {
-	lda	%1
+	ldaa	%1
 	tsta
+	%2	%3
 } by {
 	; Peephole 4a	- eliminated redundant tsta
-	lda	%1
-}
+	ldaa	%1
+	%2	%3
+} if same(%2 'beq' 'bne' 'bmi' 'bpl')
+
+replace {
+	ldab	%1
+	tstb
+	%2	%3
+} by {
+	; Peephole 4a'	- eliminated redundant tstb
+	ldab	%1
+	%2	%3
+} if same(%2 'beq' 'bne' 'bmi' 'bpl')
+
+replace {
+	ldaa	%1,x
+	tsta
+	%2	%3
+} by {
+	; Peephole 4d	- eliminated redundant tsta
+	ldaa	%1,x
+	%2	%3
+} if same(%2 'beq' 'bne' 'bmi' 'bpl')
+
+replace {
+	ldab	%1,x
+	tstb
+	%2	%3
+} by {
+	; Peephole 4d'	- eliminated redundant tstb
+	ldab	%1,x
+	%2	%3
+} if same(%2 'beq' 'bne' 'bmi' 'bpl')
 
 replace {
 	ldx	%1
-	tstx
+	cpx	#0
 } by {
-	; Peephole 4b	- eliminated redundant tstx
+	; Peephole 4b	- eliminated redundant cpx #0
 	ldx	%1
 }
+
+replace {
+	ldx	%1,x
+	cpx	#0
+} by {
+	; Peephole 4b'	- eliminated redundant cpx #0
+	ldx	%1,x
+}
+
+replace {
+	%1
+	cpx	#0
+	%2	%3
+} by {
+	; Peephole 4c	- eliminated redundant cpx #0 after %1
+	%1
+	%2	%3
+} if same(%1 'inx' 'dex'), same(%2 'beq' 'bne')
 
 replace {
 	jmp	%5
@@ -236,30 +293,6 @@ replace restart {
 %2:
 %1:
 } if labelRefCountChange(%1 -1)
-
-replace {
-	cmp	#%2
-	beq	%1
-} by {
-	; Peephole 10a   - combined cmp/beq
-	cbeqa	#%2,%1
-}
-
-replace {
-	cmp	*%2
-	beq	%1
-} by {
-	; Peephole 10b   - combined cmp/beq
-	cbeq	*%2,%1
-}
-
-replace {
-        dec     %2,s
-        bne     %1
-} by {
-        ; Peephole 10c   - combined dec/bne
-        dbnz    %2,s,%1
-}
 
 // should be one of the last peepholes
 replace restart {
