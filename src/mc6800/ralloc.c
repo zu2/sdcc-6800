@@ -600,42 +600,6 @@ DEFSETFUNC (deallocStackSpil)
 }
 
 
-#if 0
-static void
-packRegsForLiteral (iCode * ic)
-{
-  int k;
-  iCode *uic;
-
-  if (ic->op != '=')
-    return;
-  if (POINTER_SET (ic))
-    return;
-  if (!IS_LITERAL (getSpec (operandType (IC_RIGHT (ic)))))
-    return;
-  if (bitVectnBitsOn (OP_DEFS (IC_RESULT (ic))) > 1)
-    return;
-
-  for (k=0; k< OP_USES (IC_RESULT (ic))->size; k++)
-    if (bitVectBitValue (OP_USES (IC_RESULT (ic)), k))
-      {
-        uic = hTabItemWithKey (iCodehTab, k);
-        if (!uic) continue;
-
-        if (uic->op != IFX && uic->op != JUMPTABLE)
-          {
-            if (IC_LEFT (uic) && IC_LEFT (uic)->key == IC_RESULT (ic)->key)
-              ReplaceOpWithCheaperOp(&IC_LEFT(uic), IC_RIGHT(ic));
-            if (IC_RIGHT (uic) && IC_RIGHT (uic)->key == IC_RESULT (ic)->key)
-              ReplaceOpWithCheaperOp(&IC_RIGHT(uic), IC_RIGHT(ic));
-            if (IC_RESULT (uic) && IC_RESULT (uic)->key == IC_RESULT (ic)->key)
-              ReplaceOpWithCheaperOp(&IC_RESULT(uic), IC_RIGHT(ic));
-          }
-      }
-
-}
-#endif
-
 
 /*-----------------------------------------------------------------*/
 /* packRegsForAssign - register reduction for assignment           */
@@ -654,12 +618,6 @@ packRegsForAssign (iCode * ic, eBBlock * ebp)
 
   /* if the true symbol is defined in far space or on stack
      then we should not since this will increase register pressure */
-#if 0
-  if (isOperandInFarSpace(IC_RESULT(ic)) && !farSpacePackable(ic))
-    {
-      return 0;
-    }
-#endif
 
   /* find the definition of iTempNN scanning backwards if we find
      a use of the true symbol before we find the definition then
