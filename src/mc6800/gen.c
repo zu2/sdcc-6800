@@ -8976,7 +8976,11 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
       }
 
   if (needrestorex)
-    pullReg (mc6800_reg_x);
+    {
+      pullReg (mc6800_reg_x);
+      if (ifx)
+        mc6800_emitOp ("tsta", MODE_INH, "");
+    }
 
   freeAsmop (NULL, derefaop, ic, true);
   freeAsmop (result, NULL, ic, true);
@@ -9217,9 +9221,11 @@ release:
   freeAsmop (left, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 
+  pullOrFreeReg (mc6800_reg_x, needpullx);
+  if (ifx && needpullx)
+    mc6800_emitOp ("tsta", MODE_INH, "");
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
-  pullOrFreeReg (mc6800_reg_x, needpullx);
 
   if (ifx && !ifx->generated)
     {
