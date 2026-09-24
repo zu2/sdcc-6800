@@ -10424,6 +10424,18 @@ genCast (iCode * ic)
           offset++;
           size--;
         }
+      else if (size == 2 && AOP_TYPE (right) == AOP_STL)
+        {
+          bool needpullb = pushRegIfSurv (mc6800_reg_b);
+          bool needpulla = pushRegIfSurv (mc6800_reg_a);
+
+          loadRegFromAop (mc6800_reg_d, AOP (right), offset);
+          storeRegToAop (mc6800_reg_d, AOP (result), offset);
+          pullOrFreeReg (mc6800_reg_a, needpulla);
+          pullOrFreeReg (mc6800_reg_b, needpullb);
+          offset += 2;
+          size -= 2;
+        }
       else if ((size > 2 || size >= 2 && !signExtend)
       &&  mc6800_reg_x->isDead
       &&  AOP_TYPE (right) != AOP_SOF
