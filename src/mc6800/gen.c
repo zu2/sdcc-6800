@@ -6510,8 +6510,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       return;
     }
   if (AOP_TYPE (right) == AOP_STL && !IS_AOP_X (AOP (left)) && !IS_AOP_D (AOP (left))
-      || AOP_TYPE (left) == AOP_STL && !mc6800_reg_b->isFree
-         && !(mc6800_reg_x->isDead && AOP_SIZE (right) == 2 && !IS_AOP_WITH_X (AOP (right))))
+      || AOP_TYPE (left) == AOP_STL && AOP_SIZE (right) != 2)
     {
       UNIMPLEMENTED;
       freeAsmop (right, NULL, ic, false);
@@ -6581,6 +6580,39 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       mc6800_emitOp ("cpx", MODE_DIR, "*%s", tmp);
       freeTemp ();
       mc6800_freeReg (mc6800_reg_x);
+    }
+  else if (AOP_TYPE (left) == AOP_STL)
+    {
+      const char *xtmp = allocTemp ();
+      const char *rtmp = allocTemp ();
+      const char *tmp;
+      symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+      bool xfree = mc6800_reg_x->isFree;
+      bool needpulla;
+
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", xtmp);
+      mc6800_freeReg (mc6800_reg_x);
+      needpulla = pushRegIfUsed (mc6800_reg_a);
+      loadRegFromAop (mc6800_reg_a, AOP (right), 0);
+      mc6800_emitOp ("staa", MODE_DIR, "*%s+1", rtmp);
+      loadRegFromAop (mc6800_reg_a, AOP (right), 1);
+      mc6800_emitOp ("staa", MODE_DIR, "*%s", rtmp);
+      tmp = setupTmpFromSP (_G.stackOfs + AOP (left)->aopu.aop_stk);
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", xtmp);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      mc6800_reg_x->isFree = xfree;
+      mc6800_emitOp ("ldaa", MODE_DIR, "*%s+1", rtmp);
+      mc6800_emitOp ("cmpa", MODE_DIR, "*%s+1", tmp);
+      emitBranch ("bne", tlbl);
+      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", rtmp);
+      mc6800_emitOp ("cmpa", MODE_DIR, "*%s", tmp);
+      if (!regalloc_dry_run)
+        mc6800_emitLabel (tlbl);
+      freeTemp ();
+      freeTemp ();
+      freeTemp ();
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      pullOrFreeReg (mc6800_reg_a, needpulla);
     }
   else
     {
