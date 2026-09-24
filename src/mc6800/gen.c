@@ -3537,9 +3537,12 @@ genCall (iCode * ic)
       ((IS_ITEMP (IC_RESULT (ic)) &&
        (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic))))
     {
-      mc6800_useReg (mc6800_reg_b);
-      if (operandSize (IC_RESULT (ic)) > 1)
-        mc6800_useReg (mc6800_reg_a);
+      if (operandSize (IC_RESULT (ic)) <= 2)
+        {
+          mc6800_useReg (mc6800_reg_b);
+          if (operandSize (IC_RESULT (ic)) > 1)
+            mc6800_useReg (mc6800_reg_a);
+        }
       aopOp (IC_RESULT (ic), ic, false);
 
       assignResultValue (IC_RESULT (ic));
@@ -3635,9 +3638,12 @@ genPcall (iCode * ic)
       ((IS_ITEMP (IC_RESULT (ic)) &&
        (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic))))
     {
-      mc6800_useReg (mc6800_reg_b);
-      if (operandSize (IC_RESULT (ic)) > 1)
-        mc6800_useReg (mc6800_reg_a);
+      if (operandSize (IC_RESULT (ic)) <= 2)
+        {
+          mc6800_useReg (mc6800_reg_b);
+          if (operandSize (IC_RESULT (ic)) > 1)
+            mc6800_useReg (mc6800_reg_a);
+        }
       _G.accInUse++;
       aopOp (IC_RESULT (ic), ic, false);
       _G.accInUse--;
@@ -6150,6 +6156,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   symbol *tlbl_NE = NULL;
   symbol *tlbl_EQ = NULL;
   bool needpulla = false;
+  bool loaded;
 
   opcode = ic->op;
 
@@ -6341,14 +6348,17 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
             }
           else
             {
+              loaded = false;
               if (!(AOP_TYPE (left) == AOP_REG && AOP (left)->aopu.aop_reg[offset]->rIdx == A_IDX))
                 {
                   needpulla = pushRegIfSurv (mc6800_reg_a);
+                  loaded = mc6800_findRegAop (AOP (left), offset) != mc6800_reg_a;
                   loadRegFromAop (mc6800_reg_a, AOP (left), offset);
                 }
               if (aopIsLitVal (right->aop, offset, 1, 0x00))
                 {
-                  mc6800_emitOp ("tsta", MODE_INH, "");
+                  if (!loaded)
+                    mc6800_emitOp ("tsta", MODE_INH, "");
                 }
               else if (AOP_TYPE (right) == AOP_REG)
                 {
