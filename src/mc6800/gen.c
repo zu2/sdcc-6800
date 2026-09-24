@@ -9944,10 +9944,12 @@ genPointerSet (iCode * ic, iCode * pi)
         AOP (result)->aopu.aop_reg[i]->isDead = true;
     }
 
-  needpullx = pushRegIfSurv (mc6800_reg_x);
-
   aopOp (right, ic, false);
   size = AOP_SIZE (right);
+
+  if (!(IS_AOP_X (AOP (result)) && !stackBasedOffset (left) && !bit_field
+        && AOP_TYPE (right) != AOP_SOF && !IS_AOP_WITH_X (AOP (right))))
+    needpullx = pushRegIfSurv (mc6800_reg_x);
 
   /* if bit-field then pack */
   if (bit_field)
