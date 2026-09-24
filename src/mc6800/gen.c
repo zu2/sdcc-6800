@@ -2064,8 +2064,6 @@ aopForSym (iCode * ic, symbol * sym, bool result)
   wassertl (ic != NULL, "Got a null iCode");
   wassertl (sym != NULL, "Got a null symbol");
 
-  printf("in aopForSym for symbol %s\n", sym->name);
-
   space = SPEC_OCLS (sym->etype);
 
   /* if already has one */
@@ -2384,10 +2382,6 @@ aopOp (operand *op, iCode * ic, bool result)
 
   // Is this a pointer set result?
   //
-  if ((op == IC_RESULT (ic)) && POINTER_SET (ic))
-    {
-      printf("checking pointer set result\n");
-    }
 
   //printf("checking literal\n");
   /* if this a literal */
@@ -2523,8 +2517,6 @@ aopOp (operand *op, iCode * ic, bool result)
             }
           aop->size = getSize (sym->type);
           aop->op = op;
-          printf ("spill symbol %s\n", OP_SYMBOL (op)->name);
-          printf (" with size = %d\n", aop->size);
           if (!result)
             aop->valinfo = getOperandValinfo (ic, op);
           return;
@@ -2539,7 +2531,6 @@ aopOp (operand *op, iCode * ic, bool result)
       return;
     }
 
-  printf("assuming register\n");
   /* must be in a register */
   wassert (sym->nRegs);
   sym->aop = op->aop = aop = newAsmop (AOP_REG);
@@ -3155,8 +3146,6 @@ genCopy (operand *result, operand *source)
        wassert (0);
      need_lsb_to_msb_order = !overlap || result_at_lower_address;
    }
-  printf("result regs: size=%d, nRegs=0x%02x\n", AOP_SIZE(result),result->aop->regmask);
-
   if (need_lsb_to_msb_order)
     {
       offset = 0;
@@ -10454,7 +10443,6 @@ genAssign (iCode * ic)
 
   if (!genAssignLit (result, right))
     {
-      printf(";     genAssign size result %d,right %d\n",AOP_SIZE(result),AOP_SIZE(right));
       genCopy (result, right);
     }
 

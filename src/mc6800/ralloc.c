@@ -551,7 +551,6 @@ regTypeNum (eBBlock *ebbs)
           sym->nRegs = ((IS_AGGREGATE (sym->type) || sym->isptr) ?
                         getSize (sym->type = aggrToPtr (sym->type, false)) :
                         getSize (sym->type));
-	  printf("; sym->nRegs %d\n",sym->nRegs);
           if (sym->nRegs > 8)
             {
               fprintf (stderr, "allocated more than 8 registers for type ");
