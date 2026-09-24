@@ -3232,55 +3232,6 @@ unsaveRegisters (iCode *ic)
 
 
 /*-----------------------------------------------------------------*/
-/* pushSide -                                                      */
-/*-----------------------------------------------------------------*/
-static void
-pushSide (operand *oper, int size, iCode *ic)
-{
-  int offset = 0;
-  bool xIsFree = mc6800_reg_x->isFree;
-
-  mc6800_useReg (mc6800_reg_x);
-  aopOp (oper, ic, false);
-
-  if (AOP_TYPE (oper) == AOP_REG)
-    {
-      /* The operand is in registers; we can push them directly */
-      while (size--)
-        {
-          pushReg (AOP (oper)->aopu.aop_reg[offset++], true);
-        }
-    }
-  else if (mc6800_reg_a->isFree)
-    {
-      /* A is free, so piecewise load operand into a and push A */
-      while (size--)
-        {
-          loadRegFromAop (mc6800_reg_a, AOP (oper), offset++);
-          pushReg (mc6800_reg_a, true);
-        }
-    }
-  else
-    {
-      /* A is not free. Adjust stack, preserve A, copy operand */
-      /* into position on stack (using A), and restore original A */
-      adjustStack (-size);
-      pushReg (mc6800_reg_a, true);
-      while (size--)
-        {
-          loadRegFromAop (mc6800_reg_a, AOP (oper), offset++);
-          emitcode ("sta", "%d,s", 2+size);
-          regalloc_dry_run_cost += 3;
-        }
-      pullReg (mc6800_reg_a);
-    }
-
-  freeAsmop (oper, NULL, ic, true);
-  if (xIsFree)
-    mc6800_freeReg (mc6800_reg_x);
-}
-
-/*-----------------------------------------------------------------*/
 /* assignResultValue -                                             */
 /*-----------------------------------------------------------------*/
 static void
