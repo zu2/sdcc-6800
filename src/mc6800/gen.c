@@ -9009,6 +9009,7 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   bool needpulla = false;
   bool needpullb = false;
   bool needpullx = false;
+  bool useb = false;
   bool vol = false;
 
   D (emitcode (";     genPointerGet", ""));
@@ -9017,7 +9018,7 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
      post-increment is left to its own icode */
   pi = NULL;
 
-  if ((size = getSize (operandType (result))) > 1)
+  if ((size = getSize (operandType (result))) > 1 && IS_BITVAR (retype))
     ifx = NULL;
 
   aopOp (left, ic, false);
@@ -9028,7 +9029,7 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       /* if result is not bit variable type */
       if (!IS_BITVAR (retype))
         {
-          genDataPointerGet (left, right, result, ic, ifx);
+          genDataPointerGet (left, right, result, ic, size > 1 ? NULL : ifx);
           return;
         }
       else
@@ -9039,6 +9040,9 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
     }
 
   aopOp (result, ic, false);
+
+  if (size > 1 && AOP_TYPE (result) == AOP_REG)
+    ifx = NULL;
 
   /* if bit then unpack */
   if (IS_BITVAR (retype))
@@ -9187,7 +9191,9 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   else
     {
       offset = size - 1;
-      needpulla = pushRegIfSurv (mc6800_reg_a);
+      useb = ifx && !mc6800_reg_a->isDead && mc6800_reg_b->isFree && mc6800_reg_b->isDead;
+      if (!useb)
+        needpulla = pushRegIfSurv (mc6800_reg_a);
 
       if (!ifx && AOP_TYPE (result) == AOP_REG && AOP_SIZE (result) == 2)
         {
@@ -9209,7 +9215,12 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
         while (size--)
           {
             xoffset = litOffset + (AOP_SIZE (result) - offset - 1);
-            loadRegIndexed (mc6800_reg_a, xoffset, rematOffset);
+            if (ifx && offset != AOP_SIZE (result) - 1)
+              mc6800_emitOp (useb ? "orab" : "oraa", MODE_IDX, "%d,x", xoffset);
+            else if (useb)
+              mc6800_emitOp ("ldab", MODE_IDX, "%d,x", xoffset);
+            else
+              loadRegIndexed (mc6800_reg_a, xoffset, rematOffset);
             if (!ifx)
               storeRegToAop (mc6800_reg_a, AOP (result), offset);
             offset--;
@@ -9223,7 +9234,7 @@ release:
 
   pullOrFreeReg (mc6800_reg_x, needpullx);
   if (ifx && needpullx)
-    mc6800_emitOp ("tsta", MODE_INH, "");
+    mc6800_emitOp (useb ? "tstb" : "tsta", MODE_INH, "");
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
 
