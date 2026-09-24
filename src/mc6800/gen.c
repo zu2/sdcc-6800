@@ -9523,7 +9523,7 @@ genPackBits (operand * result, operand * left, sym_link * etype, operand * right
   unsigned char mask;           /* bitmask within current byte */
   int litOffset = 0;
   char *rematOffset = NULL;
-  bool needpull;
+  bool needpull = false;
   reg_info *reg;
   asmop *tmpaop = NULL;
 
