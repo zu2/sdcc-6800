@@ -6540,6 +6540,8 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
     {
       const char *tmp = setupTmpFromSP (_G.stackOfs + AOP (right)->aopu.aop_stk);
       mc6800_emitOp ("cmpb", MODE_DIR, "*%s+1", tmp);
+      if (!ifx && !needpulla)
+        needpulla = pushRegIfSurv (mc6800_reg_a);
       if (!tlbl_NE && !regalloc_dry_run)
         tlbl_NE = newiTempLabel (NULL);
       emitBranch ("bne", tlbl_NE);
@@ -6551,6 +6553,8 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       const char *tmp = allocTemp ();
       mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
       mc6800_emitOp ("cmpb", MODE_DIR, "*%s+1", tmp);
+      if (!ifx && !needpulla)
+        needpulla = pushRegIfSurv (mc6800_reg_a);
       if (!tlbl_NE && !regalloc_dry_run)
         tlbl_NE = newiTempLabel (NULL);
       emitBranch ("bne", tlbl_NE);
@@ -6561,6 +6565,8 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
     {
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
       accopWithAop ("cmpb", AOP (right), 0);
+      if (!ifx && !needpulla)
+        needpulla = pushRegIfSurv (mc6800_reg_a);
       if (!tlbl_NE && !regalloc_dry_run)
         tlbl_NE = newiTempLabel (NULL);
       emitBranch ("bne", tlbl_NE);
