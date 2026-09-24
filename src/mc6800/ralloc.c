@@ -752,6 +752,9 @@ packRegsForAssign (iCode * ic, eBBlock * ebp)
   if (!dic)
     return 0;                   /* did not find */
 
+  if ((dic->op == LEFT_OP || dic->op == RIGHT_OP) && IS_VOLATILE (operandType (IC_RESULT (ic))))
+    return 0;
+
   /* if assignment then check that right is not a bit */
   if (ASSIGNMENT (ic) && !POINTER_SET (ic))
     {
