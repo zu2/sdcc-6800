@@ -8387,7 +8387,7 @@ genLeftShift (iCode *ic)
   symbol *tlbl, *tlbl1;
   char *shift;
   asmop *aopResult;
-  bool needpullcountreg;
+  bool needpullcountreg = false;
   reg_info *countreg = NULL;
   const char *tmp = NULL;
 
@@ -8705,7 +8705,7 @@ genRightShift (iCode * ic)
   symbol *tlbl, *tlbl1;
   char *shift;
   bool sign;
-  bool needpullcountreg;
+  bool needpullcountreg = false;
   reg_info *countreg = NULL;
   const char *tmp = NULL;
 
