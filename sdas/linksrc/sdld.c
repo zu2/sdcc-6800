@@ -74,6 +74,7 @@ sdld_init (char *path)
     { "z180", TARGET_ID_Z180, },
     { "8051", TARGET_ID_8051, },
     { "6808", TARGET_ID_6808, },
+    { "6800", TARGET_ID_6808, },
     { "stm8", TARGET_ID_STM8, },
     { "pdk",  TARGET_ID_PDK,  },
     { "f8",   TARGET_ID_F8,   },

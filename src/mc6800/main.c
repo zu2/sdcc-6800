@@ -598,7 +598,7 @@ mc6800_get_model (void)
 */
 static const char *_linkCmd[] =
 {
-  "sdld6808", "-nf", "$1", "$L", NULL
+  "sdld6800", "-nf", "$1", "$L", NULL
 };
 
 /* $3 is replaced by assembler.debug_opts resp. port->assembler.plain_opts */
