@@ -713,10 +713,10 @@ PORT mc6800_port =
   {
     256,        /* maxCount */
     2,          /* sizeofElement */
-    {8,16,32},  /* sizeofMatchJump[] */
-    {8,16,32},  /* sizeofRangeCompare[] */
-    5,          /* sizeofSubtract */
-    10,         /* sizeofDispatch */
+    {4,5,26},   /* sizeofMatchJump[] */
+    {4,6,22},   /* sizeofRangeCompare[] */
+    2,          /* sizeofSubtract */
+    17,         /* sizeofDispatch */
   },
   "_",
   _mc6800_init,
