@@ -6522,7 +6522,25 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
           jlbl = IC_FALSE (ifx);
         }
     }
-  if (AOP_TYPE (right) == AOP_STL && !IS_AOP_X (AOP (left)) && !IS_AOP_D (AOP (left)) && !(AOP_TYPE (left) == AOP_STL && mc6800_reg_a->isDead && mc6800_reg_b->isDead)
+  if (AOP_TYPE (left) == AOP_STL && AOP_TYPE (right) == AOP_STL)
+    {
+      bool cond = ((AOP (left)->aopu.aop_stk == AOP (right)->aopu.aop_stk) == (ic->op == EQ_OP));
+
+      if (ifx)
+        {
+          if (IC_TRUE (ifx) ? cond : !cond)
+            emitBranch ("jmp", jlbl);
+          ifx->generated = 1;
+        }
+      else
+        for (offset = 0; offset < AOP_SIZE (result); offset++)
+          storeConstToAop (offset == 0 && cond, AOP (result), offset);
+      freeAsmop (right, NULL, ic, false);
+      freeAsmop (left, NULL, ic, false);
+      freeAsmop (result, NULL, ic, true);
+      return;
+    }
+  if (AOP_TYPE (right) == AOP_STL && !IS_AOP_X (AOP (left)) && !IS_AOP_D (AOP (left))
       || AOP_TYPE (left) == AOP_STL && !mc6800_reg_b->isFree)
     {
       UNIMPLEMENTED;
@@ -6568,22 +6586,6 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       emitBranch ("bne", tlbl_NE);
       mc6800_emitOp ("cmpa", MODE_DIR, "*%s", tmp);
       freeTemp ();
-    }
-  else if (AOP_TYPE (left) == AOP_STL && AOP_TYPE (right) == AOP_STL)
-    {
-      const char *tmp = allocTemp ();
-      int delta = 1 + _G.stackOfs + AOP (right)->aopu.aop_stk + _G.stackPushes;
-
-      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
-      freeTemp ();
-      mc6800_emitOp ("cmpb", MODE_IMM, "#%d", delta & 0xff);
-      if (!tlbl_NE && !regalloc_dry_run)
-        tlbl_NE = newiTempLabel (NULL);
-      emitBranch ("bne", tlbl_NE);
-      mc6800_emitOp ("cmpa", MODE_IMM, "#%d", (delta >> 8) & 0xff);
     }
   else if (AOP_TYPE (left) == AOP_STL && mc6800_reg_a->isDead && mc6800_reg_b->isDead)
     {
