@@ -1876,7 +1876,6 @@ aopForSym (iCode * ic, symbol * sym, bool result)
 {
   asmop *aop;
   memmap *space;
-  int lo, hi, shift, limit;
 
   wassertl (ic != NULL, "Got a null iCode");
   wassertl (sym != NULL, "Got a null symbol");
@@ -1907,44 +1906,6 @@ aopForSym (iCode * ic, symbol * sym, bool result)
       aop->size = getSize (sym->type);
       aop->aopu.aop_stk = sym->stack + (sym->stack > 0 ? _G.param_offset : 0);
 
-      if (!regalloc_dry_run && mc6800_reg_x->isFree && mc6800_reg_x->aop != &tsxaop)
-        {
-          if (!mc6800_reg_x->isDead)
-            return aop;
-          if (ic->op == IFX && operandConflictsWithX (IC_COND (ic)))
-            return aop;
-          else if (ic->op == JUMPTABLE && operandConflictsWithX (IC_JTCOND (ic)))
-            return aop;
-          else
-            {
-              if (POINTER_SET (ic) || POINTER_GET (ic))
-                return aop;
-              if (ic->op == ADDRESS_OF)
-                return aop;
-              if (operandConflictsWithX (IC_LEFT (ic)))
-                return aop;
-              if (operandConflictsWithX (IC_RIGHT (ic)))
-                return aop;
-            }
-          lo = _G.stackOfs + _G.stackPushes + aop->aopu.aop_stk;
-          hi = lo + aop->size - 1;
-          shift = 0;
-          if (hi > 255)
-            shift = hi - 255;
-          if (lo < 0)
-            shift = lo;
-          limit = (mc6800_reg_a->isFree || mc6800_reg_b->isFree) ? 16 : 18;
-          if (shift >= -limit && shift <= limit)
-            {
-              emitcode ("tsx", "");
-              mc6800_dirtyReg (mc6800_reg_x, false);
-              mc6800_reg_x->aop = &tsxaop;
-              mc6800_reg_x->stackOffset = -_G.stackPushes;
-              adjustX (shift);
-            }
-          else
-            setupXFromSP (shift - _G.stackPushes);
-        }
       return aop;
     }
 
