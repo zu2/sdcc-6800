@@ -6522,7 +6522,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
           jlbl = IC_FALSE (ifx);
         }
     }
-  if (AOP_TYPE (right) == AOP_STL && !IS_AOP_X (AOP (left)) && !(AOP_TYPE (left) == AOP_STL && mc6800_reg_a->isDead && mc6800_reg_b->isDead)
+  if (AOP_TYPE (right) == AOP_STL && !IS_AOP_X (AOP (left)) && !IS_AOP_D (AOP (left)) && !(AOP_TYPE (left) == AOP_STL && mc6800_reg_a->isDead && mc6800_reg_b->isDead)
       || AOP_TYPE (left) == AOP_STL && !mc6800_reg_b->isFree)
     {
       UNIMPLEMENTED;
@@ -6546,6 +6546,16 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
     {
       const char *tmp = setupTmpFromSP (_G.stackOfs + AOP (right)->aopu.aop_stk);
       mc6800_emitOp ("cpx", MODE_DIR, "*%s", tmp);
+      freeTemp ();
+    }
+  else if (IS_AOP_D (AOP (left)) && AOP_TYPE (right) == AOP_STL)
+    {
+      const char *tmp = setupTmpFromSP (_G.stackOfs + AOP (right)->aopu.aop_stk);
+      mc6800_emitOp ("cmpb", MODE_DIR, "*%s+1", tmp);
+      if (!tlbl_NE && !regalloc_dry_run)
+        tlbl_NE = newiTempLabel (NULL);
+      emitBranch ("bne", tlbl_NE);
+      mc6800_emitOp ("cmpa", MODE_DIR, "*%s", tmp);
       freeTemp ();
     }
   else if (IS_AOP_D (AOP (left)) && IS_AOP_X (AOP (right)))
