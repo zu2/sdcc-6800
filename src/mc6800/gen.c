@@ -3223,7 +3223,6 @@ genUminusFloat (operand * op, operand * result)
 
   D (emitcode (";     genUminusFloat", ""));
 
-#if 0
   /* for this we just copy and then flip the bit */
 
   size = AOP_SIZE (op) - 1;
@@ -3236,12 +3235,10 @@ genUminusFloat (operand * op, operand * result)
 
   needpula = pushRegIfSurv (mc6800_reg_a);
   loadRegFromAop (mc6800_reg_a, AOP (op), offset);
-  emitcode ("eor", "#0x80");
-  regalloc_dry_run_cost += 2;
+  mc6800_emitOp ("eora", MODE_IMM, "#0x80");
   mc6800_useReg (mc6800_reg_a);
   storeRegToAop (mc6800_reg_a, AOP (result), offset);
   pullOrFreeReg (mc6800_reg_a, needpula);
-#endif
 }
 
 /*-----------------------------------------------------------------*/
@@ -3268,14 +3265,12 @@ genUminus (iCode * ic)
 
   optype = operandType (IC_LEFT (ic));
 
-#if 0
   /* if float then do float stuff */
   if (IS_FLOAT (optype))
     {
       genUminusFloat (IC_LEFT (ic), IC_RESULT (ic));
       goto release;
     }
-#endif
 
   /* otherwise subtract from zero */
   size = AOP_SIZE (IC_LEFT (ic));
@@ -9947,7 +9942,10 @@ genPointerSet (iCode * ic, iCode * pi)
   aopOp (right, ic, false);
   size = AOP_SIZE (right);
 
+  if (!bit_field)
+    decodePointerOffset (left, &litOffset, &rematOffset);
   if (!(IS_AOP_X (AOP (result)) && !stackBasedOffset (left) && !bit_field
+        && !rematOffset && litOffset >= 0 && litOffset + size - 1 <= 0xff
         && AOP_TYPE (right) != AOP_SOF && !IS_AOP_WITH_X (AOP (right))))
     needpullx = pushRegIfSurv (mc6800_reg_x);
 
