@@ -26,8 +26,8 @@
 /* Use the D macro for basic (unobtrusive) debugging messages */
 #define D(x) do if (options.verboseAsm) { x; } while (0)
 /* Use the DD macro for detailed debugging messages */
-//#define DD(x)
-#define DD(x) x
+#define DD(x)
+//#define DD(x) x
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1163,7 +1163,6 @@ static void
 loadRegFromConst (reg_info * reg, int c)
 {
   D (emitcode (";     loadRegFromConst", ""));
-  DD (emitcode ("", ";     loadRegToAop (%s, %d)", reg->name, c));
 
   switch (reg->rIdx)
     {
@@ -7170,8 +7169,8 @@ genOr (iCode * ic, iCode * ifx)
   aopOp ((result = IC_RESULT (ic)), ic, true);
 
 #ifdef DEBUG_TYPE
-  DD (emitcode ("", "; Type res[%d] = l[%d]&r[%d]", AOP_TYPE (result), AOP_TYPE (left), AOP_TYPE (right)));
-  DD (emitcode ("", "; Size res[%d] = l[%d]&r[%d]", AOP_SIZE (result), AOP_SIZE (left), AOP_SIZE (right)));
+  DD (emitcode ("", "; Type res[%d] = l[%d]|r[%d]", AOP_TYPE (result), AOP_TYPE (left), AOP_TYPE (right)));
+  DD (emitcode ("", "; Size res[%d] = l[%d]|r[%d]", AOP_SIZE (result), AOP_SIZE (left), AOP_SIZE (right)));
 #endif
 
   /* if left is a literal & right is not then exchange them */
@@ -7403,8 +7402,8 @@ genXor (iCode * ic, iCode * ifx)
   aopOp ((result = IC_RESULT (ic)), ic, true);
 
 #ifdef DEBUG_TYPE
-  DD (emitcode ("", "; Type res[%d] = l[%d]&r[%d]", AOP_TYPE (result), AOP_TYPE (left), AOP_TYPE (right)));
-  DD (emitcode ("", "; Size res[%d] = l[%d]&r[%d]", AOP_SIZE (result), AOP_SIZE (left), AOP_SIZE (right)));
+  DD (emitcode ("", "; Type res[%d] = l[%d]^r[%d]", AOP_TYPE (result), AOP_TYPE (left), AOP_TYPE (right)));
+  DD (emitcode ("", "; Size res[%d] = l[%d]^r[%d]", AOP_SIZE (result), AOP_SIZE (left), AOP_SIZE (right)));
 #endif
 
   /* if left is a literal & right is not ||
@@ -11394,11 +11393,11 @@ genmc6800Code (iCode *lic)
       if (!mc6800_reg_a->isFree)
         DD (emitcode ("", "; forgot to free a"));
       if (!mc6800_reg_b->isFree)
-        DD (emitcode ("", "; forgot to free h"));
+        DD (emitcode ("", "; forgot to free b"));
       if (!mc6800_reg_x->isFree)
         DD (emitcode ("", "; forgot to free x"));
       if (!mc6800_reg_d->isFree)
-        DD (emitcode ("", "; forgot to free hx"));
+        DD (emitcode ("", "; forgot to free d"));
     }
 
   if (options.debug)
