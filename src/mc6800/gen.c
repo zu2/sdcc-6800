@@ -1574,14 +1574,6 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
     case AOP_REG:
       rmwWithReg (rmwop, aop->aopu.aop_reg[loffset]);
       break;
-    case AOP_EXT:
-      needpull = pushRegIfUsed (reg);
-      loadRegFromAop (reg, aop, loffset);
-      rmwWithReg (rmwop, reg);
-      if (strcmp ("tst", rmwop))
-        storeRegToAop (reg, aop, loffset);
-      pullOrFreeReg (reg, needpull);
-      break;
     case AOP_DUMMY:
       break;
     case AOP_SOF:
