@@ -247,6 +247,22 @@ replace {
 } if same(%1 'inx' 'dex'), same(%2 'beq' 'bne')
 
 replace {
+	ldx	%1
+	stx	%1
+} by {
+	; Peephole 11a	- removed redundant stx
+	ldx	%1
+} if notVolatile(%1)
+
+replace {
+	stx	%1
+	ldx	%1
+} by {
+	; Peephole 11b	- removed redundant ldx
+	stx	%1
+} if notVolatile(%1)
+
+replace {
 	jmp	%5
 } by {
 	; Peephole 6a  - replaced jmp to rts with rts

@@ -1058,7 +1058,7 @@ notVolatileVariable(const char *var, lineNode *currPl, lineNode *endPl)
         return true;
     }
 
-  if (TARGET_HC08_LIKE || TARGET_IS_MOS6502)
+  if (TARGET_HC08_LIKE || TARGET_IS_MOS6502 || TARGET_IS_MC6800)
     {
       if (var[0] == '#')
         return true;
