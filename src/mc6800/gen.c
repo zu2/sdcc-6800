@@ -2888,7 +2888,8 @@ genCopy (operand *result, operand *source)
     }
 
   /* if they are the same registers */
-  if (sameRegs (AOP (source), AOP (result)))
+  if (sameRegs (AOP (source), AOP (result)) && !isOperandVolatile (result, false) &&
+      !isOperandVolatile (source, false))
     return;
 
   if (IS_AOP_X (AOP (result)) && srcsize == 2)
