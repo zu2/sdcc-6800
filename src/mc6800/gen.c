@@ -5920,45 +5920,55 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
       right = temp;
       opcode = exchangedCmp (opcode);
     }
-  if (!IS_AOP_D (AOP (left)))
+  if (sign && AOP_TYPE (right) == AOP_LIT && !(ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull)
+      && (opcode == '<' || opcode == GE_OP))
     {
-      if (IS_AOP_X (AOP (left)))
-        {
-          const char *tmp = allocTemp ();
-
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
-          mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
-          freeTemp ();
-        }
-      else
-        loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-    }
-  if (AOP_TYPE (right) == AOP_LIT && ((opcode == '>') || (opcode == LE_OP))
-      && (ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) != (sign ? 0x7fffull : 0xffffull))
-    {
-      unsigned int lim = (unsigned int) ((ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) + 1);
-
-      mc6800_emitOp ("subb", MODE_IMM, "#0x%02x", lim & 0xff);
-      mc6800_emitOp ("sbca", MODE_IMM, "#0x%02x", (lim >> 8) & 0xff);
-      opcode = (opcode == '>') ? GE_OP : '<';
-    }
-  else if (AOP_TYPE (right) == AOP_STL)
-    {
-      const char *tmp = allocTemp ();
-      int delta = 1 + _G.stackOfs + AOP (right)->aopu.aop_stk + _G.stackPushes;
-
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
-      mc6800_emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
-      freeTemp ();
+      if (!IS_AOP_D (AOP (left)))
+        loadRegFromAop (mc6800_reg_a, AOP (left), 1);
+      mc6800_emitOp ("tsta", MODE_INH, "");
     }
   else
     {
-      accopWithAop ("subb", AOP (right), 0);
-      accopWithAop ("sbca", AOP (right), 1);
+      if (!IS_AOP_D (AOP (left)))
+        {
+          if (IS_AOP_X (AOP (left)))
+            {
+              const char *tmp = allocTemp ();
+
+              mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+              mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
+              mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+              freeTemp ();
+            }
+          else
+            loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+        }
+      if (AOP_TYPE (right) == AOP_LIT && ((opcode == '>') || (opcode == LE_OP))
+          && (ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) != (sign ? 0x7fffull : 0xffffull))
+        {
+          unsigned int lim = (unsigned int) ((ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) + 1);
+
+          mc6800_emitOp ("subb", MODE_IMM, "#0x%02x", lim & 0xff);
+          mc6800_emitOp ("sbca", MODE_IMM, "#0x%02x", (lim >> 8) & 0xff);
+          opcode = (opcode == '>') ? GE_OP : '<';
+        }
+      else if (AOP_TYPE (right) == AOP_STL)
+        {
+          const char *tmp = allocTemp ();
+          int delta = 1 + _G.stackOfs + AOP (right)->aopu.aop_stk + _G.stackPushes;
+
+          mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
+          mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
+          mc6800_emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+          freeTemp ();
+        }
+      else
+        {
+          accopWithAop ("subb", AOP (right), 0);
+          accopWithAop ("sbca", AOP (right), 1);
+        }
     }
   mc6800_freeReg (mc6800_reg_d);
   reg = mc6800_reg_b;
