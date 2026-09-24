@@ -63,7 +63,7 @@ transform       = @program_transform_name@
 
 # Compiling entire program or any subproject
 # ------------------------------------------
-all: sdcc-ld8051 sdcc-ldz80 sdcc-ldgb sdcc-ld6808 sdcc-ldstm8 sdcc-ldpdk sdcc-ldf8
+all: sdcc-ld8051 sdcc-ldz80 sdcc-ldgb sdcc-ld6808 sdcc-ld6800 sdcc-ldstm8 sdcc-ldpdk sdcc-ldf8
 
 sdcc-ld8051: checkconf $(ASLINK)
 
@@ -73,13 +73,15 @@ sdcc-ldgb: checkconf $(top_builddir)/bin/sdldgb$(EXEEXT)
 
 sdcc-ld6808: checkconf $(top_builddir)/bin/sdld6808$(EXEEXT)
 
+sdcc-ld6800: checkconf $(top_builddir)/bin/sdld6800$(EXEEXT)
+
 sdcc-ldstm8: checkconf $(top_builddir)/bin/sdldstm8$(EXEEXT)
 
 sdcc-ldf8: checkconf $(top_builddir)/bin/sdldf8$(EXEEXT)
 
 sdcc-ldpdk: checkconf $(top_builddir)/bin/sdldpdk$(EXEEXT)
 
-$(top_builddir)/bin/sdldz80$(EXEEXT) $(top_builddir)/bin/sdldgb$(EXEEXT) $(top_builddir)/bin/sdldstm8$(EXEEXT) $(top_builddir)/bin/sdld6808$(EXEEXT) $(top_builddir)/bin/sdldpdk$(EXEEXT) $(top_builddir)/bin/sdldf8$(EXEEXT): $(ASLINK)
+$(top_builddir)/bin/sdldz80$(EXEEXT) $(top_builddir)/bin/sdldgb$(EXEEXT) $(top_builddir)/bin/sdldstm8$(EXEEXT) $(top_builddir)/bin/sdld6808$(EXEEXT) $(top_builddir)/bin/sdld6800$(EXEEXT) $(top_builddir)/bin/sdldpdk$(EXEEXT) $(top_builddir)/bin/sdldf8$(EXEEXT): $(ASLINK)
 	cp -p $(ASLINK) $@
 
 $(ASLINK): $(LKOBJECTS)
@@ -105,6 +107,11 @@ install: all installdirs
 	  $(INSTALL) $(top_builddir)/bin/sdld6808$(EXEEXT) $(DESTDIR)$(bindir)/`echo 'sdld6808' | sed '$(transform)'`$(EXEEXT); \
 	  $(STRIP) $(DESTDIR)$(bindir)/`echo 'sdld6808' | sed '$(transform)'`$(EXEEXT); \
 	fi
+	if [ "`grep mc6800 $(top_builddir)/ports.build`" = "mc6800" ]; \
+	then \
+	  $(INSTALL) $(top_builddir)/bin/sdld6800$(EXEEXT) $(DESTDIR)$(bindir)/`echo 'sdld6800' | sed '$(transform)'`$(EXEEXT); \
+	  $(STRIP) $(DESTDIR)$(bindir)/`echo 'sdld6800' | sed '$(transform)'`$(EXEEXT); \
+	fi
 	if [ "`grep z80 $(top_builddir)/ports.build`" = "z80" ]; \
 	then \
 	  $(INSTALL) $(top_builddir)/bin/sdldz80$(EXEEXT) $(DESTDIR)$(bindir)/`echo 'sdldz80' | sed '$(transform)'`$(EXEEXT); \
@@ -126,7 +133,7 @@ install: all installdirs
 # Deleting all the installed files
 # --------------------------------
 uninstall:
-	for ld in $(top_builddir)/bin/sdld $(top_builddir)/bin/sdldz80 $(top_builddir)/bin/sdldgb $(top_builddir)/bin/sdldstm8 $(top_builddir)/bin/sdld6808 $(top_builddir)/bin/sdldpdk $(top_builddir)/bin/sdldf8; \
+	for ld in $(top_builddir)/bin/sdld $(top_builddir)/bin/sdldz80 $(top_builddir)/bin/sdldgb $(top_builddir)/bin/sdldstm8 $(top_builddir)/bin/sdld6808 $(top_builddir)/bin/sdld6800 $(top_builddir)/bin/sdldpdk $(top_builddir)/bin/sdldf8; \
 	do \
 	  rm -f $(DESTDIR)$(bindir)/`echo \`basename $$ld\` | sed '$(transform)'`$(EXEEXT); \
 	done
