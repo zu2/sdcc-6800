@@ -6510,7 +6510,8 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       return;
     }
   if (AOP_TYPE (right) == AOP_STL && !IS_AOP_X (AOP (left)) && !IS_AOP_D (AOP (left))
-      || AOP_TYPE (left) == AOP_STL && !mc6800_reg_b->isFree)
+      || AOP_TYPE (left) == AOP_STL && !mc6800_reg_b->isFree
+         && !(mc6800_reg_x->isDead && AOP_SIZE (right) == 2 && !IS_AOP_WITH_X (AOP (right))))
     {
       UNIMPLEMENTED;
       freeAsmop (right, NULL, ic, false);
@@ -6564,6 +6565,16 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
         tlbl_NE = newiTempLabel (NULL);
       emitBranch ("bne", tlbl_NE);
       accopWithAop ("cmpa", AOP (right), 1);
+    }
+  else if (AOP_TYPE (left) == AOP_STL && mc6800_reg_x->isDead && AOP_SIZE (right) == 2 && !IS_AOP_WITH_X (AOP (right)))
+    {
+      const char *tmp;
+
+      loadRegFromAop (mc6800_reg_x, AOP (right), 0);
+      tmp = setupTmpFromSP (_G.stackOfs + AOP (left)->aopu.aop_stk);
+      mc6800_emitOp ("cpx", MODE_DIR, "*%s", tmp);
+      freeTemp ();
+      mc6800_freeReg (mc6800_reg_x);
     }
   else
     {
