@@ -1006,19 +1006,6 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
   mc6800_useReg (reg);
 }
 
-/*--------------------------------------------------------------------------*/
-/* loadRegHXAfromAop - Load registers A, H, and X from aops.                */
-/*                     This takes care of the tricky cases where the        */
-/*                     sources may be registers that overlap with the       */
-/*                     destination registers. An aop may be NULL if the     */
-/*                     corresponding register does not need to be loaded.   */
-/*--------------------------------------------------------------------------*/
-static void
-loadRegHXAfromAop(asmop * aopH, int ofsH, asmop * aopX, int ofsX, asmop * aopA, int ofsA)
-{
-  printf("; loadRegHXAfromAop\n");
-}
-
 
 /*--------------------------------------------------------------------------*/
 /* storeRegToAop - Store register reg to logical offset loffset of aop.     */
