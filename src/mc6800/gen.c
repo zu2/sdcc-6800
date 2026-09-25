@@ -4107,7 +4107,18 @@ genPlusIncr (iCode * ic)
     return false;
 
   if (!sameRegs (AOP (left), AOP (result)))
-    return false;
+    {
+      if (size != 2 || icount > ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6))
+        return false;
+      if (AOP_TYPE (result) == AOP_SOF || (AOP_TYPE (result) == AOP_REG && !IS_AOP_X (AOP (result))))
+        return false;
+      if (!mc6800_reg_x->isDead || (AOP_TYPE (left) == AOP_REG && !IS_AOP_X (AOP (left))))
+        return false;
+      loadRegFromAop (mc6800_reg_x, AOP (left), 0);
+      addConstToX (icount);
+      storeRegToAop (mc6800_reg_x, AOP (result), 0);
+      return true;
+    }
 
   if (AOP_TYPE (result) == AOP_REG)
     {
