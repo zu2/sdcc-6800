@@ -370,6 +370,21 @@ static void assign_operands_for_cost(const assignment &a, unsigned short int i, 
   assign_operand_for_cost(IC_RIGHT(ic), a, i, G, I);
   assign_operand_for_cost(IC_RESULT(ic), a, i, G, I);
 
+  if(ic->op != IFX && ic->prev && ic->prev->op == GET_VALUE_AT_ADDRESS && OP_SYMBOL_CONST(IC_RESULT(ic->prev))->regType == REG_CND)
+    {
+      symbol *sym = OP_SYMBOL(IC_LEFT(ic->prev));
+      cfg_alive_t::const_iterator v, v_end;
+
+      for (v = G[i].alive.begin(), v_end = G[i].alive.end(); v != v_end; ++v)
+        if(I[*v].v == sym->key)
+          {
+            sym->regs[I[*v].byte] = (a.global[*v] >= 0) ? regsmc6800 + a.global[*v] : 0;
+            sym->isspilt = (a.global[*v] < 0);
+            sym->nRegs = I[*v].size;
+            sym->accuse = 0;
+          }
+    }
+
   if(ic->op == SEND && (ic->builtinSEND || ic->next && ic->next->op == SEND))
     {
       assign_operands_for_cost(a, *(adjacent_vertices(i, G).first), G, I);
@@ -468,6 +483,29 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
 
   if(!Dinst_ok(a, i, G, I))
     return(std::numeric_limits<float>::infinity());
+
+  if(ic->op != IFX && ic->prev && ic->prev->op == GET_VALUE_AT_ADDRESS && OP_SYMBOL_CONST(IC_RESULT(ic->prev))->regType == REG_CND)
+    {
+      int key = OP_SYMBOL_CONST(IC_LEFT(ic->prev))->key;
+      bool inx = false, inmem = false, otherinx = false;
+      cfg_alive_t::const_iterator v, v_end;
+
+      for (v = G[i].alive.begin(), v_end = G[i].alive.end(); v != v_end; ++v)
+        {
+          bool x = (a.global[*v] == REG_XL || a.global[*v] == REG_XH);
+          if(I[*v].v != key)
+            otherinx |= x;
+          else if(a.global[*v] < 0)
+            inmem = true;
+          else if(a.global[*v] == REG_XL && I[*v].byte == 0 || a.global[*v] == REG_XH && I[*v].byte == 1)
+            inx = true;
+          else
+            return(std::numeric_limits<float>::infinity());
+        }
+      if(inx && (inmem || operand_on_stack(IC_LEFT(ic), a, i, G) || operand_on_stack(IC_RIGHT(ic), a, i, G) || operand_on_stack(IC_RESULT(ic), a, i, G)) ||
+        inmem && otherinx)
+        return(std::numeric_limits<float>::infinity());
+    }
 
   if(!Xinst_ok(a, i, G, I))
     return(std::numeric_limits<float>::infinity());
@@ -582,6 +620,20 @@ static void extra_ic_generated(iCode *ic)
           OP_SYMBOL (IC_RESULT (ic))->regType = REG_CND;
           ifx->generated = true;
         }
+    }
+  if(ic->op == GET_VALUE_AT_ADDRESS && IS_ITEMP (IC_RESULT (ic)) && getSize(operandType(IC_RESULT (ic))) <= 2 && IS_ITEMP (IC_LEFT (ic)) && !OP_SYMBOL (IC_LEFT (ic))->remat &&
+    !IS_VOLATILE (operandType (IC_LEFT (ic))->next) && !IS_BITVAR (getSpec (operandType (IC_RESULT (ic)))) &&
+    IS_OP_LITERAL (IC_RIGHT (ic)) &&
+    bitVectnBitsOn (OP_USES (IC_RESULT (ic))) == 1 && ic->next &&
+    (ic->next->op == '+' || ic->next->op == '-' || IS_BITWISE_OP (ic->next) || IS_CONDITIONAL (ic->next)) &&
+    isOperandEqual (IC_LEFT (ic->next), IC_RESULT (ic)) != isOperandEqual (IC_RIGHT (ic->next), IC_RESULT (ic)))
+    {
+      OP_SYMBOL (IC_RESULT (ic))->for_newralloc = false;
+      OP_SYMBOL (IC_RESULT (ic))->regType = REG_CND;
+      ic->generated = true;
+      ic->next->rlive = bitVectSetBit (ic->next->rlive, OP_SYMBOL (IC_LEFT (ic))->key);
+      if (OP_SYMBOL (IC_LEFT (ic))->liveTo < ic->next->seq)
+        OP_SYMBOL (IC_LEFT (ic))->liveTo = ic->next->seq;
     }
   if(ic->op == '-' && IS_VALOP (IC_RIGHT (ic)) && operandLitValue (IC_RIGHT (ic)) == 1 && getSize(operandType(IC_RESULT (ic))) == 1 && !isOperandInFarSpace (IC_RESULT (ic)) && isOperandEqual (IC_RESULT (ic), IC_LEFT (ic)))
     {

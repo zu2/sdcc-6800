@@ -1856,6 +1856,22 @@ setupXForAop (asmop * aop)
 {
   int lo, hi, shift, limit;
 
+  if (aop->type == AOP_IDX)
+    {
+      iCode *dic = hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (aop->op)));
+
+      if (IS_AOP_X (AOP (IC_LEFT (dic))) || mc6800_reg_x->aop == aop)
+        return;
+      if (!mc6800_reg_x->isFree && !mc6800_reg_x->isDead)
+        {
+          UNIMPLEMENTED;
+          return;
+        }
+      loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (dic)), 0);
+      mc6800_freeReg (mc6800_reg_x);
+      mc6800_reg_x->aop = aop;
+      return;
+    }
   if (aop->type != AOP_SOF)
     return;
   if (mc6800_reg_x->aop != &tsxaop)
@@ -2233,6 +2249,16 @@ aopOp (operand *op, iCode * ic, bool result)
     piCode (ic, NULL);
   sym = OP_SYMBOL (op);
 
+  if (sym->regType == REG_CND && ic->prev && ic->prev->op == GET_VALUE_AT_ADDRESS && isOperandEqual (IC_RESULT (ic->prev), op))
+    {
+      aopOp (IC_LEFT (ic->prev), ic, false);
+      sym->aop = op->aop = aop = newAsmop (AOP_IDX);
+      aop->size = getSize (operandType (op));
+      aop->op = op;
+      aop->aopu.aop_stk = (int) operandLitValue (IC_RIGHT (ic->prev));
+      return;
+    }
+
   /* if the type is a conditional */
   if (sym->regType == REG_CND)
     {
@@ -2351,6 +2377,9 @@ freeAsmop (operand * op, asmop * aaop, iCode * ic, bool pop)
 
   if (!aop)
     return;
+
+  if (aop->type == AOP_IDX && !aop->freed)
+    freeAsmop (IC_LEFT ((iCode *) hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (aop->op)))), NULL, ic, pop);
 
   if (aop->freed)
     goto dealloc;
@@ -2555,7 +2584,9 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
       strcpy (rs, s);
       return rs;
     case AOP_IDX:
-      xofs = offset; /* For now, assume hx points to the base address of operand */
+      xofs = aop->aopu.aop_stk + offset;
+      if (xofs < 0 || xofs > 255)
+        werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "index offset out of range");
       if (xofs)
         {
           if (regalloc_dry_run) /* Don't worry about the exact offset during the dry run */
@@ -6180,6 +6211,12 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       left = right;
       right = temp;
     }
+  if (AOP_TYPE (right) == AOP_IDX && AOP_TYPE (left) != AOP_IDX && AOP_TYPE (left) != AOP_REG)
+    {
+      operand *temp = left;
+      left = right;
+      right = temp;
+    }
   if (AOP_TYPE (right) == AOP_STL && AOP_TYPE (left) != AOP_STL && AOP_TYPE (left) != AOP_REG)
     {
       operand *temp = left;
@@ -6231,7 +6268,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   size = max (AOP_SIZE (left), AOP_SIZE (right));
 
   if ((size == 2)
-      && ((AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT || IS_AOP_X (AOP (left))) && (AOP_SIZE (left) == 2))
+      && ((AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT || AOP_TYPE (left) == AOP_IDX || IS_AOP_X (AOP (left))) && (AOP_SIZE (left) == 2))
       && ((AOP_TYPE (right) == AOP_LIT) || (AOP_TYPE (right) == AOP_IMMD) || ((AOP_TYPE (right) == AOP_DIR || AOP_TYPE (right) == AOP_EXT) && (AOP_SIZE (right) == 2))) && (mc6800_reg_x->isDead || IS_AOP_X (AOP (left))))
     {
       loadRegFromAop (mc6800_reg_x, AOP (left), 0);
@@ -10804,6 +10841,8 @@ genmc6800iCode (iCode *ic)
           updateiTempRegisterUse (IC_RESULT (ic));
         updateiTempRegisterUse (IC_LEFT (ic));
         updateiTempRegisterUse (IC_RIGHT (ic));
+        if (ic->prev && ic->prev->op == GET_VALUE_AT_ADDRESS && OP_SYMBOL (IC_RESULT (ic->prev))->regType == REG_CND)
+          updateiTempRegisterUse (IC_LEFT (ic->prev));
       }
 
     for (i = A_IDX; i <= XH_IDX; i++)
@@ -10965,6 +11004,8 @@ genmc6800iCode (iCode *ic)
       break;
 
     case GET_VALUE_AT_ADDRESS:
+      if (OP_SYMBOL (IC_RESULT (ic))->regType == REG_CND && ic->next && ic->next->op != IFX)
+        break;
       genPointerGet (ic, hasIncmc6800 (IC_LEFT (ic), ic, getSize (operandType (IC_RESULT (ic)))), ifxForOp (IC_RESULT (ic), ic));
       break;
 
