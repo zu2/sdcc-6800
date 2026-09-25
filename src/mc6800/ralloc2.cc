@@ -465,7 +465,7 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
   iCode *ic = G[i].ic;
   float c;
 
-  wassert (TARGET_IS_MC6800 || TARGET_IS_S08);
+  wassert (TARGET_IS_MC6800);
 
   if(!inst_sane(a, i, G, I))
     return(std::numeric_limits<float>::infinity());

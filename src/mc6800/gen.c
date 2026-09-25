@@ -51,7 +51,6 @@ static char *one = "#0x01";
 
 static struct
 {
-  short hxPushed;
   short accInUse;
   short nRegsSaved;
   int stackOfs;
