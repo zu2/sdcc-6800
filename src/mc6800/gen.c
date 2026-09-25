@@ -3295,6 +3295,13 @@ genIpush (iCode * ic)
       goto release;
     }
 
+  if (AOP_TYPE (IC_LEFT (ic)) == AOP_STL && size == 2 && mc6800_reg_b->isFree)
+    {
+      loadRegFromAop (mc6800_reg_d, AOP (IC_LEFT (ic)), 0);
+      pushReg (mc6800_reg_d, true);
+      goto release;
+    }
+
   while (size--)
     {
       loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (ic)), offset++);
