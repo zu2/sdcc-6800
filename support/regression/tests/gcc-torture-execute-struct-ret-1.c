@@ -55,7 +55,7 @@ void
 testTortureExecute (void)
 {
 #if !defined(__SDCC_pdk14) && !defined(__SDCC_pdk15) // Lack of memory
-#if !defined(__SDCC_mcs51) && !defined(__SDCC_ds390) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) && !defined(SDCC_MOS) // Todo: enable when struct parmeters are supported!
+#if !defined(__SDCC_mcs51) && !defined(__SDCC_ds390) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) && !defined(SDCC_MOS) && !defined(__SDCC_mc6800) // Todo: enable when struct parmeters are supported!
   X Xr;
   char tmp[100];
 
