@@ -1041,7 +1041,7 @@ moveSendToCall (iCode *sic, eBBlock *ebp)
   iCode * prev = sic->prev;
   iCode * sic2 = NULL;
   iCode * cic;
-  
+
   /* Go find the CALL/PCALL */
   cic = sic;
   while (cic && cic->op != CALL && cic->op != PCALL)
@@ -1052,7 +1052,7 @@ moveSendToCall (iCode *sic, eBBlock *ebp)
   /* Is there a second SEND? If so, we'll need to move it too. */
   if (sic->next->op == SEND)
     sic2 = sic->next;
-  
+
   /* relocate the SEND(s) */
   remiCodeFromeBBlock (ebp, sic);
   addiCodeToeBBlock (ebp, sic, cic);
@@ -1224,14 +1224,14 @@ packRegisters (eBBlock ** ebpp, int count)
       for (ic = ebp->sch; ic; ic = ic->next)
         {
           //packRegsForLiteral (ic);
-      
+
           /* move SEND to immediately precede its CALL/PCALL */
           if (ic->op == SEND && ic->next &&
               ic->next->op != CALL && ic->next->op != PCALL)
             {
               ic = moveSendToCall (ic, ebp);
             }
-      
+
           /* if this is an itemp & result of an address of a true sym
              then mark this as rematerialisable   */
           if (ic->op == ADDRESS_OF &&

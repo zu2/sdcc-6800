@@ -43,25 +43,25 @@ template <class I_t>
 static void add_operand_conflicts_in_node(const cfg_node &n, I_t &I)
 {
   const iCode *ic = n.ic;
-  
+
   const operand *result = IC_RESULT(ic);
   const operand *left = IC_LEFT(ic);
   const operand *right = IC_RIGHT(ic);
-	
+
   if(!result || !IS_SYMOP(result))
     return;
-    
+
   // Todo: Identify more operations that code generation can always handle and exclude them (as done for the z80-like ports).
   if (ic->op == '=')
     return;
 
-  operand_map_t::const_iterator oir, oir_end, oirs; 
+  operand_map_t::const_iterator oir, oir_end, oirs;
   boost::tie(oir, oir_end) = n.operands.equal_range(OP_SYMBOL_CONST(result)->key);
   if(oir == oir_end)
     return;
-    
+
   operand_map_t::const_iterator oio, oio_end;
-  
+
   if(left && IS_SYMOP(left))
     for(boost::tie(oio, oio_end) = n.operands.equal_range(OP_SYMBOL_CONST(left)->key); oio != oio_end; ++oio)
       for(oirs = oir; oirs != oir_end; ++oirs)
@@ -71,7 +71,7 @@ static void add_operand_conflicts_in_node(const cfg_node &n, I_t &I)
           if(I[rvar].byte < I[ovar].byte)
             boost::add_edge(rvar, ovar, I);
         }
-        
+
   if(right && IS_SYMOP(right))
     for(boost::tie(oio, oio_end) = n.operands.equal_range(OP_SYMBOL_CONST(right)->key); oio != oio_end; ++oio)
       for(oirs = oir; oirs != oir_end; ++oirs)
@@ -317,10 +317,10 @@ template <class G_t, class I_t>
 static void set_surviving_regs(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
 {
   iCode *ic = G[i].ic;
-  
+
   bitVectClear(ic->rMask);
   bitVectClear(ic->rSurv);
-  
+
   cfg_alive_t::const_iterator v, v_end;
   for (v = G[i].alive.begin(), v_end = G[i].alive.end(); v != v_end; ++v)
     {
@@ -344,8 +344,8 @@ static void assign_operand_for_cost(operand *o, const assignment &a, unsigned sh
     {
       var_t v = oi->second;
       if(a.global[v] >= 0)
-        { 
-          sym->regs[I[v].byte] = regsmc6800 + a.global[v];   
+        {
+          sym->regs[I[v].byte] = regsmc6800 + a.global[v];
           sym->isspilt = false;
           sym->nRegs = I[v].size;
           sym->accuse = 0;
@@ -365,11 +365,11 @@ template <class G_t, class I_t>
 static void assign_operands_for_cost(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
 {
   const iCode *ic = G[i].ic;
-  
+
   assign_operand_for_cost(IC_LEFT(ic), a, i, G, I);
   assign_operand_for_cost(IC_RIGHT(ic), a, i, G, I);
   assign_operand_for_cost(IC_RESULT(ic), a, i, G, I);
-    
+
   if(ic->op == SEND && (ic->builtinSEND || ic->next && ic->next->op == SEND))
     {
       assign_operands_for_cost(a, *(adjacent_vertices(i, G).first), G, I);
@@ -382,10 +382,10 @@ static bool operand_sane(const operand *o, const assignment &a, unsigned short i
 {
   if(!o || !IS_SYMOP(o))
     return(true);
- 
+
   operand_map_t::const_iterator oi, oi2, oi_end;
   boost::tie(oi, oi_end) = G[i].operands.equal_range(OP_SYMBOL_CONST(o)->key);
-  
+
   if(oi == oi_end)
     return(true);
 
@@ -395,7 +395,7 @@ static bool operand_sane(const operand *o, const assignment &a, unsigned short i
   oi2++;
   if (oi2 == oi_end)
     return(true);
-  
+
   // Register combinations code generation cannot handle yet (AH, XH, HA).
   if(std::binary_search(a.local.begin(), a.local.end(), oi->second) && std::binary_search(a.local.begin(), a.local.end(), oi2->second))
     {
@@ -410,7 +410,7 @@ static bool operand_sane(const operand *o, const assignment &a, unsigned short i
       if(h == REG_XL && l == REG_B)
         return(false);
     }
-  
+
   // In registers.
   if(std::binary_search(a.local.begin(), a.local.end(), oi->second))
     {
@@ -426,7 +426,7 @@ static bool operand_sane(const operand *o, const assignment &a, unsigned short i
         if(std::binary_search(a.local.begin(), a.local.end(), oi->second))
           return(false);
     }
- 
+
   return(true);
 }
 
@@ -638,8 +638,8 @@ static bool tree_dec_ralloc(T_t &T, G_t &G, const I_t &I)
     {
       symbol *sym = (symbol *)(hTabItemWithKey(liveRanges, I[v].v));
       if(winner.global[v] >= 0)
-        { 
-          sym->regs[I[v].byte] = regsmc6800 + winner.global[v];   
+        {
+          sym->regs[I[v].byte] = regsmc6800 + winner.global[v];
           sym->isspilt = false;
           sym->nRegs = I[v].size;
           sym->accuse = 0;

@@ -1397,7 +1397,7 @@ transferAopAop (asmop *srcaop, int srcofs, asmop *dstaop, int dstofs)
       storeConstToAop (byteOfVal (srcaop->aopu.aop_lit, srcofs), dstaop, dstofs);
       return;
     }
-    
+
   if (dstaop->type == AOP_REG && !IS_AOP_X (dstaop))
     {
       reg = dstaop->aopu.aop_reg[dstofs];
@@ -2480,7 +2480,7 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
      size then zero */
   if (loffset > (aop->size - 1) && aop->type != AOP_LIT)
     return zero;
-  
+
   /* depending on type */
   switch (aop->type)
     {
@@ -2589,7 +2589,7 @@ getDataSize (operand *op)
 static void
 asmopToBool (asmop *aop, reg_info *reg)
 {
-  bool isFloat; 
+  bool isFloat;
   symbol *tlbl, *tlbl1;
   int size = aop->size;
   bool needpula = false;
@@ -3554,7 +3554,7 @@ genPcall (iCode * ic)
     {
       updateiTempRegisterUse (IC_LEFT (sendic));
     }
-  
+
   if (!IS_LITERAL (etype))
     {
       aopOp (IC_LEFT (ic), ic, false);
@@ -4252,7 +4252,7 @@ genPlus16 (iCode *ic)
   accopWithAop ("addb", rightOp, 0);
   accopWithAop ("adca", rightOp, 1);
   storeRegToAop (mc6800_reg_d, result, 0);
-  
+
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
 }
@@ -4884,7 +4884,7 @@ genMultOneByte (operand * left, operand * right, operand * result)
     mc6800_emitLabel (tlbl3);
   adjustStack (1);
   storeRegToFullAop (mc6800_reg_xa, AOP (result), true);
-#endif  
+#endif
   pullOrFreeReg (mc6800_reg_x, needpullx);
   pullOrFreeReg (mc6800_reg_a, needpulla);
 }
@@ -6442,7 +6442,7 @@ hasIncmc6800 (operand *op, const iCode *ic, int osize)
     return NULL;
   if (osize != (isize = getSize (type->next)))
     return NULL;
-  
+
   while (lic)
     {
       /* if operand of the form op = op + <sizeof *op> */
@@ -8354,7 +8354,7 @@ genRightShiftLiteral (operand * left, operand * right, operand * result, iCode *
       bool needpulla = pushRegIfSurv (mc6800_reg_a);
       if (sign)
         {
-          
+
           /* get sign in acc.7 */
           loadRegFromAop (mc6800_reg_a, AOP (left), size - 1);
         }
@@ -8932,7 +8932,7 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
   derefaop = aopDerefAop (AOP (left), litOffset);
   freeAsmop (left, NULL, ic, true);
   derefaop->size = size;
-  
+
   if (ifx)
     needpulla = pushRegIfSurv (mc6800_reg_a);
   if (derefaop->type == AOP_SOF && !IS_AOP_X (AOP (result)))
@@ -9031,7 +9031,7 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   /* it should be marking the pointer (left op) registers dead. */
   /* EEP - 5 Jan 2013 */
   if (AOP_TYPE (left) == AOP_REG && pi)
-    { 
+    {
       int i;
       for (i = 0; i < AOP_SIZE (left); i++)
         AOP (left)->aopu.aop_reg[i]->isDead = true;
@@ -9661,7 +9661,7 @@ genPointerSet (iCode * ic, iCode * pi)
       return;
     }
   if (AOP_TYPE (result) == AOP_REG && pi)
-    { 
+    {
       int i;
       for (i = 0; i < AOP_SIZE (result); i++)
         AOP (result)->aopu.aop_reg[i]->isDead = true;
@@ -9845,7 +9845,7 @@ static void
 genIfx (iCode * ic, iCode * popIc)
 {
   operand *cond = IC_COND (ic);
-  
+
   D (emitcode (";     genIfx", ""));
 
   aopOp (cond, ic, false);
@@ -9900,7 +9900,7 @@ genAddrOf (iCode * ic)
   int size, offset;
   bool needpullx;
   struct dbuf_s dbuf;
-  
+
   D (emitcode (";     genAddrOf", ""));
 
   aopOp (IC_RESULT (ic), ic, false);
@@ -10016,7 +10016,7 @@ genAssignLit (operand * result, operand * right)
 
   if ((AOP_TYPE (result) != AOP_DIR ) && IS_MC6800)
     canUseX = false;
-    
+
   if (canUseX)
     {
       /* Assign words that are already in HX */
@@ -10108,7 +10108,7 @@ genAssignLit (operand * result, operand * right)
             }
         }
     }
-    
+
   /* Assign whatever remains to be assigned */
   for (offset=size-1; offset>=0; offset--)
     {
@@ -10136,7 +10136,7 @@ genAssign (iCode * ic)
 
   result = IC_RESULT (ic);
   right = IC_RIGHT (ic);
-  
+
   aopOp (right, ic, false);
   aopOp (result, ic, true);
   if (IS_SYMOP (result) && AOP (result)->op)
@@ -10804,7 +10804,7 @@ genmc6800iCode (iCode *ic)
     case IPUSH_VALUE_AT_ADDRESS:
           genPointerPush (ic);
           break;
-  
+
     case IPOP:
       /* IPOP happens only when trying to restore a
          spilt live range, if there is an ifx statement
@@ -11034,7 +11034,7 @@ drymc6800iCode (iCode *ic)
   _G.stackOfs = mc6800_dry_stack_size;
 
   init_aop_pass();
-  
+
   genmc6800iCode (ic);
 
   destroy_line_list ();
