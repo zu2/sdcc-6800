@@ -321,7 +321,7 @@ createStackSpil (symbol * sym)
   /* set the type to the spilling symbol */
   sloc->type = copyLinkChain (sym->type);
   sloc->etype = getSpec (sloc->type);
-  SPEC_SCLS (sloc->etype) = S_DATA;
+  SPEC_SCLS (sloc->etype) = options.xdata_spill ? S_XDATA : S_DATA;
   SPEC_EXTR (sloc->etype) = 0;
   SPEC_STAT (sloc->etype) = 0;
   SPEC_VOLATILE(sloc->etype) = 0;

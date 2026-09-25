@@ -254,6 +254,12 @@ _mc6800_parseOptions (int *pargc, char **argv, int *i)
       return true;
     }
 
+  if (!strcmp (argv[*i], "--zp-spill"))
+    {
+      options.xdata_spill = 0;
+      return true;
+    }
+
   return false;
 }
 
@@ -267,6 +273,8 @@ static OPTION _mc6800_options[] =
     {0, OPTION_LARGE_MODEL, NULL, "16-bit address space for data (default)"},
     {0, "--out-fmt-elf", NULL, "Output executable in ELF format" },
     {0, OPTION_NO_STD_CRT0, &options.no_std_crt0, "Do not link default crt0.rel"},
+    {0, "--no-zp-spill", &options.xdata_spill, "Place register spills in 16-bit address space (default)"},
+    {0, "--zp-spill", NULL, "Place register spills in the zero page"},
     {0, NULL }
   };
 
@@ -302,6 +310,7 @@ _mc6800_setDefaultOptions (void)
   options.omitFramePtr = 1;     /* no frame pointer (we use SP */
                                 /* offsets instead)            */
   options.noOverlay = 1;
+  options.xdata_spill = 1;
 }
 
 static const char *
