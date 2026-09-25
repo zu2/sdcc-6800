@@ -700,7 +700,7 @@ PORT mc6800_port =
   {
     -1,         /* direction (-1 = stack grows down) */
     0,          /* bank_overhead (switch between register banks) */
-    4,          /* isr_overhead */
+    5,          /* isr_overhead */
     2,          /* call_overhead */
     0,          /* reent_overhead */
     0,          /* banked_overhead (switch between code banks) */
