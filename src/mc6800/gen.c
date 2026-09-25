@@ -3792,8 +3792,19 @@ genFunction (iCode * ic)
 
   if (IFFUNC_ISISR (sym->type))
     {
-      wassertl (0, "__interrupt not supported");
-      return;
+      symbol *tlbl = newiTempLabel (NULL);
+
+      mc6800_emitOp ("ldx", MODE_IMM, "#___SDCC_mc6800_ret0");
+      mc6800_emitLabel (tlbl);
+      mc6800_emitOp ("ldaa", MODE_IDX, "0,x");
+      mc6800_emitOp ("psha", MODE_INH, "");
+      mc6800_emitOp ("inx", MODE_INH, "");
+      mc6800_emitOp ("cpx", MODE_IMM, "#___SDCC_mc6800_ret0+24");
+      emitBranch ("bne", tlbl);
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      _G.stackPushes += 24;
+      updateCFA ();
     }
 
   /* For some cases it is worthwhile to perform a RECEIVE iCode */
@@ -3944,6 +3955,17 @@ genEndFunction (iCode * ic)
 
   if (IFFUNC_ISISR (sym->type))
     {
+      symbol *tlbl = newiTempLabel (NULL);
+
+      mc6800_emitOp ("ldx", MODE_IMM, "#___SDCC_mc6800_ret0+24");
+      mc6800_emitLabel (tlbl);
+      mc6800_emitOp ("dex", MODE_INH, "");
+      mc6800_emitOp ("pula", MODE_INH, "");
+      mc6800_emitOp ("staa", MODE_IDX, "0,x");
+      mc6800_emitOp ("cpx", MODE_IMM, "#___SDCC_mc6800_ret0");
+      emitBranch ("bne", tlbl);
+      _G.stackPushes -= 24;
+
       /* if debug then send end of function */
       if (options.debug && currFunc && !regalloc_dry_run)
         {
