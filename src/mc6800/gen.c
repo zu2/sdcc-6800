@@ -51,12 +51,9 @@ static char *one = "#0x01";
 
 static struct
 {
-  short accInUse;
-  short nRegsSaved;
   int stackOfs;
   int stackPushes;
   int param_offset;
-  short regsinuse;
   set *sendSet;
   int tempOfs;
 }
@@ -3657,9 +3654,7 @@ genPcall (iCode * ic)
           if (operandSize (IC_RESULT (ic)) > 1)
             mc6800_useReg (mc6800_reg_a);
         }
-      _G.accInUse++;
       aopOp (IC_RESULT (ic), ic, false);
-      _G.accInUse--;
 
       assignResultValue (IC_RESULT (ic));
 
@@ -3730,7 +3725,6 @@ genFunction (iCode * ic)
 
 
   D (emitcode (";     genFunction", ""));
-  _G.nRegsSaved = 0;
   _G.stackPushes = 0;
   /* create the function header */
   emitcode (";", "-----------------------------------------");
