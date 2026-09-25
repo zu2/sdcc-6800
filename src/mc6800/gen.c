@@ -49,9 +49,8 @@ static void adjustStack (int n);
 static char *zero = "#0x00";
 static char *one = "#0x01";
 
-unsigned fReturnSizeMC6800 = 4;   /* shared with ralloc.c */
+unsigned fReturnSizeMC6800 = 4;
 
-// XXX
 #define	IS_S08	(0)
 
 static struct
@@ -1166,7 +1165,7 @@ storeConstToAop (int c, asmop * aop, int loffset)
       return;
     }
 
-  /* If the value needed is already in A or X, just store it */
+  /* If the value needed is already in A or B, just store it */
   if (mc6800_reg_a->isLitConst && mc6800_reg_a->litConst == c)
     {
       storeRegToAop (mc6800_reg_a, aop, loffset);
@@ -1536,9 +1535,8 @@ accopWithAop (char *accop, asmop *aop, int loffset)
 
 /*--------------------------------------------------------------------------*/
 /* rmwWithReg - Emit read/modify/write instruction rmwop with register reg. */
-/*              byte at logical offset loffset of asmop aop. Register reg   */
-/*              must be 8-bit.                                              */
-/*              Supports: com, dec, inc, lsl, lsr, neg, rol, ror            */
+/*              Register reg must be 8-bit.                                 */
+/*              Supports: asl, asr, com, dec, inc, lsr, neg, rol, ror       */
 /*--------------------------------------------------------------------------*/
 static void
 rmwWithReg (char *rmwop, reg_info * reg)
@@ -1565,7 +1563,8 @@ rmwWithReg (char *rmwop, reg_info * reg)
 /*--------------------------------------------------------------------------*/
 /* rmwWithAop - Emit read/modify/write instruction rmwop with the byte at   */
 /*                logical offset loffset of asmop aop.                      */
-/*                Supports: com, dec, inc, lsl, lsr, neg, rol, ror, tst     */
+/*                Supports: asl, asr, com, dec, inc, lsr, neg, rol, ror,    */
+/*                tst                                                       */
 /*--------------------------------------------------------------------------*/
 static void
 rmwWithAop (char *rmwop, asmop * aop, int loffset)
@@ -1583,7 +1582,7 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
 
   /* If we need a register: */
   /*   use A if it's free,  */
-  /*   otherwise use X if it's free */
+  /*   otherwise use B if it's free */
   /*   otherwise use A (and preserve original value via the stack) */
   if (!mc6800_reg_a->isFree && mc6800_reg_b->isFree)
     reg = mc6800_reg_b;
@@ -1603,8 +1602,7 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
         offset += _G.stackOfs + _G.stackPushes + aop->aopu.aop_stk + 1;
         if ((offset > 0xff) || (offset < 0))
           {
-            /* Unfortunately, the rmw class of instructions only support a */
-            /* single byte stack pointer offset and we need two. */
+            /* Indexed addressing only supports an offset of 0 to 255. */
             needpull = pushRegIfUsed (reg);
             loadRegFromAop (reg, aop, loffset);
             rmwWithReg (rmwop, reg);
@@ -2193,9 +2191,6 @@ aopOp (operand *op, iCode * ic, bool result)
   if (!op)
     return;
 
-  // Is this a pointer set result?
-  //
-
   /* if this a literal */
   if (IS_OP_LITERAL (op))
     {
@@ -2503,7 +2498,7 @@ aopDerefAop (asmop * aop, int offset)
 /*-----------------------------------------------------------------*/
 /* aopAdrStr - for referencing the address of the aop              */
 /*-----------------------------------------------------------------*/
-/* loffset seems to have a weird meaning here. It seems to be nonzero in some places where one would expect an offset to be zero */
+/* loffset is the logical offset (0 is the least significant byte)  */
 static const char *
 aopAdrStr (asmop * aop, int loffset, bool bit16)
 {
@@ -3236,7 +3231,7 @@ unsaveRegisters (iCode *ic)
 
 
 /*-----------------------------------------------------------------*/
-/* assignResultValue -                                             */
+/* assignResultValue - store the return value of a call to oper   */
 /*-----------------------------------------------------------------*/
 static void
 assignResultValue (operand * oper)
@@ -3755,9 +3750,6 @@ genFunction (iCode * ic)
       return;
     }
 
-  /* if this is an interrupt service routine then
-     save h  */
-
   /* For some cases it is worthwhile to perform a RECEIVE iCode */
   /* before setting up the stack frame completely. */
   while (ric && ric->next && ric->next->op == RECEIVE)
@@ -3920,7 +3912,7 @@ genRet (iCode * ic)
   D (emitcode (";     genRet", ""));
 
   /* if we have no return value then
-     just generate the "ret" */
+     just jump to the return */
   if (!IC_LEFT (ic))
     goto jumpret;
 
@@ -5458,7 +5450,7 @@ genModOneByte (operand * left, operand * right, operand * result)
 }
 
 /*-----------------------------------------------------------------*/
-/* genMod - generates code for division                            */
+/* genMod - generates code for modulus                             */
 /*-----------------------------------------------------------------*/
 static void
 genMod (iCode * ic)
@@ -5884,7 +5876,7 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
       return;
     }
 
-  // 2-byte comparison on the MC6800 is not straightforward, but we simply write it as cmpd here.
+  // Put the operand in D on the left.
   if (IS_AOP_D (AOP (right)))
     {
       operand *temp = left;
@@ -6018,9 +6010,7 @@ genCmpMANY (iCode * ic, iCode * ifx, operand * left, operand * right, int size, 
   /* These conditions depend on the Z flag bit, but Z is */
   /* only valid for the last byte of the comparison, not */
   /* the whole value. So exchange the operands to get a  */
-  /* comparison that doesn't depend on Z. (This is safe  */
-  /* to do here since ralloc won't assign multi-byte     */
-  /* operands to registers for comparisons)              */
+  /* comparison that doesn't depend on Z.               */
   if ((opcode == '>') || (opcode == LE_OP))
     {
       operand *temp = left;
@@ -6681,7 +6671,7 @@ genAnd (iCode * ic, iCode * ifx)
       left = tmp;
     }
 
-  /* if right is accumulator & left is not then exchange them */
+  /* if right is in registers & left is not in A then exchange them */
   if (AOP_TYPE (right) == AOP_REG && ! IS_AOP_WITH_A (AOP (left)))
     {
       operand *tmp = right;
@@ -6948,7 +6938,7 @@ genOr (iCode * ic, iCode * ifx)
       left = tmp;
     }
 
-  /* if left is accumulator & right is not then exchange them */
+  /* if right is in registers & left is not in A then exchange them */
   if (AOP_TYPE (right) == AOP_REG && !IS_AOP_WITH_A (AOP (left)))
     {
       operand *tmp = right;
@@ -7173,8 +7163,7 @@ genXor (iCode * ic, iCode * ifx)
   DD (emitcode ("", "; Size res[%d] = l[%d]^r[%d]", AOP_SIZE (result), AOP_SIZE (left), AOP_SIZE (right)));
 #endif
 
-  /* if left is a literal & right is not ||
-     if left needs acc & right does not */
+  /* if left is a literal & right is not then exchange them */
   if (AOP_TYPE (left) == AOP_LIT && AOP_TYPE (right) != AOP_LIT)
     {
       operand *tmp = right;
@@ -7182,7 +7171,7 @@ genXor (iCode * ic, iCode * ifx)
       left = tmp;
     }
 
-  /* if left is accumulator & right is not then exchange them */
+  /* if right is in registers & left is not in A then exchange them */
   if (AOP_TYPE (right) == AOP_REG && !IS_AOP_WITH_A (AOP (left)))
     {
       operand *tmp = right;
@@ -7787,7 +7776,7 @@ AccSRsh (reg_info *reg, int shCount)
       mc6800_emitOpWithAcc ("rol", reg, MODE_INH, "");
       mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
       mc6800_emitOpWithAcc ("sbc", reg, MODE_IMM, "#0x00");
-      /* total: 4 cycles, 4 bytes */
+      /* total: 6 cycles, 5 bytes */
       mc6800_dirtyReg (reg, false);
       return;
     }
@@ -8163,7 +8152,7 @@ genLeftShift (iCode *ic)
   bool maskedtopbyte = (topbytemask != 0xff);
 
   /* shift count is unknown then we have to form
-     a loop get the loop count in X : Note: we take
+     a loop get the loop count in B, A or X : Note: we take
      only the lower order byte since shifting
      more that 32 bits make no sense anyway, ( the
      largest size of an object can be only 32 bits ) */
@@ -10106,7 +10095,7 @@ genAssignLit (operand * result, operand * right)
 
   if (canUseX && (size>=2))
     {
-      /* Assign whatever reamains to be assigned */
+      /* Assign whatever remains to be assigned */
       for (offset=size-2; offset>=0; offset -= 2)
         {
           if (assigned[offset] && assigned[offset+1])

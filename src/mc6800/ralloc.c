@@ -28,15 +28,6 @@
 #include "gen.h"
 #include "dbuf_string.h"
 
-/*-----------------------------------------------------------------*/
-/* At this point we start getting processor specific although      */
-/* some routines are non-processor specific & can be reused when   */
-/* targetting other processors. The decision for this will have    */
-/* to be made on a routine by routine basis                        */
-/* routines used to pack registers are most definitely not reusable */
-/* since the pack the registers depending strictly on the MCU      */
-/*-----------------------------------------------------------------*/
-
 extern void genmc6800Code (iCode *);
 
 #define D(x)
@@ -61,7 +52,7 @@ int mc6800_ptrRegReq;             /* one byte pointer register required */
 int mc6800_dry_stack_size;
 static int mc6800_call_stack_size;
 
-/* 6808 registers */
+/* 6800 registers */
 reg_info regsmc6800[] =
 {
 
@@ -420,7 +411,6 @@ updateRegUsage (iCode * ic)
 {
   int reg;
 
-  // update the registers in use at the start of this icode
   for (reg=0; reg<mc6800_nRegs; reg++)
     {
       if (regsmc6800[reg].isFree)
@@ -918,7 +908,7 @@ packRegsForSupport (iCode * ic, eBBlock * ebp)
 }
 
 /*-----------------------------------------------------------------*/
-/* isBitwiseOptimizable - requirements of JEAN LOUIS VERN          */
+/* isBitwiseOptimizable - conditions for packing a bitwise operation */
 /*-----------------------------------------------------------------*/
 static bool
 isBitwiseOptimizable (iCode * ic)
@@ -973,7 +963,7 @@ packForPush (iCode * ic, eBBlock ** ebpp, int count)
   if (dic->op != '=' || POINTER_SET (dic))
     return;
 
-  if (dic->seq < ebp->fSeq || dic->seq > ebp->lSeq) // Evelyn did this
+  if (dic->seq < ebp->fSeq || dic->seq > ebp->lSeq)
     {
       int i;
       for (i=0; i<count; i++)
@@ -1074,7 +1064,7 @@ moveSendToCall (iCode *sic, eBBlock *ebp)
 /*---------------------------------------------------------------------*/
 /* packPointerOp - see if we can move an offset from addition iCode    */
 /*                 to the pointer iCode to used indexed addr mode      */
-/* The z80-related ports do a similar thing in SDCCopt.c, offsetFold() */
+/* The z80-related ports do this in SDCCopt.c, offsetFoldUse()         */
 /*---------------------------------------------------------------------*/
 static void
 packPointerOp (iCode * ic, eBBlock ** ebpp)

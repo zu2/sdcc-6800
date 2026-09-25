@@ -44,9 +44,9 @@ enum
 #define REG_GPR 0x02
 #define REG_CND 0x04
 
-/* Must preserve the relation MC6800MASK_H > MC6800MASK_X > MC08MASK_A  */
-/* so that MC6800MASK_REV can be automatically applied when reversing */
-/* the usual register pair ordering. */
+/* Must preserve the relations MC6800MASK_A < MC6800MASK_B and         */
+/* MC6800MASK_XL < MC6800MASK_XH, so that aopOp sets MC6800MASK_REV   */
+/* for D (low byte in B) and not for X (low byte in XL).              */
 #define MC6800MASK_A 0x01
 #define MC6800MASK_B 0x02
 #define MC6800MASK_XL 0x04
@@ -61,7 +61,7 @@ typedef struct reg_info
     short type;			/* can have value
 				   REG_GPR, REG_PTR or REG_CND */
     short rIdx;			/* index into register table */
-    char *name;			/* name */
+    char *name;
     short mask;			/* bitmask for pair allocation */
     struct asmop *aop;		/* last operand */
     int aopofs;			/* last operand offset */

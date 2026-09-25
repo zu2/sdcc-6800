@@ -31,7 +31,7 @@ typedef enum
                     can happen only for the result */
   AOP_IMMD,      /* immediate value for eg. remateriazable */
   AOP_STR,       /* array of strings */
-  AOP_CRY,       /* carry contains the value of this */
+  AOP_CRY,       /* the condition flags contain the value of this */
   AOP_EXT,       /* operand using extended addressing mode */
   AOP_SOF,       /* operand at an offset on the stack */
   AOP_STL,       /* operand is an address on the stack */
@@ -66,7 +66,7 @@ typedef struct asmop
 	reg_info *aop_reg[4];	/* array of registers */
 	char *aop_dir;		/* if direct  */
         char *aop_immd;         /* if immediate */
-	int aop_stk;		/* stack offset when AOP_STK */
+	int aop_stk;		/* stack offset when AOP_SOF or AOP_STL, offset from x when AOP_IDX */
       }
     aopu;
     struct valinfo valinfo;

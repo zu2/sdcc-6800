@@ -17,10 +17,6 @@
   along with this program; if not, write to the Free Software
   Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 -------------------------------------------------------------------------*/
-/*
-    Note that mlh prepended _mc6800_ on the static functions.  Makes
-    it easier to set a breakpoint using the debugger.
-*/
 #include "common.h"
 #include "mc6800.h"
 #include "main.h"
@@ -164,7 +160,7 @@ mc6800_getOpcodeData (const char *inst)
   return NULL;
 }
 
-/* list of key words used by msc51 */
+/* list of key words used by mc6800 */
 static char *_mc6800_keywords[] =
 {
   "at",
@@ -486,9 +482,7 @@ newAsmLineNode (void)
 
 /*--------------------------------------------------------------------*/
 /* Given an instruction and its first two operands, compute the       */
-/* instruction size. There are a few cases where it's too complicated */
-/* to distinguish between an 8-bit offset and 16-bit offset; in these */
-/* cases we conservatively assume the 16-bit offset size.             */
+/* instruction size.                                                  */
 /*--------------------------------------------------------------------*/
 static int
 mc6800_instructionSize (const char *inst, const char *op1, const char *op2)
@@ -612,7 +606,6 @@ static const char * const _crt[] = { "crt0.rel", NULL, };
 
 static const char * const _libs_mc6800[] = { "mc6800", NULL, };
 
-/* Globals */
 PORT mc6800_port =
 {
   TARGET_ID_MC6800,
@@ -624,7 +617,7 @@ PORT mc6800_port =
     false,                      /* Emit glue around main */
     MODEL_SMALL | MODEL_LARGE,
     MODEL_LARGE,
-    mc6800_get_model,           /* model == target */
+    mc6800_get_model,           /* mc6800 or mc6800-stack-auto */
   },
   {
     _asmCmd,
@@ -641,8 +634,8 @@ PORT mc6800_port =
     NULL,
     ".rel",
     1,
-    _crt,                       /* crt */
-    _libs_mc6800,                 /* libs */
+    _crt,
+    _libs_mc6800,
   },
   {                             /* Peephole optimizer */
     _mc6800_defaultRules,
@@ -741,7 +734,7 @@ PORT mc6800_port =
   NULL,
   _mc6800_keywords,
   _mc6800_genAssemblerStart,
-  _mc6800_genAssemblerEnd,        /* no genAssemblerEnd */
+  _mc6800_genAssemblerEnd,
   NULL,                         /* genIVT */
   _mc6800_genXINIT,
   NULL,                         /* genInitStartup */
@@ -749,9 +742,9 @@ PORT mc6800_port =
   _mc6800_regparm,
   NULL,                         /* process_pragma */
   NULL,                         /* getMangledFunctionName */
-  _hasNativeMulFor,             /* hasNativeMulFor */
-  hasExtBitOp,                  /* hasExtBitOp */
-  oclsExpense,                  /* oclsExpense */
+  _hasNativeMulFor,
+  hasExtBitOp,
+  oclsExpense,
   true,                         /* use_dw_for_init */
   false,                        /* little_endian */
   0,                            /* leave lt */
