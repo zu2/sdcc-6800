@@ -48,7 +48,6 @@ static struct
 _G;
 
 /* Shared with gen.c */
-int mc6800_ptrRegReq;             /* one byte pointer register required */
 int mc6800_dry_stack_size;
 static int mc6800_call_stack_size;
 
@@ -1492,7 +1491,7 @@ mc6800_ralloc (ebbIndex * ebbi)
   setToNull ((void *) &_G.funcrUsed);
   setToNull ((void *) &_G.regAssigned);
   setToNull ((void *) &_G.totRegAssigned);
-  mc6800_ptrRegReq = _G.stackExtend = _G.dataExtend = 0;
+  _G.stackExtend = _G.dataExtend = 0;
   mc6800_dry_stack_size = 0;
   mc6800_nRegs = 8;
   mc6800_reg_a = mc6800_regWithIdx(A_IDX);

@@ -49,10 +49,6 @@ static void adjustStack (int n);
 static char *zero = "#0x00";
 static char *one = "#0x01";
 
-unsigned fReturnSizeMC6800 = 4;
-
-#define	IS_S08	(0)
-
 static struct
 {
   short hxPushed;
@@ -93,7 +89,6 @@ freeTemp (void)
 }
 static asmop tsxaop;
 
-extern int mc6800_ptrRegReq;
 extern int mc6800_dry_stack_size;
 extern int mc6800_nRegs;
 extern struct dbuf_s *codeOutBuf;
@@ -109,9 +104,6 @@ static bool sameRegs (asmop *aop1, asmop *aop2);
 static reg_info *mc6800_findRegAop (asmop *aop, int loffset);
 static void mc6800_dirtyRegAop (asmop *aop, int loffset);
 static void mc6800_emitLabel (symbol *tlbl);
-#define RESULTONSTACK(x) \
-                         (IC_RESULT(x) && IC_RESULT(x)->aop && \
-                         IC_RESULT(x)->aop->type == AOP_STK )
 #define IS_AOP_A(x) ((x)->regmask == MC6800MASK_A)
 #define IS_AOP_B(x) ((x)->regmask == MC6800MASK_B)
 #define IS_AOP_X(x) ((x)->regmask == MC6800MASK_X)
@@ -697,8 +689,6 @@ aopName (asmop * aop)
                aop->aopu.aop_reg[1] ? aop->aopu.aop_reg[1]->name : "-",
                aop->aopu.aop_reg[0] ? aop->aopu.aop_reg[0]->name : "-");
       return buf;
-    case AOP_STK:
-      return "STK";
     default:
       sprintf (buf, "?%d", aop->type);
       return buf;
@@ -4801,8 +4791,8 @@ genMinus (iCode * ic)
     }
 
 release:
-  freeAsmop (IC_LEFT (ic), NULL, ic, (RESULTONSTACK (ic) ? false : true));
-  freeAsmop (IC_RIGHT (ic), NULL, ic, (RESULTONSTACK (ic) ? false : true));
+  freeAsmop (IC_LEFT (ic), NULL, ic, true);
+  freeAsmop (IC_RIGHT (ic), NULL, ic, true);
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
 }
 
@@ -5036,8 +5026,8 @@ genMult (iCode * ic)
   assert (0);
 #endif
 release:
-  freeAsmop (left, NULL, ic, (RESULTONSTACK (ic) ? false : true));
-  freeAsmop (right, NULL, ic, (RESULTONSTACK (ic) ? false : true));
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (right, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 }
 
@@ -5302,8 +5292,8 @@ genDiv (iCode * ic)
   /* should have been converted to function call */
   assert (0);
 release:
-  freeAsmop (left, NULL, ic, (RESULTONSTACK (ic) ? false : true));
-  freeAsmop (right, NULL, ic, (RESULTONSTACK (ic) ? false : true));
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (right, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 }
 
@@ -5539,8 +5529,8 @@ genMod (iCode * ic)
   assert (0);
 
 release:
-  freeAsmop (left, NULL, ic, (RESULTONSTACK (ic) ? false : true));
-  freeAsmop (right, NULL, ic, (RESULTONSTACK (ic) ? false : true));
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (right, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 }
 
@@ -6620,8 +6610,8 @@ genAndOp (iCode * ic)
   storeRegToFullAop (mc6800_reg_a, AOP (result), false);
   pullOrFreeReg(mc6800_reg_a, needpulla);
 
-  freeAsmop (left, NULL, ic, (RESULTONSTACK (ic) ? false : true));
-  freeAsmop (right, NULL, ic, (RESULTONSTACK (ic) ? false : true));
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (right, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 }
 
@@ -6669,8 +6659,8 @@ genOrOp (iCode * ic)
   storeRegToFullAop (mc6800_reg_a, AOP (result), false);
   pullOrFreeReg(mc6800_reg_a, needpulla);
 
-  freeAsmop (left, NULL, ic, (RESULTONSTACK (ic) ? false : true));
-  freeAsmop (right, NULL, ic, (RESULTONSTACK (ic) ? false : true));
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (right, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 }
 
@@ -6961,8 +6951,8 @@ genAnd (iCode * ic, iCode * ifx)
   pullOrFreeReg (mc6800_reg_a, needpulla);
 
 release:
-  freeAsmop (left, NULL, ic, (RESULTONSTACK (ic) ? false : true));
-  freeAsmop (right, NULL, ic, (RESULTONSTACK (ic) ? false : true));
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (right, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 }
 
@@ -7196,8 +7186,8 @@ genOr (iCode * ic, iCode * ifx)
   pullOrFreeReg (mc6800_reg_a, needpulla);
 
 release:
-  freeAsmop (left, NULL, ic, (RESULTONSTACK (ic) ? false : true));
-  freeAsmop (right, NULL, ic, (RESULTONSTACK (ic) ? false : true));
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (right, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 }
 
@@ -7351,8 +7341,8 @@ genXor (iCode * ic, iCode * ifx)
 
 release:
 
-  freeAsmop (left, NULL, ic, (RESULTONSTACK (ic) ? false : true));
-  freeAsmop (right, NULL, ic, (RESULTONSTACK (ic) ? false : true));
+  freeAsmop (left, NULL, ic, true);
+  freeAsmop (right, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 }
 

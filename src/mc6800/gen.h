@@ -27,10 +27,7 @@ typedef enum
   AOP_LIT = 1,   /* operand is a literal value */
   AOP_REG,       /* is in registers */
   AOP_DIR,       /* operand using direct addressing mode */
-  AOP_STK,       /* should be pushed on stack this
-                    can happen only for the result */
   AOP_IMMD,      /* immediate value for eg. remateriazable */
-  AOP_STR,       /* array of strings */
   AOP_CRY,       /* the condition flags contain the value of this */
   AOP_EXT,       /* operand using extended addressing mode */
   AOP_SOF,       /* operand at an offset on the stack */
@@ -76,7 +73,6 @@ asmop;
 void genmc6800Code (iCode *);
 void mc6800_emitDebuggerSymbol (const char *);
 
-extern unsigned fReturnSizeMC6800;
 
 iCode *hasIncmc6800 (operand *op, const iCode *ic, int osize);
 extern bool mc6800_assignment_optimal;
