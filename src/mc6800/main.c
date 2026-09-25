@@ -226,14 +226,14 @@ _mc6800_regparm (sym_link * l, bool reentrant)
   int size = getSize(l);
 
   /* If they fit completely, the first two bytes of parameters can go */
-  /* into A and X, otherwise, they go on the stack. Examples:         */
-  /*   foo(char p1)                    A <- p1                        */
-  /*   foo(char p1, char p2)           A <- p1, X <- p2               */
-  /*   foo(char p1, char p2, char p3)  A <- p1, X <- p2, stack <- p3  */
-  /*   foo(int p1)                     XA <- p1                       */
+  /* into B and A, otherwise, they go on the stack. Examples:         */
+  /*   foo(char p1)                    B <- p1                        */
+  /*   foo(char p1, char p2)           B <- p1, A <- p2               */
+  /*   foo(char p1, char p2, char p3)  B <- p1, A <- p2, stack <- p3  */
+  /*   foo(int p1)                     D <- p1                        */
   /*   foo(long p1)                    stack <- p1                    */
-  /*   foo(char p1, int p2)            A <- p1, stack <- p2           */
-  /*   foo(int p1, char p2)            XA <- p1, stack <- p2          */
+  /*   foo(char p1, int p2)            B <- p1, stack <- p2           */
+  /*   foo(int p1, char p2)            D <- p1, stack <- p2           */
 
   if (regParmFlg>=2)
     return 0;

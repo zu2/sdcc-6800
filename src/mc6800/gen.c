@@ -1758,7 +1758,7 @@ newAsmop (short type)
 
 
 /*-----------------------------------------------------------------*/
-/* operandConflictsWithHX - true if operand in h and/or x register */
+/* operandConflictsWithX - true if operand in x register           */
 /*-----------------------------------------------------------------*/
 static bool
 operandConflictsWithX (operand *op)
@@ -3362,7 +3362,7 @@ genPointerPush (iCode *ic)
   wassertl (!operandLitValue (IC_RIGHT(ic)), "IPUSH_VALUE_AT_ADDRESS with non-zero right operand");
 
   loadRegFromAop (mc6800_reg_x, left->aop, 0);
-  /* so hx now contains the address */
+  /* so x now contains the address */
 
   int size = getSize (operandType (IC_LEFT (ic))->next);
   while (size--)
@@ -3690,7 +3690,7 @@ resultRemat (iCode * ic)
 }
 
 /*-----------------------------------------------------------------*/
-/* inExcludeList - return 1 if the string is in exclude Reg list   */
+/* regsCmp - true if two register names are equal, ignoring case   */
 /*-----------------------------------------------------------------*/
 static int
 regsCmp (void *p1, void *p2)
@@ -4012,9 +4012,6 @@ genRet (iCode * ic)
 
   if (AOP_TYPE (IC_LEFT (ic)) == AOP_LIT)
     {
-      /* If returning a literal, we can load the bytes of the return value */
-      /* in any order. By loading A and X first, any other bytes that match */
-      /* can use the shorter sta and stx instructions. */
       offset = 0;
       while (size--)
         {
@@ -4523,7 +4520,8 @@ addSign (operand * result, int offset, int sign)
 
 
 /*-----------------------------------------------------------------*/
-/* genMinus - generates code for subtraction                       */
+/* genMinus8 - generates code for 8-bit subtraction                */
+/*-----------------------------------------------------------------*/
 static void
 genMinus8 (iCode *ic)
 {
@@ -7746,8 +7744,6 @@ AccLsh (reg_info *reg, int shCount)
 
   shCount &= 0x0007;            // shCount : 0..7
 
-  /* Shift counts of 4 and 5 are currently optimized for code size.        */
-  /* Falling through to the unrolled loop would be optimal for code speed. */
   /* For shift counts of 6 and 7, the unrolled loop is never optimal.      */
   switch (shCount)
     {
@@ -7768,8 +7764,8 @@ AccLsh (reg_info *reg, int shCount)
       return;
     }
 
-  /* lsla is only 1 cycle and byte, so an unrolled loop is often  */
-  /* the fastest (shCount<6) and shortest (shCount<4).            */
+  /* asla and aslb are 2 cycles and 1 byte each, so an unrolled   */
+  /* loop is used for the shift counts below 6.                   */
   for (i = 0; i < shCount; i++)
     mc6800_emitOpWithAcc ("asl", reg, MODE_INH, "");
   mc6800_dirtyReg (reg, false);
@@ -7817,8 +7813,6 @@ AccRsh (reg_info *reg, int shCount, bool sign)
 
   shCount &= 0x0007;            // shCount : 0..7
 
-  /* Shift counts of 4 and 5 are currently optimized for code size.        */
-  /* Falling through to the unrolled loop would be optimal for code speed. */
   /* For shift counts of 6 and 7, the unrolled loop is never optimal.      */
   switch (shCount)
     {
@@ -7834,13 +7828,13 @@ AccRsh (reg_info *reg, int shCount, bool sign)
       mc6800_emitOpWithAcc ("rol", reg, MODE_INH, "");
       mc6800_emitOpWithAcc ("rol", reg, MODE_INH, "");
       mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x01");
-      /* total: 6 cycles, 3 bytes */
+      /* total: 6 cycles, 4 bytes */
       mc6800_dirtyReg (reg, false);
       return;
     }
 
-  /* lsra is only 2 cycle and  1 byte, so an unrolled loop is often  */
-  /* the fastest (shCount<6) and shortest (shCount<4).            */ /* TODO */
+  /* lsra and lsrb are 2 cycles and 1 byte each, so an unrolled   */
+  /* loop is used for the shift counts below 6.                   */ /* TODO */
   for (i = 0; i < shCount; i++)
     mc6800_emitOpWithAcc ("lsr", reg, MODE_INH, "");
   mc6800_dirtyReg (reg, false);
@@ -10093,7 +10087,7 @@ genAssignLit (operand * result, operand * right)
 
   if (canUseX)
     {
-      /* Assign words that are already in HX */
+      /* Assign words that are already in X */
       for (offset=size-2; offset>=0; offset -= 2)
         {
           if (assigned[offset] || assigned[offset+1])
@@ -10794,7 +10788,7 @@ updateiTempRegisterUse (operand * op)
 }
 
 /*---------------------------------------------------------------------------------------*/
-/* genmc6800iode - generate code for MC6800 based controllers for a single iCode instruction */
+/* genmc6800iCode - generate code for MC6800 based controllers for a single iCode instruction */
 /*---------------------------------------------------------------------------------------*/
 static void
 genmc6800iCode (iCode *ic)
