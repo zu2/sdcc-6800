@@ -8789,7 +8789,7 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
   wassert (rematOffset==NULL);
 
   aopOp (result, ic, true);
-  size = AOP_SIZE (result);
+  size = getSize (operandType (result));
 
   derefaop = aopDerefAop (AOP (left), litOffset);
   freeAsmop (left, NULL, ic, true);
