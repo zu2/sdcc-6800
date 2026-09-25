@@ -2733,6 +2733,20 @@ asmopToBool (asmop *aop, reg_info *reg)
         loadRegFromConst (reg ? reg : mc6800_reg_a, 0);
       mc6800_freeReg (reg ? reg : mc6800_reg_a);
       break;
+    case AOP_STL:
+      if (reg)
+        {
+          loadRegFromConst (reg, 1);
+          return;
+        }
+      needpula = pushRegIfUsed (mc6800_reg_a);
+      mc6800_emitOp ("ldaa", MODE_IMM, "#0x01");
+      mc6800_dirtyReg (mc6800_reg_a, false);
+      if (needpula)
+        pullReg (mc6800_reg_a);
+      else
+        mc6800_freeReg (mc6800_reg_a);
+      break;
     default:
       if (size == 1)
         {
