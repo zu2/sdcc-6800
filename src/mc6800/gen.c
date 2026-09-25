@@ -3813,6 +3813,25 @@ genFunction (iCode * ic)
       ric = (ric->prev && ric->prev->op == RECEIVE) ? ric->prev : NULL;
     }
 
+  /* A copy of a received parameter to the top of the stack frame can be pushed, too. */
+  if (!regalloc_dry_run && ic->next && ic->next->op == RECEIVE)
+    for (iCode *aic = ic->next->next; aic && (aic->op == '=' && !POINTER_SET (aic) || aic->op == CAST); aic = aic->next)
+      {
+        symbol *dsym = OP_SYMBOL (IC_RESULT (aic));
+        int size = getSize (operandType (IC_RESULT (aic)));
+
+        if (IS_ITEMP (IC_RESULT (aic)) && (dsym->isspilt || !dsym->nRegs) && dsym->usl.spillLoc)
+          dsym = dsym->usl.spillLoc;
+        if (IS_SYMOP (IC_RIGHT (aic)) && dsym == OP_SYMBOL (IC_RIGHT (aic)))
+          continue;
+        if (!isOperandEqual (IC_RESULT (ic->next), IC_RIGHT (aic)) || !dsym->onStack || dsym->stack != -_G.stackPushes - size
+            || size != getSize (operandType (IC_RIGHT (aic))))
+          break;
+        for (int ofs = 0; ofs < size; ofs++, stackAdjust--)
+          pushReg (mc6800_aop_pass[ofs + ic->next->argreg - 1]->aopu.aop_reg[0], false);
+        aic->generated = 1;
+      }
+
   /* adjust the stack for the function */
   if (stackAdjust)
     {
