@@ -6362,9 +6362,13 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
 
   size = max (AOP_SIZE (left), AOP_SIZE (right));
 
-  if ((size == 2)
-      && ((AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT || AOP_TYPE (left) == AOP_IDX || IS_AOP_X (AOP (left))) && (AOP_SIZE (left) == 2))
-      && ((AOP_TYPE (right) == AOP_LIT) || (AOP_TYPE (right) == AOP_IMMD) || ((AOP_TYPE (right) == AOP_DIR || AOP_TYPE (right) == AOP_EXT) && (AOP_SIZE (right) == 2))) && (mc6800_reg_x->isDead || IS_AOP_X (AOP (left))))
+  if (AOP_SIZE (left) == 2 &&
+    (AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT || AOP_TYPE (left) == AOP_IDX || IS_AOP_X (AOP (left))) &&
+    (mc6800_reg_x->isDead || IS_AOP_X (AOP (left))) &&
+    ((AOP_TYPE (right) == AOP_LIT && AOP_SIZE (right) <= 2) ||
+    (AOP_TYPE (right) == AOP_IMMD && AOP_SIZE (right) <= 2) ||
+    (AOP_TYPE (right) == AOP_DIR && AOP_SIZE (right) == 2) ||
+    (AOP_TYPE (right) == AOP_EXT && AOP_SIZE (right) == 2)))
     {
       loadRegFromAop (mc6800_reg_x, AOP (left), 0);
       mc6800_emitOpw_o ("cpx", AOP (right), 0);
