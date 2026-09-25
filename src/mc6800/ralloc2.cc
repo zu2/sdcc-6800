@@ -650,6 +650,18 @@ static void extra_ic_generated(iCode *ic)
           ifx->generated = true;
         }
     }
+  if(ic->op == '=' && !POINTER_SET (ic) && IS_ITEMP (IC_RESULT (ic)) && getSize(operandType(IC_RESULT (ic))) <= 2 &&
+    ic->next && (ic->next->op == '-' || ic->next->op == '+') && IS_OP_LITERAL (IC_RIGHT (ic->next)) && operandLitValue (IC_RIGHT (ic->next)) == 1 &&
+    getSize(operandType(IC_RESULT (ic->next))) == getSize(operandType(IC_RESULT (ic))) &&
+    !isOperandVolatile (IC_RIGHT (ic), false) && !isOperandVolatile (IC_RESULT (ic->next), false) &&
+    (isOperandEqual (IC_LEFT (ic->next), IC_RIGHT (ic)) || isOperandEqual (IC_LEFT (ic->next), IC_RESULT (ic))) &&
+    ic->next->next && ic->next->next->op == IFX && isOperandEqual (IC_COND (ic->next->next), IC_RESULT (ic)) &&
+    bitVectnBitsOn (OP_USES (IC_RESULT (ic))) == (isOperandEqual (IC_LEFT (ic->next), IC_RESULT (ic)) ? 2 : 1))
+    {
+      OP_SYMBOL (IC_RESULT (ic))->for_newralloc = false;
+      OP_SYMBOL (IC_RESULT (ic))->regType = REG_CND;
+      ic->next->next->generated = true;
+    }
   if(ic->op == GET_VALUE_AT_ADDRESS && !ic->generated)
     {
       iCode *inc;

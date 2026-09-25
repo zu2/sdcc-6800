@@ -10701,6 +10701,83 @@ genDjnz (iCode * ic, iCode * ifx)
 }
 
 /*-----------------------------------------------------------------*/
+/* genPostIncDec - n + 1 or n - 1 and jump on the old value of n    */
+/*-----------------------------------------------------------------*/
+static void
+genPostIncDec (iCode *ic, iCode *ifx)
+{
+  operand *source = isOperandEqual (IC_LEFT (ic), IC_RESULT (ic->prev)) ? IC_RIGHT (ic->prev) : IC_LEFT (ic);
+  operand *result = IC_RESULT (ic);
+  bool inc = ic->op == '+';
+  bool zflag = inc;
+  symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
+  asmop *aop;
+
+  D (emitcode (";     genPostIncDec", ""));
+
+  aopOp (source, ic, false);
+  aopOp (result, ic, true);
+  if (!sameRegs (AOP (source), AOP (result)))
+    genCopy (result, source);
+  aop = AOP (result);
+
+  if (IS_AOP_X (aop) || aop->size > 1 && (aop->type == AOP_DIR || aop->type == AOP_EXT) && mc6800_reg_x->isFree && mc6800_reg_x->isDead)
+    {
+      loadRegFromAop (mc6800_reg_x, aop, 0);
+      addConstToX (inc ? 1 : -1);
+      storeRegToAop (mc6800_reg_x, aop, 0);
+      mc6800_emitOp ("cpx", MODE_IMM, inc ? "#0x0001" : "#0xffff");
+      zflag = true;
+    }
+  else if (aop->size == 1)
+    {
+      reg_info *acc = IS_AOP_A (aop) || IS_AOP_B (aop) ? aop->aopu.aop_reg[0] : mc6800_reg_a->isFree || !mc6800_reg_b->isFree ? mc6800_reg_a : mc6800_reg_b;
+      bool needpull = !(aop->regmask & acc->mask) && pushRegIfUsed (acc);
+
+      loadRegFromAop (acc, aop, 0);
+      mc6800_emitOpWithAcc (inc ? "cmp" : "sub", acc, MODE_IMM, "#0x01");
+      if (inc)
+        mc6800_emitOpWithAcc ("inc", acc, MODE_INH, "");
+      storeRegToAop (acc, aop, 0);
+      pullOrFreeReg (acc, needpull);
+      zflag = false;
+    }
+  else
+    {
+      bool needpullb = !(aop->regmask & MC6800MASK_B) && pushRegIfUsed (mc6800_reg_b);
+      bool needpulla = !(aop->regmask & MC6800MASK_A) && pushRegIfUsed (mc6800_reg_a);
+      symbol *zlbl = regalloc_dry_run || !inc ? 0 : newiTempLabel (NULL);
+
+      loadRegFromAop (mc6800_reg_d, aop, 0);
+      mc6800_emitOp (inc ? "addb" : "subb", MODE_IMM, "#0x01");
+      mc6800_emitOp (inc ? "adca" : "sbca", MODE_IMM, "#0x00");
+      storeRegToAop (mc6800_reg_d, aop, 0);
+      if (inc)
+        {
+          mc6800_emitOp ("cmpb", MODE_IMM, "#0x01");
+          emitBranch ("bne", zlbl);
+          mc6800_emitOp ("tsta", MODE_INH, "");
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (zlbl);
+        }
+      pullOrFreeReg (mc6800_reg_a, needpulla);
+      pullOrFreeReg (mc6800_reg_b, needpullb);
+    }
+
+  if (IC_TRUE (ifx))
+    emitBranch (zflag ? "beq" : "bcs", tlbl);
+  else
+    emitBranch (zflag ? "bne" : "bcc", tlbl);
+  emitBranch ("jmp", IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx));
+  if (!regalloc_dry_run)
+    mc6800_emitLabel (tlbl);
+  ifx->generated = 1;
+
+  freeAsmop (result, NULL, ic, true);
+  freeAsmop (source, NULL, ic, true);
+}
+
+/*-----------------------------------------------------------------*/
 /* genReceive - generate code for a receive iCode                  */
 /*-----------------------------------------------------------------*/
 static void
@@ -10986,11 +11063,18 @@ genmc6800iCode (iCode *ic)
       break;
 
     case '+':
-      genPlus (ic);
+      if (ic->prev && ic->prev->op == '=' && !POINTER_SET (ic->prev) && IS_ITEMP (IC_RESULT (ic->prev))
+          && OP_SYMBOL (IC_RESULT (ic->prev))->regType == REG_CND && ic->next && ic->next->op == IFX)
+        genPostIncDec (ic, ic->next);
+      else
+        genPlus (ic);
       break;
 
     case '-':
-      if (!genDjnz (ic, ifxForOp (IC_RESULT (ic), ic)))
+      if (ic->prev && ic->prev->op == '=' && !POINTER_SET (ic->prev) && IS_ITEMP (IC_RESULT (ic->prev))
+          && OP_SYMBOL (IC_RESULT (ic->prev))->regType == REG_CND && ic->next && ic->next->op == IFX)
+        genPostIncDec (ic, ic->next);
+      else if (!genDjnz (ic, ifxForOp (IC_RESULT (ic), ic)))
         genMinus (ic);
       break;
 
@@ -11073,6 +11157,9 @@ genmc6800iCode (iCode *ic)
       break;
 
     case '=':
+      if (!POINTER_SET (ic) && IS_ITEMP (IC_RESULT (ic)) && OP_SYMBOL (IC_RESULT (ic))->regType == REG_CND
+          && ic->next && (ic->next->op == '-' || ic->next->op == '+'))
+        break;
       if (POINTER_SET (ic))
         genPointerSet (ic, hasIncmc6800 (IC_RESULT (ic), ic, getSize (operandType (IC_RIGHT (ic)))));
       else
