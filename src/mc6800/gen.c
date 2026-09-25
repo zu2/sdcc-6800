@@ -2266,6 +2266,8 @@ aopOp (operand *op, iCode * ic, bool result)
               else
                 aop->aopu.aop_stk = -getSize (sym->type);
             }
+          else if (sym->usl.spillLoc)
+            sym->aop = op->aop = aop = aopForSym (ic, sym->usl.spillLoc, result);
           else
             sym->aop = op->aop = aop = newAsmop (AOP_DIR);
           aop->size = getSize (sym->type);
@@ -3515,7 +3517,7 @@ genCall (iCode * ic)
   if (ic->parmBytes + bigreturn * 2)
     pullNull (ic->parmBytes + bigreturn * 2);
 
-  if (ic->regsSaved && !IFFUNC_CALLEESAVES (dtype))
+  if ((ic->regsSaved || regalloc_dry_run) && !IFFUNC_CALLEESAVES (dtype))
     unsaveRegisters (ic);
 }
 
@@ -3621,7 +3623,7 @@ genPcall (iCode * ic)
       pullNull (ic->parmBytes + bigreturn * 2);
     }
   /* if we had saved some registers then unsave them */
-  if (ic->regsSaved && !IFFUNC_CALLEESAVES (dtype))
+  if ((ic->regsSaved || regalloc_dry_run) && !IFFUNC_CALLEESAVES (dtype))
     unsaveRegisters (ic);
 }
 
