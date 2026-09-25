@@ -6628,103 +6628,6 @@ hasIncmc6800 (operand *op, const iCode *ic, int osize)
 }
 
 /*-----------------------------------------------------------------*/
-/* genAndOp - for && operation                                     */
-/*-----------------------------------------------------------------*/
-static void
-genAndOp (iCode * ic)
-{
-  operand *left, *right, *result;
-  symbol *tlbl, *tlbl0;
-  bool needpulla;
-
-  D (emitcode (";     genAndOp", ""));
-
-  /* note here that && operations that are in an
-     if statement are taken away by backPatchLabels
-     only those used in arthmetic operations remain */
-  aopOp ((left = IC_LEFT (ic)), ic, false);
-  aopOp ((right = IC_RIGHT (ic)), ic, false);
-  aopOp ((result = IC_RESULT (ic)), ic, false);
-
-  tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-  tlbl0 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-  needpulla = pushRegIfSurv (mc6800_reg_a);
-  asmopToBool (AOP (left), NULL);
-  emitBranch ("beq", tlbl0);
-  asmopToBool (AOP (right), NULL);
-  emitBranch ("beq", tlbl0);
-  loadRegFromConst (mc6800_reg_a, 1);
-  emitBranch ("bra", tlbl);
-  if (!regalloc_dry_run)
-    mc6800_emitLabel (tlbl0);
-  mc6800_dirtyReg (mc6800_reg_a, false);
-  loadRegFromConst (mc6800_reg_a, 0);
-  if (!regalloc_dry_run)
-    mc6800_emitLabel (tlbl);
-  mc6800_dirtyReg (mc6800_reg_a, false);
-
-  mc6800_useReg (mc6800_reg_a);
-  mc6800_freeReg (mc6800_reg_a);
-
-  storeRegToFullAop (mc6800_reg_a, AOP (result), false);
-  pullOrFreeReg(mc6800_reg_a, needpulla);
-
-  freeAsmop (left, NULL, ic, true);
-  freeAsmop (right, NULL, ic, true);
-  freeAsmop (result, NULL, ic, true);
-}
-
-
-/*-----------------------------------------------------------------*/
-/* genOrOp - for || operation                                      */
-/*-----------------------------------------------------------------*/
-static void
-genOrOp (iCode * ic)
-{
-  operand *left, *right, *result;
-  symbol *tlbl, *tlbl0;
-  bool needpulla;
-
-  D (emitcode (";     genOrOp", ""));
-
-  /* note here that || operations that are in an
-     if statement are taken away by backPatchLabels
-     only those used in arthmetic operations remain */
-  aopOp ((left = IC_LEFT (ic)), ic, false);
-  aopOp ((right = IC_RIGHT (ic)), ic, false);
-  aopOp ((result = IC_RESULT (ic)), ic, false);
-
-  tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-  tlbl0 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-  needpulla = pushRegIfSurv (mc6800_reg_a);
-  asmopToBool (AOP (left), NULL);
-  emitBranch ("bne", tlbl0);
-  asmopToBool (AOP (right), NULL);
-  emitBranch ("bne", tlbl0);
-  loadRegFromConst (mc6800_reg_a, 0);
-  emitBranch ("bra", tlbl);
-  if (!regalloc_dry_run)
-    mc6800_emitLabel (tlbl0);
-  mc6800_dirtyReg (mc6800_reg_a, false);
-  loadRegFromConst (mc6800_reg_a, 1);
-  if (!regalloc_dry_run)
-    mc6800_emitLabel (tlbl);
-  mc6800_dirtyReg (mc6800_reg_a, false);
-
-  mc6800_useReg (mc6800_reg_a);
-  mc6800_freeReg (mc6800_reg_a);
-
-  storeRegToFullAop (mc6800_reg_a, AOP (result), false);
-  pullOrFreeReg(mc6800_reg_a, needpulla);
-
-  freeAsmop (left, NULL, ic, true);
-  freeAsmop (right, NULL, ic, true);
-  freeAsmop (result, NULL, ic, true);
-}
-
-/*-----------------------------------------------------------------*/
 /* isLiteralBit - test if lit == 2^n                               */
 /*-----------------------------------------------------------------*/
 static int
@@ -11170,11 +11073,8 @@ genmc6800iCode (iCode *ic)
       break;
 
     case AND_OP:
-      genAndOp (ic);
-      break;
-
     case OR_OP:
-      genOrOp (ic);
+      wassertl (0, "Unimplemented iCode");
       break;
 
     case '^':
