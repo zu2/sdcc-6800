@@ -2180,7 +2180,6 @@ aopOp (operand *op, iCode * ic, bool result)
   // Is this a pointer set result?
   //
 
-  //printf("checking literal\n");
   /* if this a literal */
   if (IS_OP_LITERAL (op))
     {
@@ -2193,7 +2192,6 @@ aopOp (operand *op, iCode * ic, bool result)
       return;
     }
 
-  //printf("checking pre-existing\n");
   /* if already has a asmop then continue */
   if (op->aop)
     {
@@ -2201,7 +2199,6 @@ aopOp (operand *op, iCode * ic, bool result)
       return;
     }
 
-  //printf("checking underlying sym\n");
   /* if the underlying symbol has a aop */
   if (IS_SYMOP (op) && OP_SYMBOL (op)->aop)
     {
@@ -2209,14 +2206,11 @@ aopOp (operand *op, iCode * ic, bool result)
       memcpy (aop, OP_SYMBOL (op)->aop, sizeof (*aop));
       //op->aop = aop = OP_SYMBOL (op)->aop;
       aop->size = getSize (operandType (op));
-      //printf ("reusing underlying symbol %s\n",OP_SYMBOL (op)->name);
-      //printf (" with size = %d\n", aop->size);
 
       aop->op = op;
       return;
     }
 
-  //printf("checking true sym\n");
   /* if this is a true symbol */
   if (IS_TRUE_SYMOP (op))
     {
@@ -2224,8 +2218,6 @@ aopOp (operand *op, iCode * ic, bool result)
       aop->op = op;
       if (!result)
         aop->valinfo = getOperandValinfo (ic, op);
-      //printf ("new symbol %s\n", OP_SYMBOL (op)->name);
-      //printf (" with size = %d\n", aop->size);
       return;
     }
 
@@ -2241,7 +2233,6 @@ aopOp (operand *op, iCode * ic, bool result)
     piCode (ic, NULL);
   sym = OP_SYMBOL (op);
 
-  //printf("checking conditional\n");
   /* if the type is a conditional */
   if (sym->regType == REG_CND)
     {
@@ -2253,13 +2244,11 @@ aopOp (operand *op, iCode * ic, bool result)
       return;
     }
 
-  //printf("checking spilt\n");
   /* if it is spilt then two situations
      a) is rematerialize
      b) has a spill location */
   if (sym->isspilt || sym->nRegs == 0)
     {
-      //printf("checking remat\n");
       /* rematerialize it NOW */
       if (sym->remat)
         {
@@ -2306,7 +2295,6 @@ aopOp (operand *op, iCode * ic, bool result)
               /* force a new aop if sizes differ */
               oldAsmOp = sym->usl.spillLoc->aop;
               sym->usl.spillLoc->aop = NULL;
-              //printf ("forcing new aop\n");
             }
           sym->aop = op->aop = aop = aopForSym (ic, sym->usl.spillLoc, result);
           if (sym->usl.spillLoc->aop->size != getSize (sym->type))
@@ -3282,10 +3270,8 @@ genIpush (iCode * ic)
   /* then do the push */
   aopOp (IC_LEFT (ic), ic, false);
 
-  // pushSide(IC_LEFT(ic), AOP_SIZE(IC_LEFT(ic)));
   size = AOP_SIZE (IC_LEFT (ic));
 
-//  l = aopGet (AOP (IC_LEFT (ic)), 0, false, true);
   if (IS_AOP_X (AOP (IC_LEFT (ic))))
     {
       const char *tmp = allocTemp ();
@@ -3311,9 +3297,7 @@ genIpush (iCode * ic)
 
   while (size--)
     {
-//      printf("loading %d\n", offset);
       loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (ic)), offset++);
-//      printf("pushing \n");
       pushReg (mc6800_reg_a, true);
     }
 release:
