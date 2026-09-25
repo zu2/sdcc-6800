@@ -280,6 +280,8 @@ static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, co
     (ic->op == LEFT_OP || ic->op == RIGHT_OP) && !operand_in_reg(IC_LEFT(ic), REG_XL, ia, i, G) && !operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G) ||
     ic->op == CAST && getSize(operandType(IC_RESULT(ic))) == getSize(operandType(IC_RIGHT(ic))) ||
     (ic->op == '+' || ic->op == '-') && IS_OP_LITERAL(IC_RIGHT(ic)) && abs((int)operandLitValue(IC_RIGHT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6) ||
+    (ic->op == '+' || ic->op == '-') && !IS_OP_LITERAL(IC_RIGHT(ic)) && operand_in_reg(IC_LEFT(ic), REG_XL, ia, i, G) &&
+    !operand_in_reg(IC_RIGHT(ic), REG_XL, ia, i, G) && !operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G) ||
     ic->op == '+' && IS_OP_LITERAL(IC_LEFT(ic)) && abs((int)operandLitValue(IC_LEFT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6)))
     return(false);
 
@@ -454,6 +456,9 @@ static bool inst_sane(const assignment &a, unsigned short int i, const G_t &G, c
 }
 
 // Cost function.
+// Increments of a pointer that the pointer get or set before them generates.
+static std::set<const iCode *> ptr_inc_ics;
+
 template <class G_t, class I_t>
 static float instruction_cost(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
 {
@@ -475,7 +480,7 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
   std::cout.flush();
 #endif
 
-  if(ic->generated)
+  if(ic->generated || ptr_inc_ics.count(ic))
     return(0.0f);
 
   if(!ABXinst_ok(a, i, G, I))
@@ -645,6 +650,18 @@ static void extra_ic_generated(iCode *ic)
           ifx->generated = true;
         }
     }
+  if(ic->op == GET_VALUE_AT_ADDRESS && !ic->generated)
+    {
+      iCode *inc;
+      if (inc = hasIncmc6800 (IC_LEFT (ic), ic, getSize (operandType (IC_RESULT (ic)))))
+        ptr_inc_ics.insert(inc);
+    }
+  if(POINTER_SET (ic))
+    {
+      iCode *inc;
+      if (inc = hasIncmc6800 (IC_RESULT (ic), ic, getSize (operandType (IC_RIGHT (ic)))))
+        ptr_inc_ics.insert(inc);
+    }
 }
 
 template <class T_t, class G_t, class I_t>
@@ -718,6 +735,7 @@ static bool tree_dec_ralloc(T_t &T, G_t &G, const I_t &I)
 
 iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
 {
+  ptr_inc_ics.clear();
 
 #ifdef DEBUG_RALLOC_DEC
   std::cout << "Processing " << currFunc->name << " from " << dstFileName << "\n"; std::cout.flush();

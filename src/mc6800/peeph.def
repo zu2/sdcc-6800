@@ -325,3 +325,12 @@ replace restart {
 	jmp	%1
 } if optimizeReturn()
 
+replace {
+	stx	*%1
+	%2	*%3
+	stx	*%1
+} by {
+	; Peephole 13	- removed redundant stx
+	stx	*%1
+	%2	*%3
+} if notSame(%2 'staa' 'stab' 'stx' 'ldx' 'sts' 'lds')
