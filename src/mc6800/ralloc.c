@@ -503,6 +503,7 @@ verifyRegsAssigned (operand *op, iCode * ic)
   if (!IS_ITEMP (op)) return;
 
   sym = OP_SYMBOL (op);
+  if (sym->regType == REG_CND) return;
   if (sym->isspilt) return;
   if (!sym->nRegs) return;
   if (sym->regs[0]) return;

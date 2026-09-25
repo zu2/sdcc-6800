@@ -4061,6 +4061,7 @@ genGoto (iCode * ic)
 static bool
 genPlusIncr (iCode * ic)
 {
+  float cycles;
   int icount;
   operand *left;
   operand *result;
@@ -4123,12 +4124,14 @@ genPlusIncr (iCode * ic)
       if (size > 1)
         emitBranch ("bcc", tlbl);
     }
+  cycles = regalloc_dry_run_cost_cycles;
   for (offset = 1; offset < size; offset++)
     {
       rmwWithAop ("inc", AOP (result), offset);
       if (offset + 1 < size)
         emitBranch ("bne", tlbl);
     }
+  regalloc_dry_run_cost_cycles = cycles;
   if (size > 1 && !regalloc_dry_run)
     mc6800_emitLabel (tlbl);
   pullOrFreeReg (mc6800_reg_a, needpula);
@@ -4359,6 +4362,7 @@ release:
 static bool
 genMinusDec (iCode * ic)
 {
+  float cycles;
   int icount;
   operand *left;
   operand *result;
@@ -4412,7 +4416,9 @@ genMinusDec (iCode * ic)
             return false;
           rmwWithAop ("tst", AOP (result), 0);
           emitBranch ("bne", tlbl);
+          cycles = regalloc_dry_run_cost_cycles;
           rmwWithAop ("dec", AOP (result), 1);
+          regalloc_dry_run_cost_cycles = cycles;
           if (!regalloc_dry_run)
             mc6800_emitLabel (tlbl);
         }
@@ -4427,7 +4433,9 @@ genMinusDec (iCode * ic)
   if (size > 1)
     {
       emitBranch ("bcc", tlbl);
+      cycles = regalloc_dry_run_cost_cycles;
       rmwWithAop ("dec", AOP (result), 1);
+      regalloc_dry_run_cost_cycles = cycles;
       if (!regalloc_dry_run)
         mc6800_emitLabel (tlbl);
     }
@@ -8920,6 +8928,7 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
   asmop *derefaop;
   bool needpulla = false;
   bool needrestorex = false;
+  bool usea;
 
   D (emitcode (";     genDataPointerGet", ""));
 
@@ -8927,33 +8936,43 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
   wassert (rematOffset==NULL);
 
   aopOp (result, ic, true);
-  size = AOP_SIZE (result);
+  size = getSize (operandType (result));
 
   derefaop = aopDerefAop (AOP (left), litOffset);
   freeAsmop (left, NULL, ic, true);
   derefaop->size = size;
 
-  if (ifx)
-    needpulla = pushRegIfSurv (mc6800_reg_a);
+  usea = mc6800_reg_a->isDead || !mc6800_reg_b->isFree || !mc6800_reg_b->isDead;
   if (derefaop->type == AOP_SOF && !IS_AOP_X (AOP (result)))
     needrestorex = pushRegIfSurv (mc6800_reg_x);
 
   if (IS_AOP_X (AOP (result)))
     loadRegFromAop (mc6800_reg_x, derefaop, 0);
+  else if (ifx && size == 2 && mc6800_reg_x->isFree && mc6800_reg_x->isDead)
+    {
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      loadRegFromAop (mc6800_reg_x, derefaop, 0);
+    }
   else
-    for (offset = 0; offset < size; offset++)
-      {
-        if (!ifx)
-          transferAopAop (derefaop, offset, AOP (result), offset);
-        else
-          loadRegFromAop (mc6800_reg_a, derefaop, offset);
-      }
+    {
+      if (ifx && usea)
+        needpulla = pushRegIfSurv (mc6800_reg_a);
+      for (offset = 0; offset < size; offset++)
+        {
+          if (!ifx)
+            transferAopAop (derefaop, offset, AOP (result), offset);
+          else if (offset == 0)
+            loadRegFromAop (usea ? mc6800_reg_a : mc6800_reg_b, derefaop, offset);
+          else
+            accopWithAop (usea ? "oraa" : "orab", derefaop, offset);
+        }
+    }
 
   if (needrestorex)
     {
       pullReg (mc6800_reg_x);
       if (ifx)
-        mc6800_emitOp ("tsta", MODE_INH, "");
+        mc6800_emitOp (usea ? "tsta" : "tstb", MODE_INH, "");
     }
 
   freeAsmop (NULL, derefaop, ic, true);
@@ -8983,7 +9002,7 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   bool needpulla = false;
   bool needpullb = false;
   bool needpullx = false;
-  bool useb = false;
+  bool usea = true;
   bool vol = false;
 
   D (emitcode (";     genPointerGet", ""));
@@ -9003,7 +9022,7 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       /* if result is not bit variable type */
       if (!IS_BITVAR (retype))
         {
-          genDataPointerGet (left, right, result, ic, size > 1 ? NULL : ifx);
+          genDataPointerGet (left, right, result, ic, ifx);
           return;
         }
       else
@@ -9083,10 +9102,10 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       addConstToX (litOffset);
       litOffset = 0;
     }
-  else if (!rematOffset && litOffset + AOP_SIZE (result) - 1 > 0xff)
+  else if (!rematOffset && litOffset + size - 1 > 0xff)
     {
-      addConstToX (litOffset + AOP_SIZE (result) - 1 - 0xff);
-      litOffset -= litOffset + AOP_SIZE (result) - 1 - 0xff;
+      addConstToX (litOffset + size - 1 - 0xff);
+      litOffset -= litOffset + size - 1 - 0xff;
     }
 
   wassertl (!needpullx || !IS_AOP_X (AOP (result)) || AOP_TYPE (result) != AOP_REG,
@@ -9162,11 +9181,15 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
       if (srctmp)
         freeTemp ();
     }
+  else if (ifx && size == 2 && mc6800_reg_x->isDead && !needpullx && !rematOffset)
+    {
+      mc6800_emitOp ("ldx", MODE_IDX, "%d,x", litOffset);
+      mc6800_dirtyReg (mc6800_reg_x, false);
+    }
   else
     {
-      offset = size - 1;
-      useb = ifx && !mc6800_reg_a->isDead && mc6800_reg_b->isFree && mc6800_reg_b->isDead;
-      if (!useb)
+      usea = !ifx || mc6800_reg_a->isDead || !mc6800_reg_b->isFree || !mc6800_reg_b->isDead;
+      if (usea)
         needpulla = pushRegIfSurv (mc6800_reg_a);
 
       if (!ifx && AOP_TYPE (result) == AOP_REG && AOP_SIZE (result) == 2)
@@ -9186,18 +9209,17 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
             storeRegToAop (mc6800_reg_a, AOP (result), offset);
           }
       else
-        while (size--)
+        for (offset = size - 1; offset >= 0; offset--)
           {
-            xoffset = litOffset + (AOP_SIZE (result) - offset - 1);
-            if (ifx && offset != AOP_SIZE (result) - 1)
-              mc6800_emitOp (useb ? "orab" : "oraa", MODE_IDX, "%d,x", xoffset);
-            else if (useb)
-              mc6800_emitOp ("ldab", MODE_IDX, "%d,x", xoffset);
-            else
+            xoffset = litOffset + offset;
+            if (ifx && offset != size - 1)
+              mc6800_emitOp (usea ? "oraa" : "orab", MODE_IDX, "%d,x", xoffset);
+            else if (usea)
               loadRegIndexed (mc6800_reg_a, xoffset, rematOffset);
+            else
+              mc6800_emitOp ("ldab", MODE_IDX, "%d,x", xoffset);
             if (!ifx)
-              storeRegToAop (mc6800_reg_a, AOP (result), offset);
-            offset--;
+              storeRegToAop (mc6800_reg_a, AOP (result), size - offset - 1);
           }
     }
 
@@ -9208,7 +9230,7 @@ release:
 
   pullOrFreeReg (mc6800_reg_x, needpullx);
   if (ifx && needpullx)
-    mc6800_emitOp (useb ? "tstb" : "tsta", MODE_INH, "");
+    mc6800_emitOp (usea ? "tsta" : "tstb", MODE_INH, "");
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
 
