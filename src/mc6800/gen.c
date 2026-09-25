@@ -6259,14 +6259,9 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   else if (IS_AOP_D (AOP (left)) && IS_AOP_X (AOP (right)))
     {
       const char *tmp = allocTemp ();
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("cmpb", MODE_DIR, "*%s+1", tmp);
-      if (!ifx && !needpulla)
-        needpulla = pushRegIfSurv (mc6800_reg_a);
-      if (!tlbl_NE && !regalloc_dry_run)
-        tlbl_NE = newiTempLabel (NULL);
-      emitBranch ("bne", tlbl_NE);
-      mc6800_emitOp ("cmpa", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp ("cpx", MODE_DIR, "*%s", tmp);
       freeTemp ();
     }
   else if (AOP_TYPE (left) == AOP_STL && mc6800_reg_a->isDead && mc6800_reg_b->isDead)
