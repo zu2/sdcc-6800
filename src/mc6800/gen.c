@@ -2702,6 +2702,12 @@ asmopToBool (asmop *aop, reg_info *reg)
           loadRegFromAop (mc6800_reg_b, aop, 0);
           break;
         }
+      if (!reg && size == 2 && mc6800_reg_x->isFree)
+        {
+          mc6800_emitOpw_o ("ldx", aop, 0);
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          break;
+        }
       if (reg)
         {
           loadRegFromAop (reg, aop, offset--);
@@ -2771,11 +2777,32 @@ asmopToBool (asmop *aop, reg_info *reg)
               mc6800_freeReg (reg);
               flagsonly = false;
             }
+          else if (mc6800_reg_x->isFree && (aop->type == AOP_IMMD || aop->type == AOP_DIR))
+            {
+              mc6800_emitOpw_o ("ldx", aop, 0);
+              mc6800_dirtyReg (mc6800_reg_x, false);
+            }
           else if (mc6800_reg_a->isFree)
             {
               loadRegFromAop (mc6800_reg_a, aop, 0);
               accopWithAop ("oraa", aop, 1);
               mc6800_freeReg (mc6800_reg_a);
+            }
+          else if (aop->type == AOP_IMMD && mc6800_reg_b->isFree)
+            {
+              loadRegFromAop (mc6800_reg_b, aop, 0);
+              accopWithAop ("orab", aop, 1);
+              mc6800_freeReg (mc6800_reg_b);
+            }
+          else if (aop->type == AOP_IMMD)
+            {
+              needpula = pushRegIfUsed (mc6800_reg_a);
+              loadRegFromAop (mc6800_reg_a, aop, 0);
+              accopWithAop ("oraa", aop, 1);
+              if (needpula)
+                pullReg (mc6800_reg_a);
+              else
+                mc6800_freeReg (mc6800_reg_a);
             }
           else
             {
