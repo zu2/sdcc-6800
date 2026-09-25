@@ -27,6 +27,7 @@
 #include "ralloc.h"
 #include "gen.h"
 #include "dbuf_string.h"
+#include "peep.h"
 
 extern char * iComments2;
 extern DEBUGFILE dwarf2DebugFile;
@@ -646,6 +647,15 @@ PORT mc6800_port =
   {                             /* Peephole optimizer */
     _mc6800_defaultRules,
     mc6800_getInstructionSize,
+    NULL,
+    NULL,
+    NULL,
+    mc6800notUsed,
+    NULL,
+    mc6800notUsedFrom,
+    NULL,
+    NULL,
+    NULL,
   },
   {
     /* Sizes: char, short, int, long, long long, near ptr, far ptr, gptr, func ptr, banked func ptr, bit, float, _BitInt (in bits) */
