@@ -1236,6 +1236,15 @@ packRegisters (eBBlock ** ebpp, int count)
               OP_SYMBOL (IC_RESULT (ic))->usl.spillLoc = NULL;
             }
 
+          /* if a parameter is only copied to an iTemp, the iTemp can be spilt to the parameter */
+          if ((ic->op == '=' && !POINTER_SET (ic) || ic->op == CAST) &&
+              IS_ITEMP (IC_RESULT (ic)) && !SPIL_LOC (IC_RESULT (ic)) && !OP_SYMBOL (IC_RESULT (ic))->remat &&
+              IS_TRUE_SYMOP (IC_RIGHT (ic)) && OP_SYMBOL (IC_RIGHT (ic))->ismyparm && OP_SYMBOL (IC_RIGHT (ic))->onStack &&
+              !OP_SYMBOL (IC_RIGHT (ic))->addrtaken && !isOperandVolatile (IC_RIGHT (ic), false) &&
+              bitVectnBitsOn (OP_USES (IC_RIGHT (ic))) == 1 && bitVectnBitsOn (OP_DEFS (IC_RIGHT (ic))) == 0 &&
+              getSize (operandType (IC_RESULT (ic))) == getSize (operandType (IC_RIGHT (ic))))
+            SPIL_LOC (IC_RESULT (ic)) = OP_SYMBOL (IC_RIGHT (ic));
+
           /* if straight assignment then carry remat flag if
              this is the only definition */
           if (ic->op == '=' &&
