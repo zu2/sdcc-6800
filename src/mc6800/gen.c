@@ -4208,7 +4208,13 @@ genPlusMANY (iCode *ic)
       offset++;
   for (; offset < size; offset++)
     {
-      loadRegFromAop (reg, leftOp, offset);
+      if (!mayskip && aopIsLitVal (leftOp, offset, 1, 0x00))
+        {
+          mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+          mc6800_dirtyReg (reg, false);
+        }
+      else
+        loadRegFromAop (reg, leftOp, offset);
       if (!mayskip || !aopIsLitVal (rightOp, offset, 1, 0x00))
         {
           accopWithAop (mayskip ? "add" : "adc", reg, rightOp, offset);
@@ -4586,7 +4592,13 @@ genMinusMANY (iCode *ic)
       offset++;
   for (; offset < size; offset++)
     {
-      loadRegFromAop (reg, AOP (IC_LEFT (ic)), offset);
+      if (!mayskip && aopIsLitVal (AOP (IC_LEFT (ic)), offset, 1, 0x00))
+        {
+          mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+          mc6800_dirtyReg (reg, false);
+        }
+      else
+        loadRegFromAop (reg, AOP (IC_LEFT (ic)), offset);
       if (!mayskip || !aopIsLitVal (AOP (IC_RIGHT (ic)), offset, 1, 0x00))
         {
           accopWithAop (mayskip ? "sub" : "sbc", reg, AOP (IC_RIGHT (ic)), offset);
