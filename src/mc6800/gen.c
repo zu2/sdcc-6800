@@ -7266,7 +7266,14 @@ genRRC (iCode * ic)
 
   size = AOP_SIZE (result);
 
-  if (size == 2)
+  if (AOP_TYPE (left) == AOP_LIT)
+    {
+      for (offset = 0; offset < size; offset++)
+        storeConstToAop ((byteOfVal (AOP (left)->aopu.aop_lit, offset) >> 1 |
+                          byteOfVal (AOP (left)->aopu.aop_lit, (offset + 1) % size) << 7) & 0xff,
+                         AOP (result), offset);
+    }
+  else if (size == 2)
     {
       symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
 
@@ -7321,7 +7328,14 @@ genRLC (iCode * ic)
 
   size = AOP_SIZE (result);
 
-  if (size == 2)
+  if (AOP_TYPE (left) == AOP_LIT)
+    {
+      for (offset = 0; offset < size; offset++)
+        storeConstToAop ((byteOfVal (AOP (left)->aopu.aop_lit, offset) << 1 |
+                          byteOfVal (AOP (left)->aopu.aop_lit, (offset + size - 1) % size) >> 7) & 0xff,
+                         AOP (result), offset);
+    }
+  else if (size == 2)
     {
       needpull = pushRegIfSurv (mc6800_reg_d);
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
@@ -7831,11 +7845,18 @@ genRot1 (iCode *ic)
   wassert (IS_OP_LITERAL (right));
 
 
-  bool needpulla = pushRegIfSurv (mc6800_reg_a);
-  loadRegFromAop (mc6800_reg_a, left->aop, 0);
-  AccRol (mc6800_reg_a, operandLitValueUll (right) % 8);
-  storeRegToAop (mc6800_reg_a, result->aop, 0);
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+  if (AOP_TYPE (left) == AOP_LIT)
+    storeConstToAop ((byteOfVal (left->aop->aopu.aop_lit, 0) << (operandLitValueUll (right) % 8) |
+                      byteOfVal (left->aop->aopu.aop_lit, 0) >> (8 - operandLitValueUll (right) % 8)) & 0xff,
+                     result->aop, 0);
+  else
+    {
+      bool needpulla = pushRegIfSurv (mc6800_reg_a);
+      loadRegFromAop (mc6800_reg_a, left->aop, 0);
+      AccRol (mc6800_reg_a, operandLitValueUll (right) % 8);
+      storeRegToAop (mc6800_reg_a, result->aop, 0);
+      pullOrFreeReg (mc6800_reg_a, needpulla);
+    }
 
   freeAsmop (result, NULL, ic, true);
   freeAsmop (left, NULL, ic, true);
