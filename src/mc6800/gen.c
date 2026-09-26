@@ -3132,7 +3132,6 @@ genUminus (iCode * ic)
 {
   int offset, size;
   sym_link *optype;
-  char *sub;
   bool needpula, needpullb;
   asmop *result;
 
@@ -3205,7 +3204,6 @@ genUminus (iCode * ic)
   result = AOP (IC_RESULT (ic));
 
   needpula = pushRegIfSurv (mc6800_reg_a);
-  sub = "sub";
   while (size--)
     {
       /* clra clears the carry, so the borrow would be lost */
@@ -3216,9 +3214,8 @@ genUminus (iCode * ic)
         }
       else
         loadRegFromConst (mc6800_reg_a, 0);
-      accopWithAop (sub, mc6800_reg_a, AOP (IC_LEFT (ic)), offset);
+      accopWithAop (offset ? "sbc" : "sub", mc6800_reg_a, AOP (IC_LEFT (ic)), offset);
       storeRegToAop (mc6800_reg_a, result, offset++);
-      sub = "sbc";
     }
   storeRegSignToUpperAop (mc6800_reg_a, result, offset, SPEC_USIGN (operandType (IC_LEFT (ic))));
   pullOrFreeReg (mc6800_reg_a, needpula);
@@ -4290,45 +4287,37 @@ genPlus8 (iCode *ic)
   asmop *result  = AOP (IC_RESULT (ic));
   reg_info *reg;
   bool needpullb = false;
-  char *add;
-  char *mask;
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
   bool maskedtopbyte = (topbytemask != 0xff);
 
-  if (IS_AOP_A (result) && !IS_AOP_WITH_A (rightOp))
-    reg = mc6800_reg_a;
-  else if (IS_AOP_B (result) && !IS_AOP_WITH_B (rightOp))
-    reg = mc6800_reg_b;
-  else if (IS_AOP_A (leftOp) && mc6800_reg_a->isDead && !IS_AOP_WITH_A (rightOp))
-    reg = mc6800_reg_a;
-  else if (IS_AOP_B (leftOp) && mc6800_reg_b->isDead && !IS_AOP_WITH_B (rightOp))
-    reg = mc6800_reg_b;
+  if (IS_AOP_A (result) || IS_AOP_B (result))
+    reg = result->aopu.aop_reg[0];
+  else if ((IS_AOP_A (leftOp) || IS_AOP_B (leftOp)) && leftOp->aopu.aop_reg[0]->isDead)
+    reg = leftOp->aopu.aop_reg[0];
   else if (mc6800_reg_b->isFree)
     reg = mc6800_reg_b;
   else if (mc6800_reg_a->isFree)
     reg = mc6800_reg_a;
   else
     {
-      reg = IS_AOP_A (result) ? mc6800_reg_a : mc6800_reg_b;
-      needpullb = (reg == mc6800_reg_b) ? pushRegIfSurv (mc6800_reg_b) : false;
-      if (reg == mc6800_reg_b && IS_AOP_B (rightOp))
-        {
-          rightOp = leftOp;
-          leftOp = AOP (IC_RIGHT (ic));
-        }
+      reg = mc6800_reg_b;
+      needpullb = pushRegIfSurv (mc6800_reg_b);
     }
-  add = "add";
-  mask = (reg == mc6800_reg_b) ? "andb" : "anda";
+  if (rightOp->type == AOP_REG && rightOp->aopu.aop_reg[0] == reg)
+    {
+      rightOp = leftOp;
+      leftOp = AOP (IC_RIGHT (ic));
+    }
 
   loadRegFromAop (reg, leftOp, 0);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
-      accopWithAop (add, reg, rightOp, 0);
+      accopWithAop ("add", reg, rightOp, 0);
       if (maskedtopbyte)
         {
-          mc6800_emitOp (mask, MODE_IMM, "#0x%02x", topbytemask);
+          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
         }
     }
   storeRegToAop (reg, result, 0);
@@ -4413,7 +4402,6 @@ genPlusMANY (iCode *ic)
   int size = getDataSize (IC_RESULT (ic));
   int offset;
   reg_info *reg;
-  char *add;
   bool needpull = false;
 
   if (mc6800_reg_b->isFree && !IS_AOP_WITH_B (result))
@@ -4426,13 +4414,11 @@ genPlusMANY (iCode *ic)
       needpull = pushRegIfSurv (reg);
     }
 
-  add = "add";
   for (offset = 0; offset < size; offset++)
     {
       loadRegFromAop (reg, leftOp, offset);
-      accopWithAop (add, reg, rightOp, offset);
+      accopWithAop (offset ? "adc" : "add", reg, rightOp, offset);
       storeRegToAop (reg, result, offset);
-      add = "adc";
     }
   pullOrFreeReg (reg, needpull);
 }
@@ -4445,7 +4431,6 @@ static void
 genPlus (iCode *ic)
 {
   int size, offset = 0;
-  char *add;
   asmop *leftOp, *rightOp;
   bool earlystore = false;
   bool delayedstore = false;
@@ -4634,8 +4619,6 @@ genMinus8 (iCode *ic)
   reg_info *reg;
   bool needpulla = false;
   bool needpullb = false;
-  char *sub;
-  char *mask;
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
@@ -4677,33 +4660,27 @@ genMinus8 (iCode *ic)
       return;
     }
 
-  if (IS_AOP_A (result) && !IS_AOP_WITH_A (rightOp))
-    reg = mc6800_reg_a;
-  else if (IS_AOP_B (result) && !IS_AOP_WITH_B (rightOp))
-    reg = mc6800_reg_b;
-  else if (IS_AOP_A (leftOp) && mc6800_reg_a->isDead && !IS_AOP_WITH_A (rightOp))
-    reg = mc6800_reg_a;
-  else if (IS_AOP_B (leftOp) && mc6800_reg_b->isDead && !IS_AOP_WITH_B (rightOp))
-    reg = mc6800_reg_b;
+  if (IS_AOP_A (result) || IS_AOP_B (result))
+    reg = result->aopu.aop_reg[0];
+  else if ((IS_AOP_A (leftOp) || IS_AOP_B (leftOp)) && leftOp->aopu.aop_reg[0]->isDead)
+    reg = leftOp->aopu.aop_reg[0];
   else if (mc6800_reg_b->isFree)
     reg = mc6800_reg_b;
   else if (mc6800_reg_a->isFree)
     reg = mc6800_reg_a;
   else
     {
-      reg = IS_AOP_A (result) ? mc6800_reg_a : mc6800_reg_b;
-      needpullb = (reg == mc6800_reg_b) ? pushRegIfSurv (mc6800_reg_b) : false;
+      reg = mc6800_reg_b;
+      needpullb = pushRegIfSurv (mc6800_reg_b);
     }
-  sub = "sub";
-  mask = (reg == mc6800_reg_b) ? "andb" : "anda";
 
   loadRegFromAop (reg, leftOp, 0);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
-      accopWithAop (sub, reg, rightOp, 0);
+      accopWithAop ("sub", reg, rightOp, 0);
       if (maskedtopbyte)
         {
-          mc6800_emitOp (mask, MODE_IMM, "#0x%02x", topbytemask);
+          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
         }
     }
   storeRegToAop (reg, result, 0);
@@ -4788,7 +4765,6 @@ genMinusMANY (iCode *ic)
   int size = getDataSize (IC_RESULT (ic));
   int offset;
   reg_info *reg;
-  char *sub;
   bool needpull = false;
 
   if (mc6800_reg_b->isFree && !IS_AOP_WITH_B (result))
@@ -4801,13 +4777,11 @@ genMinusMANY (iCode *ic)
       needpull = pushRegIfSurv (reg);
     }
 
-  sub = "sub";
   for (offset = 0; offset < size; offset++)
     {
       loadRegFromAop (reg, AOP (IC_LEFT (ic)), offset);
-      accopWithAop (sub, reg, AOP (IC_RIGHT (ic)), offset);
+      accopWithAop (offset ? "sbc" : "sub", reg, AOP (IC_RIGHT (ic)), offset);
       storeRegToAop (reg, result, offset);
-      sub = "sbc";
     }
   pullOrFreeReg (reg, needpull);
 }
