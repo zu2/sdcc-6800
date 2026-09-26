@@ -5647,13 +5647,21 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
         {
           const char *tmp = allocTemp ();
           int delta = 1 + _G.stackOfs + AOP (right)->aopu.aop_stk + _G.stackPushes;
+          symbol *tlbl = (regalloc_dry_run || sign) ? NULL : newiTempLabel (NULL);
 
           loadRegFromAop (mc6800_reg_d, AOP (left), 0);
+          // D < SP + delta ?
+          //   D < SP : yes
+          //   else   : D - SP < delta ?
           mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
           mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
+          if (!sign)
+            emitBranch ("bcs", tlbl);
           mc6800_emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
           mc6800_emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+          if (tlbl)
+            mc6800_emitLabel (tlbl);
           freeTemp ();
         }
       else
@@ -5818,12 +5826,20 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
         {
           const char *tmp = allocTemp ();
           int delta = 1 + _G.stackOfs + AOP (right)->aopu.aop_stk + _G.stackPushes;
+          symbol *tlbl = (regalloc_dry_run || sign) ? NULL : newiTempLabel (NULL);
 
+          // D < SP + delta ?
+          //   D < SP : yes
+          //   else   : D - SP < delta ?
           mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
           mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
+          if (!sign)
+            emitBranch ("bcs", tlbl);
           mc6800_emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
           mc6800_emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+          if (tlbl)
+            mc6800_emitLabel (tlbl);
           freeTemp ();
         }
       else
