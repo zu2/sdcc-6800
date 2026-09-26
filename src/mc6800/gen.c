@@ -47,7 +47,6 @@ static void transferAopAop (asmop * srcaop, int srcofs, asmop * dstaop, int dsto
 static void adjustStack (int n);
 
 static char *zero = "#0x00";
-static char *one = "#0x01";
 
 static struct
 {
@@ -3431,8 +3430,6 @@ genPcall (iCode * ic)
 {
   sym_link *dtype;
   sym_link *etype;
-  symbol *rlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-  symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   iCode * sendic;
   const char *tmp = NULL;
 
@@ -4141,13 +4138,11 @@ genPlus8 (iCode *ic)
 static void
 genPlus16 (iCode *ic)
 {
-  int size = getDataSize (IC_RESULT (ic)), offset = 0;
   asmop *leftOp  = AOP (IC_LEFT (ic));
   asmop *rightOp = AOP (IC_RIGHT (ic));
   asmop *result  = AOP (IC_RESULT (ic));
   bool needpullb = pushRegIfSurv (mc6800_reg_b);
   bool needpulla = pushRegIfSurv (mc6800_reg_a);
-  bool carry_set = false;
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
@@ -4266,8 +4261,7 @@ genPlusMANY (iCode *ic)
 static void
 genPlus (iCode *ic)
 {
-  int size, offset = 0;
-  asmop *leftOp, *rightOp;
+  int size;
 
   /* special cases :- */
 
@@ -4295,9 +4289,6 @@ genPlus (iCode *ic)
   DD (emitcode ("", ";  result size = %d", getDataSize (IC_RESULT (ic))));
 
   size = getDataSize (IC_RESULT (ic));
-
-  leftOp = AOP (IC_LEFT (ic));
-  rightOp = AOP (IC_RIGHT (ic));
 
   D (emitcode (";     genPlus", "size = %d",size));
   switch (size)
@@ -7988,7 +7979,6 @@ genLeftShift (iCode *ic)
   int size, offset;
   symbol *tlbl, *tlbl1;
   char *shift;
-  asmop *aopResult;
   bool needpullcountreg = false;
   reg_info *countreg = NULL;
   const char *tmp = NULL;
@@ -8893,7 +8883,6 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   bool needpullb = false;
   bool needpullx = false;
   reg_info *acc = mc6800_reg_a;
-  bool vol = false;
   bool xptr = false;
 
   D (emitcode (";     genPointerGet", ""));
@@ -9557,7 +9546,6 @@ genPointerSet (iCode * ic, iCode * pi)
   bool needpulla = false;
   bool needpullb = false;
   bool needpullx = false;
-  bool vol = false;
   int litOffset = 0;
   char *rematOffset = NULL;
   wassert (operandType (result)->next);
