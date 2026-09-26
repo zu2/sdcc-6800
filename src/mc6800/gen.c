@@ -5742,10 +5742,8 @@ genCmp1 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
   reg_info *reg;
   bool needpull = false;
 
-  if (IS_AOP_A (AOP (left)))
-    reg = mc6800_reg_a;
-  else if (IS_AOP_B (AOP (left)))
-    reg = mc6800_reg_b;
+  if (IS_AOP_A (AOP (left)) || IS_AOP_B (AOP (left)))
+    reg = AOP (left)->aopu.aop_reg[0];
   else
     {
       reg = (mc6800_reg_b->isDead && !IS_AOP_B (AOP (right))) ? mc6800_reg_b : mc6800_reg_a;
@@ -8647,16 +8645,10 @@ genUnpackBits (operand * result, operand * left, operand * right, iCode * ifx)
   blen = SPEC_BLEN (etype);
   bstr = SPEC_BSTR (etype);
 
-  if (IS_AOP_A (AOP (result)))
-    reg = mc6800_reg_a;
-  else if (IS_AOP_B (AOP (result)))
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_b->isFree)
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
+  if (IS_AOP_A (AOP (result)) || IS_AOP_B (AOP (result)))
+    reg = AOP (result)->aopu.aop_reg[0];
   else
-    reg = mc6800_reg_b;
+    reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
   needpull = pushRegIfSurv (reg);
 
   if (blen >= 8)
@@ -8837,16 +8829,10 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
   blen = SPEC_BLEN (etype);
   bstr = SPEC_BSTR (etype);
 
-  if (IS_AOP_A (AOP (result)))
-    reg = mc6800_reg_a;
-  else if (IS_AOP_B (AOP (result)))
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_b->isFree)
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
+  if (IS_AOP_A (AOP (result)) || IS_AOP_B (AOP (result)))
+    reg = AOP (result)->aopu.aop_reg[0];
   else
-    reg = mc6800_reg_b;
+    reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
 
   needpull = pushRegIfSurv (reg);
 
@@ -9314,16 +9300,10 @@ genPackBits (operand * result, operand * left, sym_link * etype, operand * right
   blen = SPEC_BLEN (etype);
   bstr = SPEC_BSTR (etype);
 
-  if (IS_AOP_A (AOP (right)) && mc6800_reg_a->isDead)
-    reg = mc6800_reg_a;
-  else if (IS_AOP_B (AOP (right)) && mc6800_reg_b->isDead)
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_b->isFree)
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
+  if ((IS_AOP_A (AOP (right)) || IS_AOP_B (AOP (right))) && AOP (right)->aopu.aop_reg[0]->isDead)
+    reg = AOP (right)->aopu.aop_reg[0];
   else
-    reg = mc6800_reg_b;
+    reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
 
   if (AOP_TYPE (right) != AOP_LIT && blen < 8
       && !IS_AOP_WITH_A (AOP (result)) && !IS_AOP_WITH_B (AOP (result)))
@@ -9522,16 +9502,10 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
   freeAsmop (result, NULL, ic, true);
   derefaop->size = size;
 
-  if (IS_AOP_A (AOP (right)) && mc6800_reg_a->isDead)
-    reg = mc6800_reg_a;
-  else if (IS_AOP_B (AOP (right)) && mc6800_reg_b->isDead)
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_b->isFree)
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
+  if ((IS_AOP_A (AOP (right)) || IS_AOP_B (AOP (right))) && AOP (right)->aopu.aop_reg[0]->isDead)
+    reg = AOP (right)->aopu.aop_reg[0];
   else
-    reg = mc6800_reg_b;
+    reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
 
   if (blen < 8)
     {
