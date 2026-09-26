@@ -46,7 +46,7 @@ static void pullReg (reg_info * reg);
 static void transferAopAop (asmop * srcaop, int srcofs, asmop * dstaop, int dstofs);
 static void adjustStack (int n);
 
-static char *zero = "#0x00";
+static const char *zero = "#0x00";
 
 static struct
 {
@@ -1267,24 +1267,6 @@ storeImmToAop (char *c, asmop * aop, int loffset)
       break;
     case AOP_DUMMY:
       break;
-    case AOP_EXT:
-    case AOP_DIR:
-    case AOP_SOF:
-      /* clr operates with read-modify-write cycles, so don't use if the */
-      /* destination is volatile to avoid the read side-effect. */
-      if (!strcmp (c, zero) && !(aop->op && isOperandVolatile (aop->op, false))
-          && (aop->type != AOP_SOF || !mc6800_reg_a->isFree && !mc6800_reg_b->isFree))
-        {
-          const char *adr = aopAdrStr (aop, loffset, false);
-
-          if (adr[0] == '*')
-            adr++;
-          /* clr dst : 3 bytes, 6 cycles */
-          mc6800_emitOp ("clr", aop->type == AOP_SOF ? MODE_IDX : MODE_EXT, adr[0] == '*' ? adr + 1 : adr);
-          mc6800_dirtyRegAop (aop, loffset);
-          break;
-        }
-      /* fall through */
     default:
       if (mc6800_reg_a->isFree)
         {
@@ -9912,6 +9894,7 @@ genAddrOf (iCode * ic)
 
   /* object not on stack then we need the name */
   size = AOP_SIZE (IC_RESULT (ic));
+  wassertl (size <= 2, "genAddrOf: result wider than a pointer");
   offset = 0;
 
   while (size--)
@@ -9925,8 +9908,6 @@ genAddrOf (iCode * ic)
         case 1:
           dbuf_printf (&dbuf, "#>%s", sym->rname);
           break;
-        default:
-          dbuf_printf (&dbuf, "#0");
         }
       storeImmToAop (dbuf_detach_c_str (&dbuf), AOP (IC_RESULT (ic)), offset++);
     }
