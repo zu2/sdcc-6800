@@ -2627,253 +2627,6 @@ getDataSize (operand *op)
 
 
 /*-----------------------------------------------------------------*/
-/* asmopToBool - Emit code to convert an asmop to a boolean.       */
-/*               Result left in A (0=false, 1=true) if ResultInA,  */
-/*               otherwise result left in Z flag (1=false, 0=true) */
-/*-----------------------------------------------------------------*/
-static void
-asmopToBool (asmop *aop, reg_info *reg)
-{
-  bool isFloat;
-  symbol *tlbl, *tlbl1;
-  int size = aop->size;
-  bool needpula = false;
-  bool flagsonly = true;
-  int offset = size - 1;
-  sym_link *type;
-
-  wassert (aop);
-  type = operandType (AOP_OP (aop));
-  isFloat = IS_FLOAT (type);
-
-  if (reg)
-    mc6800_freeReg (reg);
-
-  if (IS_BOOL (type))
-    {
-      if (reg)
-        loadRegFromAop (reg, aop, 0);
-      else
-        rmwWithAop ("tst", aop, 0);
-      return;
-    }
-
-  if (reg && size == 1)
-    {
-      loadRegFromAop (reg, aop, 0);
-      rmwWithReg ("neg", reg);
-      mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
-      mc6800_dirtyReg (reg, false);
-      rmwWithReg ("rol", reg);
-      return;
-    }
-
-  switch (aop->type)
-    {
-    case AOP_REG:
-      if (IS_AOP_A (aop))
-        {
-          mc6800_emitOp ("tsta", MODE_INH, "");
-          flagsonly = reg != mc6800_reg_a;
-        }
-      else if (IS_AOP_B (aop))
-        {
-          mc6800_emitOp ("tstb", MODE_INH, "");
-          flagsonly = reg != mc6800_reg_b;
-        }
-      else if (IS_AOP_X (aop))
-        {
-          mc6800_emitOp ("cpx", MODE_IMM, "#0");
-        }
-      else if (IS_AOP_D (aop))
-        {
-          symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-          mc6800_emitOp ("tstb", MODE_INH, "");
-          emitBranch ("bne", tlbl);
-          mc6800_emitOp ("tsta", MODE_INH, "");
-          if (!regalloc_dry_run)
-            mc6800_emitLabel (tlbl);
-        }
-      else
-        {
-          werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "Bad rIdx in asmopToBool");
-          return;
-        }
-      break;
-    case AOP_EXT:
-      if (!reg && (size == 1) && !IS_AOP_A (aop) && !mc6800_reg_a->isFree && mc6800_reg_b->isFree)
-        {
-          loadRegFromAop (mc6800_reg_b, aop, 0);
-          break;
-        }
-      if (!reg && size == 2 && mc6800_reg_x->isFree)
-        {
-          mc6800_emitOpw_o ("ldx", aop, 0);
-          mc6800_dirtyReg (mc6800_reg_x, false);
-          break;
-        }
-      if (reg)
-        {
-          loadRegFromAop (reg, aop, offset--);
-          if (isFloat)
-            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
-          while (--size)
-            accopWithAop ("ora", reg, aop, offset--);
-          flagsonly = false;
-          break;
-        }
-      needpula = pushRegIfUsed (mc6800_reg_a);
-      loadRegFromAop (mc6800_reg_a, aop, offset--);
-      if (isFloat)
-        {
-          mc6800_emitOp ("anda", MODE_IMM, "#0x7F");      //clear sign bit
-        }
-      while (--size)
-        accopWithAop ("ora", mc6800_reg_a, aop, offset--);
-      if (needpula)
-        pullReg (mc6800_reg_a);
-      else
-        mc6800_freeReg (mc6800_reg_a);
-      break;
-    case AOP_LIT:
-      /* Higher levels should optimize this case away but let's be safe */
-      if (ulFromVal (aop->aopu.aop_lit))
-        loadRegFromConst (reg ? reg : mc6800_reg_a, 1);
-      else
-        loadRegFromConst (reg ? reg : mc6800_reg_a, 0);
-      mc6800_freeReg (reg ? reg : mc6800_reg_a);
-      break;
-    case AOP_STL:
-      if (reg)
-        {
-          loadRegFromConst (reg, 1);
-          return;
-        }
-      needpula = pushRegIfUsed (mc6800_reg_a);
-      mc6800_emitOp ("ldaa", MODE_IMM, "#0x01");
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      if (needpula)
-        pullReg (mc6800_reg_a);
-      else
-        mc6800_freeReg (mc6800_reg_a);
-      break;
-    default:
-      if (size == 1)
-        {
-          if (reg)
-            {
-              loadRegFromAop (reg, aop, 0);
-              mc6800_freeReg (reg);
-              flagsonly = false;
-            }
-          else
-            {
-              rmwWithAop ("tst", aop, 0);
-            }
-          break;
-        }
-      else if (size == 2)
-        {
-          if (reg)
-            {
-              loadRegFromAop (reg, aop, 0);
-              accopWithAop ("ora", reg, aop, 1);
-              mc6800_freeReg (reg);
-              flagsonly = false;
-            }
-          else if (mc6800_reg_x->isFree && (aop->type == AOP_IMMD || aop->type == AOP_DIR))
-            {
-              mc6800_emitOpw_o ("ldx", aop, 0);
-              mc6800_dirtyReg (mc6800_reg_x, false);
-            }
-          else if (mc6800_reg_a->isFree)
-            {
-              loadRegFromAop (mc6800_reg_a, aop, 0);
-              accopWithAop ("ora", mc6800_reg_a, aop, 1);
-              mc6800_freeReg (mc6800_reg_a);
-            }
-          else if (aop->type == AOP_IMMD && mc6800_reg_b->isFree)
-            {
-              loadRegFromAop (mc6800_reg_b, aop, 0);
-              accopWithAop ("ora", mc6800_reg_b, aop, 1);
-              mc6800_freeReg (mc6800_reg_b);
-            }
-          else if (aop->type == AOP_IMMD)
-            {
-              needpula = pushRegIfUsed (mc6800_reg_a);
-              loadRegFromAop (mc6800_reg_a, aop, 0);
-              accopWithAop ("ora", mc6800_reg_a, aop, 1);
-              if (needpula)
-                pullReg (mc6800_reg_a);
-              else
-                mc6800_freeReg (mc6800_reg_a);
-            }
-          else
-            {
-              tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-              rmwWithAop ("tst", aop, 0);
-              emitBranch ("bne", tlbl);
-              rmwWithAop ("tst", aop, 1);
-              if (!regalloc_dry_run)
-                mc6800_emitLabel (tlbl);
-              break;
-            }
-        }
-      else if (reg)
-        {
-          loadRegFromAop (reg, aop, offset--);
-          if (isFloat)
-            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
-          while (--size)
-            accopWithAop ("ora", reg, aop, offset--);
-          mc6800_freeReg (reg);
-          flagsonly = false;
-        }
-      else
-        {
-          needpula = pushRegIfUsed (mc6800_reg_a);
-          loadRegFromAop (mc6800_reg_a, aop, offset--);
-          if (isFloat)
-            {
-              mc6800_emitOp ("anda", MODE_IMM, "#0x7F");
-            }
-          while (--size)
-            accopWithAop ("ora", mc6800_reg_a, aop, offset--);
-          if (needpula)
-            pullReg (mc6800_reg_a);
-          else
-            mc6800_freeReg (mc6800_reg_a);
-        }
-    }
-
-  if (reg)
-    {
-      tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-      if (flagsonly)
-        {
-          tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-          emitBranch ("bne", tlbl1);
-          loadRegFromConst (reg, 0);
-          emitBranch ("bra", tlbl);
-          if (!regalloc_dry_run)
-            mc6800_emitLabel (tlbl1);
-          mc6800_dirtyReg (reg, false);
-          loadRegFromConst (reg, 1);
-        }
-      else
-        {
-          emitBranch ("beq", tlbl);
-          loadRegFromConst (reg, 1);
-        }
-      if (!regalloc_dry_run)
-        mc6800_emitLabel (tlbl);
-      mc6800_dirtyReg (reg, false);
-      mc6800_useReg (reg);
-    }
-}
-
-/*-----------------------------------------------------------------*/
 /* genCopy - Copy the value from one operand to another            */
 /*           The caller is responsible for aopOp and freeAsmop     */
 /*-----------------------------------------------------------------*/
@@ -3069,7 +2822,10 @@ static void
 genNot (iCode * ic)
 {
   bool needpull;
+  bool needpulla = false;
   reg_info *reg;
+  asmop *aop;
+  int offset;
 
   D (emitcode (";     genNot", ""));
 
@@ -3079,14 +2835,72 @@ genNot (iCode * ic)
   if (AOP_TYPE (IC_RESULT (ic)) == AOP_REG
       && (AOP (IC_RESULT (ic))->aopu.aop_reg[0] == mc6800_reg_a || AOP (IC_RESULT (ic))->aopu.aop_reg[0] == mc6800_reg_b))
     reg = AOP (IC_RESULT (ic))->aopu.aop_reg[0];
-  else if (!mc6800_reg_b->isFree && mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
   else
-    reg = mc6800_reg_b;
+    reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
   needpull = pushRegIfSurv (reg);
-  asmopToBool (AOP (IC_LEFT (ic)), reg);
 
-  mc6800_emitOpWithAcc ("eor", reg, MODE_IMM, "#0x01");
+  aop = AOP (IC_LEFT (ic));
+  offset = aop->size - 1;
+  if (IS_BOOL (operandType (IC_LEFT (ic))))
+    {
+      loadRegFromAop (reg, aop, 0);
+      mc6800_emitOpWithAcc ("eor", reg, MODE_IMM, "#0x01");
+    }
+  else if (aop->type == AOP_LIT)
+    loadRegFromConst (reg, !ullFromVal (aop->aopu.aop_lit));
+  else if (aop->type == AOP_STL)
+    loadRegFromConst (reg, 0);
+  else if (aop->type == AOP_REG && aop->size == 1)
+    {
+      mc6800_emitOpWithAcc ("cmp", aop->aopu.aop_reg[0], MODE_IMM, "#0x01");
+      mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+      rmwWithReg ("rol", reg);
+    }
+  else if (aop->type != AOP_REG && aop->size == 1)
+    {
+      loadRegFromConst (reg, 0);
+      accopWithAop ("cmp", reg, aop, 0);
+      mc6800_emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
+    }
+  else
+    {
+      if (IS_AOP_D (aop))
+        {
+          needpulla = reg == mc6800_reg_b && pushRegIfSurv (mc6800_reg_a);
+          mc6800_emitOp ("aba", MODE_INH, "");
+          mc6800_emitOp ("adca", MODE_IMM, "#0xff");
+        }
+      else if (IS_AOP_X (aop))
+        {
+          const char *tmp = allocTemp ();
+
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOpWithAcc ("lda", reg, MODE_DIR, "*%s", tmp);
+          mc6800_emitOpWithAcc ("add", reg, MODE_DIR, "*%s+1", tmp);
+          mc6800_emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
+          freeTemp ();
+        }
+      else if (aop->type == AOP_REG)
+        werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "Bad rIdx in genNot");
+      else
+        {
+          loadRegFromAop (reg, aop, offset--);
+          if (IS_FLOAT (operandType (IC_LEFT (ic))))
+            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
+          accopWithAop ("add", reg, aop, offset--);
+          while (offset >= 0)
+            accopWithAop ("adc", reg, aop, offset--);
+          mc6800_emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
+        }
+      mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+      mc6800_emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
+      if (needpulla)
+        {
+          mc6800_dirtyReg (mc6800_reg_a, false);
+          pullReg (mc6800_reg_a);
+        }
+    }
+  mc6800_dirtyReg (reg, false);
   storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
   pullOrFreeReg (reg, needpull);
 
@@ -9911,9 +9725,9 @@ genIfx (iCode * ic, iCode * popIc)
 
   /* If the condition is a literal, we can just do an unconditional */
   /* branch or no branch */
-  if (AOP_TYPE (cond) == AOP_LIT)
+  if (AOP_TYPE (cond) == AOP_LIT || AOP_TYPE (cond) == AOP_STL)
     {
-      unsigned long long lit = ullFromVal (AOP (cond)->aopu.aop_lit);
+      unsigned long long lit = AOP_TYPE (cond) == AOP_STL ? 1 : ullFromVal (AOP (cond)->aopu.aop_lit);
       freeAsmop (cond, NULL, ic, true);
 
       /* if there was something to be popped then do it */
@@ -9935,7 +9749,51 @@ genIfx (iCode * ic, iCode * popIc)
 
   /* evaluate the operand */
   if (AOP_TYPE (cond) != AOP_CRY)
-    asmopToBool (AOP (cond), NULL);
+    {
+      asmop *aop = AOP (cond);
+      int offset = aop->size - 1;
+      reg_info *reg = aop->type == AOP_REG ? aop->aopu.aop_reg[0] : mc6800_findRegAop (aop, 0);
+
+      if (aop->size == 1 && (reg == mc6800_reg_a || reg == mc6800_reg_b))
+        mc6800_emitOpWithAcc ("tst", reg, MODE_INH, "");
+      else if (IS_AOP_X (aop))
+        mc6800_emitOp ("cpx", MODE_IMM, "#0");
+      else if (IS_AOP_D (aop))
+        {
+          symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+          mc6800_emitOp ("tstb", MODE_INH, "");
+          emitBranch ("bne", tlbl);
+          mc6800_emitOp ("tsta", MODE_INH, "");
+          if (!regalloc_dry_run)
+            mc6800_emitLabel (tlbl);
+        }
+      else if (aop->type == AOP_REG)
+        werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "Bad rIdx in genIfx");
+      else if (aop->size == 2 && !IS_FLOAT (operandType (cond)) && mc6800_reg_x->isFree &&
+        (aop->type == AOP_DIR || aop->type == AOP_EXT || aop->type == AOP_IMMD))
+        {
+          mc6800_emitOpw_o ("ldx", aop, 0);
+          mc6800_dirtyReg (mc6800_reg_x, false);
+        }
+      else if (aop->size == 1 && !mc6800_reg_a->isFree && !mc6800_reg_b->isFree)
+        rmwWithAop ("tst", aop, 0);
+      else
+        {
+          bool needpull;
+
+          reg = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+          needpull = pushRegIfUsed (reg);
+          loadRegFromAop (reg, aop, offset--);
+          if (IS_FLOAT (operandType (cond)))
+            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
+          while (offset >= 0)
+            accopWithAop ("ora", reg, aop, offset--);
+          if (aop->size > 1)
+            mc6800_dirtyReg (reg, false);
+          pullOrFreeReg (reg, needpull);
+        }
+    }
   /* the result is now in the z flag bit */
   freeAsmop (cond, NULL, ic, true);
 
@@ -10354,10 +10212,77 @@ genCast (iCode * ic)
 
   if (IS_BOOL (resulttype))
     {
-      bool needpulla = pushRegIfSurv (mc6800_reg_a);
-      asmopToBool (AOP (right), mc6800_reg_a);
-      storeRegToAop (mc6800_reg_a, AOP (result), 0);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
+      bool needpull;
+      bool needpulla = false;
+      reg_info *reg;
+      asmop *aop = AOP (right);
+      int offset = aop->size - 1;
+
+      if (IS_AOP_A (AOP (result)) || IS_AOP_B (AOP (result)))
+        reg = AOP (result)->aopu.aop_reg[0];
+      else
+        reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfSurv (reg);
+
+      if (IS_BOOL (operandType (right)))
+        loadRegFromAop (reg, aop, 0);
+      else if (aop->type == AOP_LIT)
+        loadRegFromConst (reg, !!ullFromVal (aop->aopu.aop_lit));
+      else if (aop->type == AOP_STL)
+        loadRegFromConst (reg, 1);
+      else if (aop->type == AOP_REG && aop->size == 1)
+        {
+          mc6800_emitOpWithAcc ("cmp", aop->aopu.aop_reg[0], MODE_IMM, "#0x01");
+          mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+          mc6800_emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
+        }
+      else if (aop->type != AOP_REG && aop->size == 1)
+        {
+          loadRegFromConst (reg, 0);
+          accopWithAop ("cmp", reg, aop, 0);
+          rmwWithReg ("rol", reg);
+        }
+      else
+        {
+          if (IS_AOP_D (aop))
+            {
+              needpulla = reg == mc6800_reg_b && pushRegIfSurv (mc6800_reg_a);
+              mc6800_emitOp ("aba", MODE_INH, "");
+              mc6800_emitOp ("adca", MODE_IMM, "#0xff");
+            }
+          else if (IS_AOP_X (aop))
+            {
+              const char *tmp = allocTemp ();
+
+              mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+              mc6800_emitOpWithAcc ("lda", reg, MODE_DIR, "*%s", tmp);
+              mc6800_emitOpWithAcc ("add", reg, MODE_DIR, "*%s+1", tmp);
+              mc6800_emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
+              freeTemp ();
+            }
+          else if (aop->type == AOP_REG)
+            werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "Bad rIdx in genCast");
+          else
+            {
+              loadRegFromAop (reg, aop, offset--);
+              if (IS_FLOAT (operandType (right)))
+                mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
+              accopWithAop ("add", reg, aop, offset--);
+              while (offset >= 0)
+                accopWithAop ("adc", reg, aop, offset--);
+              mc6800_emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
+            }
+          mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+          rmwWithReg ("rol", reg);
+          if (needpulla)
+            {
+              mc6800_dirtyReg (mc6800_reg_a, false);
+              pullReg (mc6800_reg_a);
+            }
+        }
+      mc6800_dirtyReg (reg, false);
+      storeRegToAop (reg, AOP (result), 0);
+      pullOrFreeReg (reg, needpull);
       goto release;
     }
 
