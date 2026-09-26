@@ -1485,13 +1485,17 @@ transferAopAop (asmop *srcaop, int srcofs, asmop *dstaop, int dstofs)
 /*                Supports: adc, add, and, bit, cmp, eor, ora, sbc, sub     */
 /*--------------------------------------------------------------------------*/
 static void
-accopWithAop (char *accop, asmop *aop, int loffset)
+accopWithAop (const char *op, reg_info *acc, asmop *aop, int loffset)
 {
+  char accop[sizeof (((mc6800opcodedata *) 0)->name)];
+
+  wassertl (acc == mc6800_reg_a || acc == mc6800_reg_b, "accopWithAop: register must be A or B");
+  SNPRINTF (accop, sizeof (accop), "%s%c", op, acc == mc6800_reg_a ? 'a' : 'b');
   setupXForAop (aop);
 
   if (aop->stacked && aop->stk_aop[loffset])
     {
-      accopWithAop (accop, aop->stk_aop[loffset], 0);
+      accopWithAop (op, acc, aop->stk_aop[loffset], 0);
       return;
     }
 
@@ -2714,7 +2718,7 @@ asmopToBool (asmop *aop, reg_info *reg)
           if (isFloat)
             mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
           while (--size)
-            accopWithAop (reg == mc6800_reg_a ? "oraa" : "orab", aop, offset--);
+            accopWithAop ("ora", reg, aop, offset--);
           flagsonly = false;
           break;
         }
@@ -2725,7 +2729,7 @@ asmopToBool (asmop *aop, reg_info *reg)
           mc6800_emitOp ("anda", MODE_IMM, "#0x7F");      //clear sign bit
         }
       while (--size)
-        accopWithAop ("oraa", aop, offset--);
+        accopWithAop ("ora", mc6800_reg_a, aop, offset--);
       if (needpula)
         pullReg (mc6800_reg_a);
       else
@@ -2773,7 +2777,7 @@ asmopToBool (asmop *aop, reg_info *reg)
           if (reg)
             {
               loadRegFromAop (reg, aop, 0);
-              accopWithAop (reg == mc6800_reg_a ? "oraa" : "orab", aop, 1);
+              accopWithAop ("ora", reg, aop, 1);
               mc6800_freeReg (reg);
               flagsonly = false;
             }
@@ -2785,20 +2789,20 @@ asmopToBool (asmop *aop, reg_info *reg)
           else if (mc6800_reg_a->isFree)
             {
               loadRegFromAop (mc6800_reg_a, aop, 0);
-              accopWithAop ("oraa", aop, 1);
+              accopWithAop ("ora", mc6800_reg_a, aop, 1);
               mc6800_freeReg (mc6800_reg_a);
             }
           else if (aop->type == AOP_IMMD && mc6800_reg_b->isFree)
             {
               loadRegFromAop (mc6800_reg_b, aop, 0);
-              accopWithAop ("orab", aop, 1);
+              accopWithAop ("ora", mc6800_reg_b, aop, 1);
               mc6800_freeReg (mc6800_reg_b);
             }
           else if (aop->type == AOP_IMMD)
             {
               needpula = pushRegIfUsed (mc6800_reg_a);
               loadRegFromAop (mc6800_reg_a, aop, 0);
-              accopWithAop ("oraa", aop, 1);
+              accopWithAop ("ora", mc6800_reg_a, aop, 1);
               if (needpula)
                 pullReg (mc6800_reg_a);
               else
@@ -2821,7 +2825,7 @@ asmopToBool (asmop *aop, reg_info *reg)
           if (isFloat)
             mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
           while (--size)
-            accopWithAop (reg == mc6800_reg_a ? "oraa" : "orab", aop, offset--);
+            accopWithAop ("ora", reg, aop, offset--);
           mc6800_freeReg (reg);
           flagsonly = false;
         }
@@ -2834,7 +2838,7 @@ asmopToBool (asmop *aop, reg_info *reg)
               mc6800_emitOp ("anda", MODE_IMM, "#0x7F");
             }
           while (--size)
-            accopWithAop ("oraa", aop, offset--);
+            accopWithAop ("ora", mc6800_reg_a, aop, offset--);
           if (needpula)
             pullReg (mc6800_reg_a);
           else
@@ -3201,7 +3205,7 @@ genUminus (iCode * ic)
   result = AOP (IC_RESULT (ic));
 
   needpula = pushRegIfSurv (mc6800_reg_a);
-  sub = "suba";
+  sub = "sub";
   while (size--)
     {
       /* clra clears the carry, so the borrow would be lost */
@@ -3212,9 +3216,9 @@ genUminus (iCode * ic)
         }
       else
         loadRegFromConst (mc6800_reg_a, 0);
-      accopWithAop (sub, AOP (IC_LEFT (ic)), offset);
+      accopWithAop (sub, mc6800_reg_a, AOP (IC_LEFT (ic)), offset);
       storeRegToAop (mc6800_reg_a, result, offset++);
-      sub = "sbca";
+      sub = "sbc";
     }
   storeRegSignToUpperAop (mc6800_reg_a, result, offset, SPEC_USIGN (operandType (IC_LEFT (ic))));
   pullOrFreeReg (mc6800_reg_a, needpula);
@@ -4259,7 +4263,7 @@ genPlusIncr (iCode * ic)
     {
       needpula = pushRegIfUsed (mc6800_reg_a);
       loadRegFromAop (mc6800_reg_a, AOP (result), 0);
-      accopWithAop ("adda", AOP (IC_RIGHT (ic)), 0);
+      accopWithAop ("add", mc6800_reg_a, AOP (IC_RIGHT (ic)), 0);
       storeRegToAop (mc6800_reg_a, AOP (result), 0);
       if (size > 1)
         emitBranch ("bcc", tlbl);
@@ -4315,13 +4319,13 @@ genPlus8 (iCode *ic)
           leftOp = AOP (IC_RIGHT (ic));
         }
     }
-  add = (reg == mc6800_reg_b) ? "addb" : "adda";
+  add = "add";
   mask = (reg == mc6800_reg_b) ? "andb" : "anda";
 
   loadRegFromAop (reg, leftOp, 0);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
-      accopWithAop (add, rightOp, 0);
+      accopWithAop (add, reg, rightOp, 0);
       if (maskedtopbyte)
         {
           mc6800_emitOp (mask, MODE_IMM, "#0x%02x", topbytemask);
@@ -4392,8 +4396,8 @@ genPlus16 (iCode *ic)
 
   loadRegFromAop (mc6800_reg_b, leftOp, 0);
   loadRegFromAop (mc6800_reg_a, leftOp, 1);
-  accopWithAop ("addb", rightOp, 0);
-  accopWithAop ("adca", rightOp, 1);
+  accopWithAop ("add", mc6800_reg_b, rightOp, 0);
+  accopWithAop ("adc", mc6800_reg_a, rightOp, 1);
   storeRegToAop (mc6800_reg_d, result, 0);
 
   pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -4422,13 +4426,13 @@ genPlusMANY (iCode *ic)
       needpull = pushRegIfSurv (reg);
     }
 
-  add = (reg == mc6800_reg_b) ? "addb" : "adda";
+  add = "add";
   for (offset = 0; offset < size; offset++)
     {
       loadRegFromAop (reg, leftOp, offset);
-      accopWithAop (add, rightOp, offset);
+      accopWithAop (add, reg, rightOp, offset);
       storeRegToAop (reg, result, offset);
-      add = (reg == mc6800_reg_b) ? "adcb" : "adca";
+      add = "adc";
     }
   pullOrFreeReg (reg, needpull);
 }
@@ -4578,7 +4582,7 @@ genMinusDec (iCode * ic)
 
   needpula = pushRegIfUsed (mc6800_reg_a);
   loadRegFromAop (mc6800_reg_a, AOP (result), 0);
-  accopWithAop ("suba", AOP (IC_RIGHT (ic)), 0);
+  accopWithAop ("sub", mc6800_reg_a, AOP (IC_RIGHT (ic)), 0);
   storeRegToAop (mc6800_reg_a, AOP (result), 0);
   if (size > 1)
     {
@@ -4690,13 +4694,13 @@ genMinus8 (iCode *ic)
       reg = IS_AOP_A (result) ? mc6800_reg_a : mc6800_reg_b;
       needpullb = (reg == mc6800_reg_b) ? pushRegIfSurv (mc6800_reg_b) : false;
     }
-  sub = (reg == mc6800_reg_b) ? "subb" : "suba";
+  sub = "sub";
   mask = (reg == mc6800_reg_b) ? "andb" : "anda";
 
   loadRegFromAop (reg, leftOp, 0);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
-      accopWithAop (sub, rightOp, 0);
+      accopWithAop (sub, reg, rightOp, 0);
       if (maskedtopbyte)
         {
           mc6800_emitOp (mask, MODE_IMM, "#0x%02x", topbytemask);
@@ -4754,22 +4758,22 @@ genMinus16 (iCode *ic)
   else if (leftOp->type == AOP_STL)
     {
       loadRegFromAop (mc6800_reg_d, leftOp, 0);
-      accopWithAop ("subb", rightOp, 0);
-      accopWithAop ("sbca", rightOp, 1);
+      accopWithAop ("sub", mc6800_reg_b, rightOp, 0);
+      accopWithAop ("sbc", mc6800_reg_a, rightOp, 1);
     }
   else if (IS_AOP_D (rightOp))
     {
       mc6800_emitOp ("coma", MODE_INH, "");
       mc6800_emitOp ("comb", MODE_INH, "");
-      accopWithAop ("adcb", leftOp, 0);
-      accopWithAop ("adca", leftOp, 1);
+      accopWithAop ("adc", mc6800_reg_b, leftOp, 0);
+      accopWithAop ("adc", mc6800_reg_a, leftOp, 1);
     }
   else
     {
       loadRegFromAop (mc6800_reg_b, leftOp, 0);
       loadRegFromAop (mc6800_reg_a, leftOp, 1);
-      accopWithAop ("subb", rightOp, 0);
-      accopWithAop ("sbca", rightOp, 1);
+      accopWithAop ("sub", mc6800_reg_b, rightOp, 0);
+      accopWithAop ("sbc", mc6800_reg_a, rightOp, 1);
     }
   storeRegToAop (mc6800_reg_d, result, 0);
 
@@ -4797,13 +4801,13 @@ genMinusMANY (iCode *ic)
       needpull = pushRegIfSurv (reg);
     }
 
-  sub = (reg == mc6800_reg_b) ? "subb" : "suba";
+  sub = "sub";
   for (offset = 0; offset < size; offset++)
     {
       loadRegFromAop (reg, AOP (IC_LEFT (ic)), offset);
-      accopWithAop (sub, AOP (IC_RIGHT (ic)), offset);
+      accopWithAop (sub, reg, AOP (IC_RIGHT (ic)), offset);
       storeRegToAop (reg, result, offset);
-      sub = (reg == mc6800_reg_b) ? "sbcb" : "sbca";
+      sub = "sbc";
     }
   pullOrFreeReg (reg, needpull);
 }
@@ -5774,7 +5778,7 @@ genCmp1 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
       needpull = pushRegIfSurv (reg);
       loadRegFromAop (reg, AOP (left), 0);
     }
-  accopWithAop ((reg == mc6800_reg_b) ? "cmpb" : "cmpa", AOP (right), 0);
+  accopWithAop ("cmp", reg, AOP (right), 0);
   mc6800_freeReg (reg);
   freeAsmop (right, NULL, ic, false);
   freeAsmop (left, NULL, ic, false);
@@ -5869,8 +5873,8 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
       else
         {
           loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-          accopWithAop ("subb", AOP (right), 0);
-          accopWithAop ("sbca", AOP (right), 1);
+          accopWithAop ("sub", mc6800_reg_b, AOP (right), 0);
+          accopWithAop ("sbc", mc6800_reg_a, AOP (right), 1);
         }
       pullReg (mc6800_reg_d);
       freeAsmop (right, NULL, ic, false);
@@ -5933,9 +5937,9 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
           else
             loadRegFromAop (reg, AOP (left), offset);
           if (offset == 0)
-            accopWithAop ((reg == mc6800_reg_b) ? "subb" : "suba", AOP (right), 0);
+            accopWithAop ("sub", reg, AOP (right), 0);
           else
-            accopWithAop ((reg == mc6800_reg_b) ? "sbcb" : "sbca", AOP (right), 1);
+            accopWithAop ("sbc", reg, AOP (right), 1);
         }
       mc6800_freeReg (reg);
       freeAsmop (right, NULL, ic, false);
@@ -6038,8 +6042,8 @@ genCmp2 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
         }
       else
         {
-          accopWithAop ("subb", AOP (right), 0);
-          accopWithAop ("sbca", AOP (right), 1);
+          accopWithAop ("sub", mc6800_reg_b, AOP (right), 0);
+          accopWithAop ("sbc", mc6800_reg_a, AOP (right), 1);
         }
     }
   mc6800_freeReg (mc6800_reg_d);
@@ -6137,7 +6141,7 @@ genCmpMANY (iCode * ic, iCode * ifx, operand * left, operand * right, int size, 
     }
   reg = mc6800_reg_b->isDead ? mc6800_reg_b : mc6800_reg_a;
   needpull = pushRegIfSurv (reg);
-  sub = (reg == mc6800_reg_b) ? "subb" : "suba";
+  sub = "sub";
   while (size--)
     {
       D (emitcode (";     genCmp ", "sub=%s,size=%d", sub,size));
@@ -6149,10 +6153,10 @@ genCmpMANY (iCode * ic, iCode * ifx, operand * left, operand * right, int size, 
         }
       else
         loadRegFromAop (reg, AOP (left), offset);
-      accopWithAop (sub, AOP (right), offset);
+      accopWithAop (sub, reg, AOP (right), offset);
       mc6800_freeReg (reg);
       offset++;
-      sub = (reg == mc6800_reg_b) ? "sbcb" : "sbca";
+      sub = "sbc";
     }
   freeAsmop (right, NULL, ic, false);
   freeAsmop (left, NULL, ic, false);
@@ -6403,13 +6407,13 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   else if (AOP_TYPE (left) == AOP_STL && mc6800_reg_a->isDead && mc6800_reg_b->isDead)
     {
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-      accopWithAop ("cmpb", AOP (right), 0);
+      accopWithAop ("cmp", mc6800_reg_b, AOP (right), 0);
       if (!ifx && !needpulla)
         needpulla = pushRegIfSurv (mc6800_reg_a);
       if (!tlbl_NE && !regalloc_dry_run)
         tlbl_NE = newiTempLabel (NULL);
       emitBranch ("bne", tlbl_NE);
-      accopWithAop ("cmpa", AOP (right), 1);
+      accopWithAop ("cmp", mc6800_reg_a, AOP (right), 1);
     }
   else if (AOP_TYPE (left) == AOP_STL && mc6800_reg_x->isDead && AOP_SIZE (right) == 2 && !IS_AOP_WITH_X (AOP (right)))
     {
@@ -6470,7 +6474,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
                   mc6800_emitOp ("cba", MODE_INH, "");
                 }
               else
-                accopWithAop ("cmpb", AOP (right), offset);
+                accopWithAop ("cmp", mc6800_reg_b, AOP (right), offset);
             }
           else
             {
@@ -6491,7 +6495,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
                   mc6800_emitOp ("cba", MODE_INH, "");
                 }
               else
-                accopWithAop ("cmpa", AOP (right), offset);
+                accopWithAop ("cmp", mc6800_reg_a, AOP (right), offset);
               if (!(AOP_TYPE (left) == AOP_REG && AOP (left)->aopu.aop_reg[offset]->rIdx == A_IDX))
                 pullOrFreeReg (mc6800_reg_a, needpulla);
               needpulla = false;
@@ -6747,7 +6751,7 @@ genAnd (iCode * ic, iCode * ifx)
             }
           else
             loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          accopWithAop ("anda", AOP (right), offset);
+          accopWithAop ("and", mc6800_reg_a, AOP (right), offset);
           mc6800_emitOp ("oraa", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
           offset++;
@@ -6783,9 +6787,9 @@ genAnd (iCode * ic, iCode * ifx)
   if (AOP_TYPE (result) == AOP_CRY && size == 1 && (IS_AOP_A (AOP (left)) || IS_AOP_A (AOP (right))))
     {
       if (IS_AOP_A (AOP (left)))
-        accopWithAop ("bita", AOP (right), 0);
+        accopWithAop ("bit", mc6800_reg_a, AOP (right), 0);
       else
-        accopWithAop ("bita", AOP (left), 0);
+        accopWithAop ("bit", mc6800_reg_a, AOP (left), 0);
       genIfxJump (ifx, "a");
       goto release;
     }
@@ -6817,7 +6821,7 @@ genAnd (iCode * ic, iCode * ifx)
             }
           else if (IS_AOP_D (AOP (left)) && offset == 0)
             {
-              accopWithAop ("bitb", AOP (right), offset);
+              accopWithAop ("bit", mc6800_reg_b, AOP (right), offset);
               if (size)
                 {
                   if (!tlbl && !regalloc_dry_run)
@@ -6828,7 +6832,7 @@ genAnd (iCode * ic, iCode * ifx)
           else
             {
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              accopWithAop ("bita", AOP (right), offset);
+              accopWithAop ("bit", mc6800_reg_a, AOP (right), offset);
               mc6800_freeReg (mc6800_reg_a);
               if (size)
                 {
@@ -6856,7 +6860,7 @@ genAnd (iCode * ic, iCode * ifx)
   &&  (IS_AOP_B (AOP (result)) || (IS_AOP_B (AOP (left)) && mc6800_reg_b->isDead)))
     {
       loadRegFromAop (mc6800_reg_b, AOP (left), 0);
-      accopWithAop ("andb", AOP (right), 0);
+      accopWithAop ("and", mc6800_reg_b, AOP (right), 0);
       mc6800_dirtyReg (mc6800_reg_b, false);
       storeRegToAop (mc6800_reg_b, AOP (result), 0);
       goto release;
@@ -6891,14 +6895,14 @@ genAnd (iCode * ic, iCode * ifx)
         transferAopAop (right->aop, offset, result->aop, offset);
       else if (IS_AOP_D (AOP (left)) && offset == 0)
         {
-          accopWithAop ("andb", AOP (right), offset);
+          accopWithAop ("and", mc6800_reg_b, AOP (right), offset);
           mc6800_dirtyReg (mc6800_reg_b, false);
           storeRegToAop (mc6800_reg_b, AOP (result), offset);
         }
       else
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          accopWithAop ("anda", AOP (right), offset);
+          accopWithAop ("and", mc6800_reg_a, AOP (right), offset);
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
           mc6800_freeReg (mc6800_reg_a);
         }
@@ -7003,7 +7007,7 @@ genOr (iCode * ic, iCode * ifx)
             }
           else
             loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          accopWithAop ("oraa", AOP (right), offset);
+          accopWithAop ("ora", mc6800_reg_a, AOP (right), offset);
           mc6800_emitOp ("oraa", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
           offset++;
@@ -7051,7 +7055,7 @@ genOr (iCode * ic, iCode * ifx)
             }
           else if (IS_AOP_D (AOP (left)) && offset == 0)
             {
-              accopWithAop ("orab", AOP (right), offset);
+              accopWithAop ("ora", mc6800_reg_b, AOP (right), offset);
               mc6800_dirtyReg (mc6800_reg_b, false);
               if (size)
                 {
@@ -7063,7 +7067,7 @@ genOr (iCode * ic, iCode * ifx)
           else
             {
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              accopWithAop ("oraa", AOP (right), offset);
+              accopWithAop ("ora", mc6800_reg_a, AOP (right), offset);
               mc6800_freeReg (mc6800_reg_a);
               if (size)
                 {
@@ -7096,7 +7100,7 @@ genOr (iCode * ic, iCode * ifx)
   &&  (IS_AOP_B (AOP (result)) || (IS_AOP_B (AOP (left)) && mc6800_reg_b->isDead)))
     {
       loadRegFromAop (mc6800_reg_b, AOP (left), 0);
-      accopWithAop ("orab", AOP (right), 0);
+      accopWithAop ("ora", mc6800_reg_b, AOP (right), 0);
       mc6800_dirtyReg (mc6800_reg_b, false);
       storeRegToAop (mc6800_reg_b, AOP (result), 0);
       goto release;
@@ -7126,14 +7130,14 @@ genOr (iCode * ic, iCode * ifx)
         transferAopAop (right->aop, offset, result->aop, offset);
       else if (IS_AOP_D (AOP (left)) && offset == 0)
         {
-          accopWithAop ("orab", AOP (right), offset);
+          accopWithAop ("ora", mc6800_reg_b, AOP (right), offset);
           mc6800_dirtyReg (mc6800_reg_b, false);
           storeRegToAop (mc6800_reg_b, AOP (result), offset);
         }
       else
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          accopWithAop ("oraa", AOP (right), offset);
+          accopWithAop ("ora", mc6800_reg_a, AOP (right), offset);
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
           mc6800_freeReg (mc6800_reg_a);
         }
@@ -7201,7 +7205,7 @@ genXor (iCode * ic, iCode * ifx)
       if (aopIsLitVal (right->aop, 0, 1, 0xff))
         rmwWithReg ("com", mc6800_reg_b);
       else
-        accopWithAop ("eorb", AOP (right), 0);
+        accopWithAop ("eor", mc6800_reg_b, AOP (right), 0);
       mc6800_dirtyReg (mc6800_reg_b, false);
       storeRegToAop (mc6800_reg_b, AOP (result), 0);
       goto release;
@@ -7228,7 +7232,7 @@ genXor (iCode * ic, iCode * ifx)
                 }
               else
                 {
-                  accopWithAop ("eorb", AOP (right), offset);
+                  accopWithAop ("eor", mc6800_reg_b, AOP (right), offset);
                   mc6800_dirtyReg (mc6800_reg_b, false);
                 }
             }
@@ -7240,7 +7244,7 @@ genXor (iCode * ic, iCode * ifx)
                   mc6800_emitOp ("tsta", MODE_INH, "");
                 }
               else
-                accopWithAop ("eora", AOP (right), offset);
+                accopWithAop ("eor", mc6800_reg_a, AOP (right), offset);
 
               mc6800_freeReg (mc6800_reg_a);
             }
@@ -7277,7 +7281,7 @@ genXor (iCode * ic, iCode * ifx)
             rmwWithReg ("com", mc6800_reg_b);
           else if (!aopIsLitVal (right->aop, offset, 1, 0x00))
             {
-              accopWithAop ("eorb", right->aop, offset);
+              accopWithAop ("eor", mc6800_reg_b, right->aop, offset);
               mc6800_dirtyReg (mc6800_reg_b, false);
             }
           storeRegToAop (mc6800_reg_b, AOP (result), offset);
@@ -7288,7 +7292,7 @@ genXor (iCode * ic, iCode * ifx)
       if (aopIsLitVal (right->aop, offset, 1, 0xff))
         rmwWithReg ("com", mc6800_reg_a);
       else if (!aopIsLitVal (right->aop, offset, 1, 0x00))
-        accopWithAop ("eora", right->aop, offset);
+        accopWithAop ("eor", mc6800_reg_a, right->aop, offset);
       storeRegToAop (mc6800_reg_a, AOP (result), offset);
       if (AOP_TYPE (result) == AOP_REG && size && AOP (result)->aopu.aop_reg[offset]->rIdx == A_IDX)
         {
@@ -7876,7 +7880,7 @@ shiftRLeftOrResult (operand * left, int offl, operand * result, int offr, int sh
   /* shift left accumulator */
   AccRsh (mc6800_reg_a, shCount, false);
   /* or with result */
-  accopWithAop ("ora", AOP (result), offr);
+  accopWithAop ("ora", mc6800_reg_a, AOP (result), offr);
   /* back to result */
   storeRegToAop (mc6800_reg_a, AOP (result), offr);
 
@@ -8769,7 +8773,7 @@ genUnpackBits (operand * result, operand * left, operand * right, iCode * ifx)
       if (blen % 8)
         mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen % 8));
       while (offset--)
-        accopWithAop (reg == mc6800_reg_a ? "oraa" : "orab", tmpaop, tmpaop->size - offset - 1);
+        accopWithAop ("ora", reg, tmpaop, tmpaop->size - offset - 1);
       mc6800_dirtyReg (reg, false);
       goto finish;
     }
@@ -8909,7 +8913,7 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
       if (blen % 8)
         mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen % 8));
       while (offset--)
-        accopWithAop (reg == mc6800_reg_a ? "oraa" : "orab", derefaop, size - offset - 1);
+        accopWithAop ("ora", reg, derefaop, size - offset - 1);
       mc6800_dirtyReg (reg, false);
       goto finish;
     }
@@ -9016,7 +9020,7 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
           else if (offset == 0)
             loadRegFromAop (acc, derefaop, offset);
           else
-            accopWithAop (acc == mc6800_reg_a ? "oraa" : "orab", derefaop, offset);
+            accopWithAop ("ora", acc, derefaop, offset);
         }
     }
 
@@ -9494,7 +9498,7 @@ genPackBits (operand * result, operand * left, sym_link * etype, operand * right
           storeRegToAop (reg, tmpaop, offset);
           loadRegIndexed (reg, litOffset + offset, rematOffset);
           mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", mask);
-          accopWithAop (reg == mc6800_reg_a ? "oraa" : "orab", tmpaop, offset);
+          accopWithAop ("ora", reg, tmpaop, offset);
         }
       else
         {
@@ -9594,9 +9598,9 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
         }
       else
         {
-          accopWithAop (reg == mc6800_reg_a ? "eora" : "eorb", derefaop, 0);
+          accopWithAop ("eor", reg, derefaop, 0);
           mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
-          accopWithAop (reg == mc6800_reg_a ? "eora" : "eorb", derefaop, 0);
+          accopWithAop ("eor", reg, derefaop, 0);
         }
       mc6800_dirtyReg (reg, false);
       storeRegToAop (reg, derefaop, 0);
@@ -9647,9 +9651,9 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
         }
       else
         {
-          accopWithAop (reg == mc6800_reg_a ? "eora" : "eorb", derefaop, size - offset - 1);
+          accopWithAop ("eor", reg, derefaop, size - offset - 1);
           mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
-          accopWithAop (reg == mc6800_reg_a ? "eora" : "eorb", derefaop, size - offset - 1);
+          accopWithAop ("eor", reg, derefaop, size - offset - 1);
         }
       mc6800_dirtyReg (reg, false);
       storeRegToAop (reg, derefaop, size - offset - 1);
