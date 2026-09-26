@@ -9444,6 +9444,11 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
     {
       storeRegToAop (mc6800_reg_x, derefaop, 0);
     }
+  else if (IS_VOLATILE (operandType (result)->next))
+    {
+      for (offset = size - 1; offset >= 0; offset--)
+        transferAopAop (AOP (right), offset, derefaop, offset);
+    }
   else if (AOP_TYPE (right) == AOP_STL)
     {
       bool needpullb = pushRegIfSurv (mc6800_reg_b);
@@ -9524,7 +9529,7 @@ genPointerSet (iCode * ic, iCode * pi)
       needpulla = pushRegIfSurv (mc6800_reg_a);
       if (AOP_TYPE (right) == AOP_REG && (AOP (right)->aopu.aop_reg[0] == mc6800_reg_a || size > 1 && AOP (right)->aopu.aop_reg[1] == mc6800_reg_a))
         mc6800_useReg (mc6800_reg_a);
-      if (AOP_TYPE (right) == AOP_REG && IS_AOP_WITH_X (AOP (right)))
+      if (AOP_TYPE (right) == AOP_REG ? IS_AOP_WITH_X (AOP (right)) : IS_VOLATILE (operandType (result)->next))
         for (offset = 0; offset < size; offset++)
           {
             loadRegFromAop (mc6800_reg_a, AOP (right), offset);
@@ -9576,7 +9581,7 @@ genPointerSet (iCode * ic, iCode * pi)
           litOffset -= litOffset + size - 1 - 0xff;
         }
 
-      if (AOP_TYPE (right) == AOP_SOF)
+      if (AOP_TYPE (right) == AOP_SOF && !IS_VOLATILE (operandType (result)->next))
         {
           const char *dsttmp = allocTemp ();
           const char *srctmp = NULL;
@@ -9620,7 +9625,7 @@ genPointerSet (iCode * ic, iCode * pi)
         }
       else
         {
-          if (AOP_TYPE (right) == AOP_REG && IS_AOP_WITH_X (AOP (right)))
+          if (AOP_TYPE (right) == AOP_REG ? IS_AOP_WITH_X (AOP (right)) : IS_VOLATILE (operandType (result)->next))
             {
               offset = size;
 
@@ -9631,7 +9636,7 @@ genPointerSet (iCode * ic, iCode * pi)
                   mc6800_freeReg (mc6800_reg_a);
                 }
             }
-          else if (AOP_TYPE (right) == AOP_REG && IS_AOP_D (AOP (right)))
+          else if (AOP_TYPE (right) == AOP_REG && IS_AOP_D (AOP (right)) && !IS_VOLATILE (operandType (result)->next))
             {
               storeRegIndexed (mc6800_reg_d, litOffset, rematOffset);
               mc6800_freeReg (mc6800_reg_a);
@@ -10056,7 +10061,14 @@ genAssign (iCode * ic)
       }
   }
 
-  if (!genAssignLit (result, right))
+  if (isOperandVolatile (result, false))
+    {
+      int offset;
+
+      for (offset = AOP_SIZE (result) - 1; offset >= 0; offset--)
+        transferAopAop (AOP (right), offset, AOP (result), offset);
+    }
+  else if (!genAssignLit (result, right))
     {
       genCopy (result, right);
     }
