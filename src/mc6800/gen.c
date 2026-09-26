@@ -467,10 +467,9 @@ aopIsLitVal (const asmop *aop, int offset, int size, unsigned long long int val)
 static int
 pushReg (reg_info * reg, bool freereg)
 {
-  int regidx = reg->rIdx;
   const char *tmp;
 
-  switch (regidx)
+  switch (reg->rIdx)
     {
     case A_IDX:
       mc6800_emitOp ("psha", MODE_INH, "");
@@ -508,10 +507,9 @@ pushReg (reg_info * reg, bool freereg)
 static void
 pullReg (reg_info * reg)
 {
-  int regidx = reg->rIdx;
   const char *tmp;
 
-  switch (regidx)
+  switch (reg->rIdx)
     {
     case A_IDX:
       mc6800_emitOp ("pula", MODE_INH, "");
@@ -1335,10 +1333,9 @@ storeRegSignToUpperAop (reg_info * reg, asmop * aop, int loffset, bool isSigned)
 static void
 storeRegToFullAop (reg_info *reg, asmop *aop, bool isSigned)
 {
-  int regidx = reg->rIdx;
   int size = aop->size;
 
-  switch (regidx)
+  switch (reg->rIdx)
     {
     case A_IDX:
     case X_IDX:
@@ -2424,7 +2421,7 @@ aopDerefAop (asmop * aop, int offset)
 {
   int adr;
   asmop *newaop = NULL;
-  sym_link *type, *etype;
+  sym_link *type;
   int p_type;
   struct dbuf_s dbuf;
 
@@ -2434,14 +2431,13 @@ aopDerefAop (asmop * aop, int offset)
     {
 
       type = operandType (aop->op);
-      etype = getSpec (type);
       /* if op is of type of pointer then it is simple */
       if (IS_PTR (type) && !IS_FUNC (type->next))
         p_type = DCL_TYPE (type);
       else
         {
           /* we have to go by the storage class */
-          p_type = PTR_TYPE (SPEC_OCLS (etype));
+          p_type = PTR_TYPE (SPEC_OCLS (getSpec (type)));
         }
     }
   else
@@ -2601,9 +2597,7 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
 static int
 getDataSize (operand *op)
 {
-  int size;
-  size = AOP_SIZE (op);
-  return size;
+  return AOP_SIZE (op);
 }
 
 
@@ -2926,7 +2920,6 @@ static void
 genUminus (iCode * ic)
 {
   int offset, size;
-  sym_link *optype;
   bool needpula, needpullb;
   asmop *result;
 
@@ -2940,10 +2933,9 @@ genUminus (iCode * ic)
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RESULT (ic), ic, true);
 
-  optype = operandType (IC_LEFT (ic));
 
   /* if float then do float stuff */
-  if (IS_FLOAT (optype))
+  if (IS_FLOAT (operandType (IC_LEFT (ic))))
     {
       genUminusFloat (IC_LEFT (ic), IC_RESULT (ic));
       goto release;
@@ -3345,7 +3337,6 @@ static void
 genCall (iCode * ic)
 {
   sym_link *dtype;
-  sym_link *etype;
 
   D (emitcode (";", "genCall"));
 
@@ -3353,7 +3344,6 @@ genCall (iCode * ic)
     saveRegisters (ic);
 
   dtype = operandType (IC_LEFT (ic));
-  etype = getSpec (dtype);
 
   const bool bigreturn = IS_STRUCT (dtype->next);
 
@@ -3366,7 +3356,7 @@ genCall (iCode * ic)
       _G.sendSet = NULL;
     }
 
-  if (IS_LITERAL (etype))
+  if (IS_LITERAL (getSpec (dtype)))
     {
       mc6800_emitOp ("jsr", MODE_EXT, "0x%04X", (unsigned int) ulFromVal (OP_VALUE (IC_LEFT (ic))));
     }
@@ -3517,8 +3507,7 @@ resultRemat (iCode * ic)
 
   if (IC_RESULT (ic) && IS_ITEMP (IC_RESULT (ic)))
     {
-      symbol *sym = OP_SYMBOL (IC_RESULT (ic));
-      if (sym->remat && !POINTER_SET (ic))
+      if (OP_SYMBOL (IC_RESULT (ic))->remat && !POINTER_SET (ic))
         return 1;
     }
 
@@ -3801,9 +3790,8 @@ genRet (iCode * ic)
      move the return value into place */
   aopOp (IC_LEFT (ic), ic, false);
   size = AOP_SIZE (IC_LEFT (ic));
-  const bool bigreturn = IS_STRUCT (operandType (IC_LEFT (ic)));
 
-  if (bigreturn)
+  if (IS_STRUCT (operandType (IC_LEFT (ic))))
     {
       const char *dst = allocTemp ();
 
@@ -4083,7 +4071,6 @@ genPlus8 (iCode *ic)
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
 
   if (IS_AOP_A (result) || IS_AOP_B (result))
     reg = result->aopu.aop_reg[0];
@@ -4108,7 +4095,7 @@ genPlus8 (iCode *ic)
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
       accopWithAop ("add", reg, rightOp, 0);
-      if (maskedtopbyte)
+      if (topbytemask != 0xff)
         {
           mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
         }
@@ -4128,7 +4115,6 @@ genPlus16 (iCode *ic)
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
 
   if (leftOp->type == AOP_STL || rightOp->type == AOP_STL)
     {
@@ -4183,7 +4169,7 @@ genPlus16 (iCode *ic)
       accopWithAop ("add", mc6800_reg_b, rightOp, 0);
       accopWithAop ("adc", mc6800_reg_a, rightOp, 1);
     }
-  if (maskedtopbyte)
+  if (topbytemask != 0xff)
     mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
   storeRegToAop (mc6800_reg_d, result, 0);
 
@@ -4205,7 +4191,6 @@ genPlusMANY (iCode *ic)
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
 
   if (mc6800_reg_b->isFree && !IS_AOP_WITH_B (result))
     reg = mc6800_reg_b;
@@ -4227,7 +4212,7 @@ genPlusMANY (iCode *ic)
       if (!mayskip || !aopIsLitVal (rightOp, offset, 1, 0x00))
         {
           accopWithAop (mayskip ? "add" : "adc", reg, rightOp, offset);
-          if (offset == size - 1 && maskedtopbyte)
+          if (offset == size - 1 && topbytemask != 0xff)
             mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
           mayskip = false;
         }
@@ -4497,13 +4482,11 @@ genMinus16 (iCode *ic)
 {
   asmop *leftOp  = AOP (IC_LEFT (ic));
   asmop *rightOp = AOP (IC_RIGHT (ic));
-  asmop *result  = AOP (IC_RESULT (ic));
   bool needpullb = pushRegIfSurv (mc6800_reg_b);
   bool needpulla = pushRegIfSurv (mc6800_reg_a);
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
 
   if (rightOp->type == AOP_STL && leftOp->type == AOP_STL)
     {
@@ -4566,9 +4549,9 @@ genMinus16 (iCode *ic)
           accopWithAop ("sbc", mc6800_reg_a, rightOp, 1);
         }
     }
-  if (maskedtopbyte)
+  if (topbytemask != 0xff)
     mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
-  storeRegToAop (mc6800_reg_d, result, 0);
+  storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
 
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -4586,7 +4569,6 @@ genMinusMANY (iCode *ic)
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
 
   if (mc6800_reg_b->isFree && !IS_AOP_WITH_B (result))
     reg = mc6800_reg_b;
@@ -4608,7 +4590,7 @@ genMinusMANY (iCode *ic)
       if (!mayskip || !aopIsLitVal (AOP (IC_RIGHT (ic)), offset, 1, 0x00))
         {
           accopWithAop (mayskip ? "sub" : "sbc", reg, AOP (IC_RIGHT (ic)), offset);
-          if (offset == size - 1 && maskedtopbyte)
+          if (offset == size - 1 && topbytemask != 0xff)
             mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
           mayskip = false;
         }
@@ -4621,12 +4603,10 @@ genMinusMANY (iCode *ic)
 static void
 genMinus (iCode * ic)
 {
-  int size;
 
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
 
   D (emitcode (";     genMinus", ""));
 
@@ -4637,12 +4617,11 @@ genMinus (iCode * ic)
   /* special cases :- */
   /* if I can do an decrement instead
      of subtract then GOOD for ME */
-  if (!maskedtopbyte && genMinusDec (ic))
+  if (topbytemask == 0xff && genMinusDec (ic))
     goto release;
 
-  size = getDataSize (IC_RESULT (ic));
 
-  switch (size)
+  switch (getDataSize (IC_RESULT (ic)))
     {
     case 1:
       genMinus8 (ic);
@@ -5589,12 +5568,11 @@ genCmp1 (iCode * ic, iCode * ifx, operand * left, operand * right, int opcode, i
   if (ifx)
     {
       symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-      symbol *jlbl = IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx);
 
       pullOrFreeReg (reg, needpull);
       freeAsmop (IC_RESULT (ic), NULL, ic, true);
       emitBranch (branchInstCmp (opcode, sign), tlbl);
-      emitBranch ("jmp", jlbl);
+      emitBranch ("jmp", IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx));
       if (!regalloc_dry_run)
         mc6800_emitLabel (tlbl);
 
@@ -5983,12 +5961,11 @@ genCmpMANY (iCode * ic, iCode * ifx, operand * left, operand * right, int size, 
   if (ifx)
     {
       symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-      symbol *jlbl = IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx);
 
       pullOrFreeReg (reg, needpull);
       freeAsmop (IC_RESULT (ic), NULL, ic, true);
       emitBranch (branchInstCmp (opcode, sign), tlbl);
-      emitBranch ("jmp", jlbl);
+      emitBranch ("jmp", IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx));
       if (!regalloc_dry_run)
         mc6800_emitLabel (tlbl);
 
@@ -6027,8 +6004,7 @@ genCmpMANY (iCode * ic, iCode * ifx, operand * left, operand * right, int size, 
 static void
 genCmp (iCode * ic, iCode * ifx)
 {
-  operand *left, *right, *result;
-  sym_link *letype, *retype;
+  operand *left, *right;
   int sign, opcode;
   int size;
   bool exchange;
@@ -6037,22 +6013,19 @@ genCmp (iCode * ic, iCode * ifx)
 
   D (emitcode (";     genCmp", "(%s)", nameCmp (opcode)));
 
-  result = IC_RESULT (ic);
   left = IC_LEFT (ic);
   right = IC_RIGHT (ic);
 
   sign = 0;
   if (IS_SPEC (operandType (left)) && IS_SPEC (operandType (right)))
     {
-      letype = getSpec (operandType (left));
-      retype = getSpec (operandType (right));
-      sign = !(SPEC_USIGN (letype) | SPEC_USIGN (retype));
+      sign = !(SPEC_USIGN (getSpec (operandType (left))) | SPEC_USIGN (getSpec (operandType (right))));
     }
 
   /* assign the amsops */
   aopOp (left, ic, false);
   aopOp (right, ic, false);
-  aopOp (result, ic, true);
+  aopOp (IC_RESULT (ic), ic, true);
 
   if (ifx && IC_TRUE (ifx))
     opcode = negatedCmp (opcode);
@@ -6413,7 +6386,6 @@ iCode *
 hasIncmc6800 (operand *op, const iCode *ic, int osize)
 {
   sym_link *type = operandType (op);
-  sym_link *retype = getSpec (type);
   iCode *lic = ic->next;
   int isize;
 
@@ -6421,7 +6393,7 @@ hasIncmc6800 (operand *op, const iCode *ic, int osize)
   if (!IS_SYMOP (op))
     return NULL;
 
-  if (IS_BITVAR (retype) || !IS_PTR (type))
+  if (IS_BITVAR (getSpec (type)) || !IS_PTR (type))
     return NULL;
   if (IS_AGGREGATE (type->next))
     return NULL;
@@ -6487,7 +6459,6 @@ genAnd (iCode * ic, iCode * ifx)
   unsigned char bytemask;
   bool needpulla = false;
   bool needpullb = false;
-  bool earlystore = false;
 
   D (emitcode (";     genAnd", ""));
 
@@ -6692,8 +6663,6 @@ genAnd (iCode * ic, iCode * ifx)
   offset = 0;
   while (size--)
     {
-      if (earlystore && offset == 1)
-        pullReg (mc6800_reg_a);
       if (aopIsLitVal (left->aop, offset, 1, 0x00) || aopIsLitVal (right->aop, offset, 1, 0x00))
         {
           if (isOperandVolatile (left, false))
@@ -6754,7 +6723,6 @@ genOr (iCode * ic, iCode * ifx)
   unsigned char bytemask;
   bool needpulla = false;
   bool needpullb = false;
-  bool earlystore = false;
 
   D (emitcode (";     genOr", ""));
 
@@ -6932,8 +6900,6 @@ genOr (iCode * ic, iCode * ifx)
   offset = 0;
   while (size--)
     {
-      if (earlystore && offset == 1)
-        pullReg (mc6800_reg_a);
       if (aopIsLitVal (right->aop, offset, 1, 0xff))
         {
           if (isOperandVolatile (left, false))
@@ -6987,7 +6953,6 @@ genXor (iCode * ic, iCode * ifx)
   int size, offset = 0;
   bool needpulla = false;
   bool needpullb = false;
-  bool earlystore = false;
 
   D (emitcode (";     genXor", ""));
 
@@ -7092,8 +7057,6 @@ genXor (iCode * ic, iCode * ifx)
   offset = 0;
   while (size--)
     {
-      if (earlystore && offset == 1)
-        pullReg (mc6800_reg_a);
       if (IS_AOP_D (AOP (left)) && offset == 0)
         {
           if (aopIsLitVal (right->aop, offset, 1, 0xff))
@@ -7436,7 +7399,6 @@ static void
 genGetByte (iCode * ic)
 {
   operand *left, *right, *result;
-  int offset;
 
   D (emitcode (";", "genGetByte"));
 
@@ -7447,8 +7409,7 @@ genGetByte (iCode * ic)
   aopOp (right, ic, false);
   aopOp (result, ic, false);
 
-  offset = (int) ulFromVal (AOP (right)->aopu.aop_lit) / 8;
-  transferAopAop (AOP (left), offset, AOP (result), 0);
+  transferAopAop (AOP (left), (int) ulFromVal (AOP (right)->aopu.aop_lit) / 8, AOP (result), 0);
 
   freeAsmop (result, NULL, ic, true);
   freeAsmop (right, NULL, ic, true);
@@ -7715,7 +7676,6 @@ genlshOne (operand * result, operand * left, int shCount)
   sym_link *resulttype = operandType (result);
   unsigned bytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedbyte = (bytemask != 0xff);
   bool needpull;
   reg_info *reg;
 
@@ -7732,7 +7692,7 @@ genlshOne (operand * result, operand * left, int shCount)
   needpull = pushRegIfSurv (reg);
   loadRegFromAop (reg, AOP (left), LSB);
   AccLsh (reg, shCount); // Shift left accumulator.
-  if (maskedbyte)
+  if (bytemask != 0xff)
     mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", bytemask);
   storeRegToAop (reg, AOP (result), LSB);
   pullOrFreeReg (reg, needpull);
@@ -7744,7 +7704,7 @@ genlshOne (operand * result, operand * left, int shCount)
 static void
 genlshTwo (operand *result, operand *left, int shCount)
 {
-  int size, i;
+  int i;
   bool needpulla, needpullb;
 
   sym_link *resulttype = operandType (result);
@@ -7754,7 +7714,6 @@ genlshTwo (operand *result, operand *left, int shCount)
 
   D (emitcode (";     genlshTwo", ""));
 
-  size = getDataSize (result);
 
   /* if shCount >= 8 */
   if (shCount >= 8)
@@ -7762,7 +7721,7 @@ genlshTwo (operand *result, operand *left, int shCount)
       shCount -= 8;
 
       needpulla = pushRegIfSurv (mc6800_reg_a);
-      if (size > 1)
+      if (getDataSize (result) > 1)
         {
           loadRegFromAop (mc6800_reg_a, AOP (left), 0);
           AccLsh (mc6800_reg_a, shCount);
@@ -7809,7 +7768,6 @@ genlshFour (operand * result, operand * left, int shCount)
   sym_link *resulttype = operandType (result);
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
 
   D (emitcode (";     genlshFour", ""));
 
@@ -7833,7 +7791,7 @@ genlshFour (operand * result, operand * left, int shCount)
         }
     }
 
-  if (maskedtopbyte)
+  if (topbytemask != 0xff)
     {
       bool needpulla = pushRegIfUsed (mc6800_reg_a);
 
@@ -7860,11 +7818,10 @@ genRot1 (iCode *ic)
   wassert (bitsForType (operandType (left)) == 8);
   wassert (IS_OP_LITERAL (right));
 
-  int s = operandLitValueUll (right) % 8;
 
   bool needpulla = pushRegIfSurv (mc6800_reg_a);
   loadRegFromAop (mc6800_reg_a, left->aop, 0);
-  AccRol (mc6800_reg_a, s);
+  AccRol (mc6800_reg_a, operandLitValueUll (right) % 8);
   storeRegToAop (mc6800_reg_a, result->aop, 0);
   pullOrFreeReg (mc6800_reg_a, needpulla);
 
@@ -7878,9 +7835,8 @@ genRot1 (iCode *ic)
 static void
 genRot (iCode *ic)
 {
-  operand *left = IC_LEFT (ic);
   operand *right = IC_RIGHT (ic);
-  unsigned int lbits = bitsForType (operandType (left));
+  unsigned int lbits = bitsForType (operandType (IC_LEFT (ic)));
   if (lbits == 8)
     genRot1 (ic);
   else if (IS_OP_LITERAL (right) && operandLitValueUll (right) % lbits == 1)
@@ -7985,7 +7941,6 @@ genLeftShift (iCode *ic)
   sym_link *resulttype = operandType (result);
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
 
   /* shift count is unknown then we have to form
      a loop get the loop count in B, A or X : Note: we take
@@ -8088,7 +8043,7 @@ genLeftShift (iCode *ic)
       freeTemp ();
     }
 
-  if (maskedtopbyte)
+  if (topbytemask != 0xff)
     {
       bool in_a = (result->aop->type == AOP_REG && result->aop->aopu.aop_reg[size - 1]->rIdx == A_IDX);
       bool needpull = false;
