@@ -4199,8 +4199,15 @@ genPlus16 (iCode *ic)
 
   loadRegFromAop (mc6800_reg_b, leftOp, 0);
   loadRegFromAop (mc6800_reg_a, leftOp, 1);
-  accopWithAop ("add", mc6800_reg_b, rightOp, 0);
-  accopWithAop ("adc", mc6800_reg_a, rightOp, 1);
+  if (aopIsLitVal (rightOp, 0, 1, 0x00))
+    accopWithAop ("add", mc6800_reg_a, rightOp, 1);
+  else
+    {
+      accopWithAop ("add", mc6800_reg_b, rightOp, 0);
+      accopWithAop ("adc", mc6800_reg_a, rightOp, 1);
+    }
+  if (maskedtopbyte)
+    mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
   storeRegToAop (mc6800_reg_d, result, 0);
 
   pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -4217,6 +4224,11 @@ genPlusMANY (iCode *ic)
   int offset;
   reg_info *reg;
   bool needpull = false;
+  bool mayskip = true;
+  sym_link *resulttype = operandType (IC_RESULT (ic));
+  unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
+    (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
+  bool maskedtopbyte = (topbytemask != 0xff);
 
   if (mc6800_reg_b->isFree && !IS_AOP_WITH_B (result))
     reg = mc6800_reg_b;
@@ -4228,10 +4240,20 @@ genPlusMANY (iCode *ic)
       needpull = pushRegIfSurv (reg);
     }
 
-  for (offset = 0; offset < size; offset++)
+  offset = 0;
+  if (sameRegs (leftOp, result))
+    while (offset < size && aopIsLitVal (rightOp, offset, 1, 0x00))
+      offset++;
+  for (; offset < size; offset++)
     {
       loadRegFromAop (reg, leftOp, offset);
-      accopWithAop (offset ? "adc" : "add", reg, rightOp, offset);
+      if (!mayskip || !aopIsLitVal (rightOp, offset, 1, 0x00))
+        {
+          accopWithAop (mayskip ? "add" : "adc", reg, rightOp, offset);
+          if (offset == size - 1 && maskedtopbyte)
+            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
+          mayskip = false;
+        }
       storeRegToAop (reg, result, offset);
     }
   pullOrFreeReg (reg, needpull);
@@ -4246,10 +4268,6 @@ genPlus (iCode *ic)
 {
   int size, offset = 0;
   asmop *leftOp, *rightOp;
-  bool earlystore = false;
-  bool delayedstore = false;
-  bool mayskip = true;
-  bool skip = false;
 
   /* special cases :- */
 
@@ -4509,6 +4527,10 @@ genMinus16 (iCode *ic)
   asmop *result  = AOP (IC_RESULT (ic));
   bool needpullb = pushRegIfSurv (mc6800_reg_b);
   bool needpulla = pushRegIfSurv (mc6800_reg_a);
+  sym_link *resulttype = operandType (IC_RESULT (ic));
+  unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
+    (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
+  bool maskedtopbyte = (topbytemask != 0xff);
 
   if (rightOp->type == AOP_STL && leftOp->type == AOP_STL)
     {
@@ -4563,9 +4585,16 @@ genMinus16 (iCode *ic)
     {
       loadRegFromAop (mc6800_reg_b, leftOp, 0);
       loadRegFromAop (mc6800_reg_a, leftOp, 1);
-      accopWithAop ("sub", mc6800_reg_b, rightOp, 0);
-      accopWithAop ("sbc", mc6800_reg_a, rightOp, 1);
+      if (aopIsLitVal (rightOp, 0, 1, 0x00))
+        accopWithAop ("sub", mc6800_reg_a, rightOp, 1);
+      else
+        {
+          accopWithAop ("sub", mc6800_reg_b, rightOp, 0);
+          accopWithAop ("sbc", mc6800_reg_a, rightOp, 1);
+        }
     }
+  if (maskedtopbyte)
+    mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
   storeRegToAop (mc6800_reg_d, result, 0);
 
   pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -4580,6 +4609,11 @@ genMinusMANY (iCode *ic)
   int offset;
   reg_info *reg;
   bool needpull = false;
+  bool mayskip = true;
+  sym_link *resulttype = operandType (IC_RESULT (ic));
+  unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
+    (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
+  bool maskedtopbyte = (topbytemask != 0xff);
 
   if (mc6800_reg_b->isFree && !IS_AOP_WITH_B (result))
     reg = mc6800_reg_b;
@@ -4591,10 +4625,20 @@ genMinusMANY (iCode *ic)
       needpull = pushRegIfSurv (reg);
     }
 
-  for (offset = 0; offset < size; offset++)
+  offset = 0;
+  if (sameRegs (AOP (IC_LEFT (ic)), result))
+    while (offset < size && aopIsLitVal (AOP (IC_RIGHT (ic)), offset, 1, 0x00))
+      offset++;
+  for (; offset < size; offset++)
     {
       loadRegFromAop (reg, AOP (IC_LEFT (ic)), offset);
-      accopWithAop (offset ? "sbc" : "sub", reg, AOP (IC_RIGHT (ic)), offset);
+      if (!mayskip || !aopIsLitVal (AOP (IC_RIGHT (ic)), offset, 1, 0x00))
+        {
+          accopWithAop (mayskip ? "sub" : "sbc", reg, AOP (IC_RIGHT (ic)), offset);
+          if (offset == size - 1 && maskedtopbyte)
+            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
+          mayskip = false;
+        }
       storeRegToAop (reg, result, offset);
     }
   pullOrFreeReg (reg, needpull);
