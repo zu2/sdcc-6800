@@ -7655,45 +7655,6 @@ AccRsh (reg_info *reg, int shCount, bool sign)
 
 
 /*-----------------------------------------------------------------*/
-/* movLeft2Result - move byte from left to result                  */
-/*-----------------------------------------------------------------*/
-static void
-movLeft2Result (operand * left, int offl, operand * result, int offr, int sign)
-{
-  if (!sameRegs (AOP (left), AOP (result)) || (offl != offr))
-    {
-      transferAopAop (AOP (left), offl, AOP (result), offr);
-    }
-}
-
-
-
-
-/*-----------------------------------------------------------------*/
-/* shiftRLeftOrResult - shift right one byte from left,or to result */
-/*-----------------------------------------------------------------*/
-static void
-shiftRLeftOrResult (operand * left, int offl, operand * result, int offr, int shCount)
-{
-  bool needpula;
-
-  if (!IS_AOP_D (AOP (left)) && !IS_AOP_A (AOP (left)))
-    needpula = pushRegIfUsed (mc6800_reg_a);
-  else
-    needpula = false;
-
-  loadRegFromAop (mc6800_reg_a, AOP (left), offl);
-  /* shift left accumulator */
-  AccRsh (mc6800_reg_a, shCount, false);
-  /* or with result */
-  accopWithAop ("ora", mc6800_reg_a, AOP (result), offr);
-  /* back to result */
-  storeRegToAop (mc6800_reg_a, AOP (result), offr);
-
-  pullOrFreeReg (mc6800_reg_a, needpula);
-}
-
-/*-----------------------------------------------------------------*/
 /* genlshOne - left shift a one byte quantity by known count       */
 /*-----------------------------------------------------------------*/
 static void
