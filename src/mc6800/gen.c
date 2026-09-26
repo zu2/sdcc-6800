@@ -6672,7 +6672,7 @@ genAnd (iCode * ic, iCode * ifx)
             }
           if (isOperandVolatile (right, false))
             {
-              loadRegFromAop (mc6800_reg_a, AOP (left), offset);
+              loadRegFromAop (mc6800_reg_a, AOP (right), offset);
               mc6800_freeReg (mc6800_reg_a);
             }
           storeConstToAop (0, AOP (result), offset);
