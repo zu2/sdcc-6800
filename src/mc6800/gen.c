@@ -8592,7 +8592,7 @@ addSPToX (void)
 {
   const char *tmp = allocTemp ();
   const char *tmp2 = allocTemp ();
-  reg_info *reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
+  reg_info *reg = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
   bool savereg = !reg->isFree;
 
   mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
