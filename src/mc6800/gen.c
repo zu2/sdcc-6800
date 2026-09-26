@@ -8770,6 +8770,20 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
       mc6800_dirtyReg (mc6800_reg_x, false);
       loadRegFromAop (mc6800_reg_x, derefaop, 0);
     }
+  else if (IS_VOLATILE (operandType (left)->next))
+    {
+      if (ifx && acc == mc6800_reg_a)
+        needpulla = pushRegIfSurv (mc6800_reg_a);
+      for (offset = size - 1; offset >= 0; offset--)
+        {
+          if (!ifx)
+            transferAopAop (derefaop, offset, AOP (result), offset);
+          else if (offset == size - 1)
+            loadRegFromAop (acc, derefaop, offset);
+          else
+            accopWithAop ("ora", acc, derefaop, offset);
+        }
+    }
   else
     {
       if (ifx && acc == mc6800_reg_a)
@@ -8924,6 +8938,33 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
     {
       mc6800_freeReg (mc6800_reg_x);
       loadRegIndexed (mc6800_reg_x, litOffset, rematOffset);
+    }
+  else if (size > 1 && IS_VOLATILE (operandType (left)->next) && (ifx || !IS_AOP_WITH_X (AOP (result))))
+    {
+      needpulla = pushRegIfSurv (mc6800_reg_a);
+      if (ifx)
+        {
+          loadRegIndexed (mc6800_reg_a, litOffset, rematOffset);
+          for (offset = 1; offset < size; offset++)
+            mc6800_emitOpWithAcc ("ora", mc6800_reg_a, MODE_IDX, "%d,x", litOffset + offset);
+        }
+      else
+        {
+          if (IS_AOP_X (AOP (left)) && !mc6800_reg_x->isDead)
+            pushReg (mc6800_reg_x, true);
+          for (offset = 0; offset < size; offset++)
+            {
+              loadRegIndexed (mc6800_reg_a, litOffset + offset, rematOffset);
+              pushReg (mc6800_reg_a, false);
+            }
+          for (offset = 0; offset < size; offset++)
+            {
+              pullReg (mc6800_reg_a);
+              storeRegToAop (mc6800_reg_a, AOP (result), offset);
+            }
+          if (IS_AOP_X (AOP (left)) && !mc6800_reg_x->isDead)
+            pullReg (mc6800_reg_x);
+        }
     }
   else if (AOP_TYPE (result) == AOP_REG && !IS_AOP_WITH_X (AOP (result))
       && AOP_SIZE (result) <= 2)
@@ -10845,6 +10886,33 @@ genmc6800iCode (iCode *ic)
     mc6800_reg_x->isDead = mc6800_reg_xl->isDead && mc6800_reg_xh->isDead;
   }
 
+  int savedtemp = _G.tempOfs;
+  operand *vop[2] = { IC_LEFT (ic), IC_RIGHT (ic) };
+
+  if (ic->op == ADDRESS_OF || ic->op == SEND || ic->op == GET_VALUE_AT_ADDRESS)
+    vop[0] = vop[1] = NULL;
+  for (int i = 0; i < 2; i++)
+    {
+      asmop *aop;
+
+      if (!vop[i] || !IS_SYMOP (vop[i]) || !isOperandVolatile (vop[i], false) || getSize (operandType (vop[i])) < 2)
+        {
+          vop[i] = NULL;
+          continue;
+        }
+      aopOp (vop[i], ic, false);
+      aop = newAsmop (AOP_DIR);
+      aop->aopu.aop_dir = (char *) allocTemp ();
+      for (int n = 2; n < AOP_SIZE (vop[i]); n += 2)
+        allocTemp ();
+      aop->size = AOP_SIZE (vop[i]);
+      aop->op = vop[i];
+      for (int offset = aop->size - 1; offset >= 0; offset--)
+        transferAopAop (AOP (vop[i]), offset, aop, offset);
+      freeAsmop (vop[i], NULL, ic, true);
+      vop[i]->aop = aop;
+    }
+
   /* depending on the operation */
   switch (ic->op)
     {
@@ -11057,6 +11125,11 @@ genmc6800iCode (iCode *ic)
       wassertl (0, "Unknown iCode");
       fprintf (stderr, "ic->op: %d\n", ic->op);
     }
+
+  for (int i = 0; i < 2; i++)
+    if (vop[i])
+      vop[i]->aop = NULL;
+  _G.tempOfs = savedtemp;
 }
 
 static void
