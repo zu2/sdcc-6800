@@ -11160,7 +11160,7 @@ init_aop_pass(void)
     {
       mc6800_aop_ret[i] = newAsmop (AOP_DIR);
       mc6800_aop_ret[i]->size = 1;
-      mc6800_aop_ret[i]->aopu.aop_dir = retname[i];
+      mc6800_aop_ret[i]->aopu.aop_dir = (char *) retname[i];
     }
 }
 
