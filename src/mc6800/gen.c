@@ -7959,6 +7959,12 @@ genLeftShift (iCode *ic)
   else if (AOP_TYPE (right) == AOP_REG && AOP_TYPE (result) == AOP_REG
       && (AOP (right)->regmask & AOP (result)->regmask))
     countreg = NULL;
+  else if (!regalloc_dry_run && AOP_TYPE (right) == AOP_SOF && AOP_TYPE (result) == AOP_SOF
+      && AOP (right)->aopu.aop_stk == AOP (result)->aopu.aop_stk)
+    countreg = NULL;
+  else if (!regalloc_dry_run && (AOP_TYPE (right) == AOP_DIR || AOP_TYPE (right) == AOP_EXT)
+      && AOP_TYPE (right) == AOP_TYPE (result) && !strcmp (AOP (right)->aopu.aop_dir, AOP (result)->aopu.aop_dir))
+    countreg = NULL;
   else if (!IS_AOP_WITH_B (AOP (result)))
     countreg = mc6800_reg_b;
   else if (!IS_AOP_WITH_A (AOP (result)))
@@ -8265,6 +8271,12 @@ genRightShift (iCode * ic)
     countreg = (AOP_TYPE (left) != AOP_SOF && AOP_TYPE (result) != AOP_SOF) ? mc6800_reg_x : NULL;
   else if (AOP_TYPE (right) == AOP_REG && AOP_TYPE (result) == AOP_REG
       && (AOP (right)->regmask & AOP (result)->regmask))
+    countreg = NULL;
+  else if (!regalloc_dry_run && AOP_TYPE (right) == AOP_SOF && AOP_TYPE (result) == AOP_SOF
+      && AOP (right)->aopu.aop_stk == AOP (result)->aopu.aop_stk)
+    countreg = NULL;
+  else if (!regalloc_dry_run && (AOP_TYPE (right) == AOP_DIR || AOP_TYPE (right) == AOP_EXT)
+      && AOP_TYPE (right) == AOP_TYPE (result) && !strcmp (AOP (right)->aopu.aop_dir, AOP (result)->aopu.aop_dir))
     countreg = NULL;
   else if (!IS_AOP_WITH_B (AOP (result)))
     countreg = mc6800_reg_b;
