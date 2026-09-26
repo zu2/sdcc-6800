@@ -9577,12 +9577,20 @@ genPointerSet (iCode * ic, iCode * pi)
       if (AOP_TYPE (right) == AOP_REG && (AOP (right)->aopu.aop_reg[0] == mc6800_reg_a || size > 1 && AOP (right)->aopu.aop_reg[1] == mc6800_reg_a))
         mc6800_useReg (mc6800_reg_a);
       if (AOP_TYPE (right) == AOP_REG ? IS_AOP_WITH_X (AOP (right)) : IS_VOLATILE (operandType (result)->next))
-        for (offset = 0; offset < size; offset++)
-          {
-            loadRegFromAop (mc6800_reg_a, AOP (right), offset);
-            pushReg (mc6800_reg_a, false);
-          }
-      loadRegFromAop (mc6800_reg_x, AOP (result), 0);
+        {
+          if (IS_AOP_WITH_A (AOP (result)) &&
+              (AOP_TYPE (right) == AOP_REG || AOP_TYPE (right) == AOP_SOF || AOP_TYPE (right) == AOP_IDX))
+            UNIMPLEMENTED;
+          else if (IS_AOP_WITH_A (AOP (result)))
+            loadRegFromAop (mc6800_reg_x, AOP (result), 0);
+          for (offset = 0; offset < size; offset++)
+            {
+              loadRegFromAop (mc6800_reg_a, AOP (right), offset);
+              pushReg (mc6800_reg_a, false);
+            }
+        }
+      if (!IS_AOP_WITH_A (AOP (result)) || !IS_VOLATILE (operandType (result)->next) || AOP_TYPE (right) == AOP_REG)
+        loadRegFromAop (mc6800_reg_x, AOP (result), 0);
       if (stackBasedOffset (left))
         addSPToX ();
       decodePointerOffset (left, &litOffset, &rematOffset);
