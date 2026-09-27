@@ -156,7 +156,7 @@ typedef struct
 	long long int quot;
 	long long int rem;
 } lldiv_t;
-#if !defined(__SDCC_ds390) && !defined(__SDCC_ds390) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) && !defined(__SDCC_mc6800) // struct return not yet supported
+#if !defined(__SDCC_ds390) && !defined(__SDCC_ds390) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) // struct return not yet supported
 div_t div(int numer, int denom);
 ldiv_t ldiv(long int numer, long int denom);
 #if !defined(__SDCC_mos6502) && !defined(__SDCC_mos65c02) // size of struct return is limited to <= 8 
