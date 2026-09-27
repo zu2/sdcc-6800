@@ -8188,6 +8188,7 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
               loadRegIndexed (mc6800_reg_a, litOffset + offset, rematOffset);
               pushReg (mc6800_reg_a, false);
             }
+          mc6800_freeReg (mc6800_reg_x);
           for (offset = 0; offset < size; offset++)
             {
               pullReg (mc6800_reg_a);
