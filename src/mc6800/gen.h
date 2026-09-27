@@ -55,8 +55,6 @@ typedef struct asmop
     operand *op;		/* originating operand */
     unsigned code:1;		/* is in Code space */
     unsigned freed:1;		/* already freed    */
-    unsigned stacked:1;		/* partial results stored on stack */
-    struct asmop *stk_aop[4];	/* asmops for the results on the stack */
     union
       {
 	value *aop_lit;		/* if literal */

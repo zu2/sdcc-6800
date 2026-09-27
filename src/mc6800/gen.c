@@ -719,12 +719,6 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
 
   setupXForAop (aop);
 
-  if (aop->stacked && aop->stk_aop[loffset])
-    {
-      loadRegFromAop (reg, aop->stk_aop[loffset], 0);
-      return;
-    }
-
   DD (emitcode ("", ";     loadRegFromAop (%s, %s, %d)", reg->name, aopName (aop), loffset));
 
   switch (regidx)
@@ -864,21 +858,8 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
     }
 
   D (emitcode (";     storeRegToAop", ""));
-  DD (emitcode ("", ";     storeRegToAop (%s, %s, %d), stacked=%d",
-                reg->name, aopName (aop), loffset, aop->stacked));
-
-  if ((reg->rIdx == D_IDX) && aop->stacked && (aop->stk_aop[loffset] || aop->stk_aop[loffset + 1]))
-    {
-      storeRegToAop (mc6800_reg_b, aop, loffset);
-      storeRegToAop (mc6800_reg_a, aop, loffset + 1);
-      return;
-    }
-
-  if (aop->stacked && aop->stk_aop[loffset])
-    {
-      storeRegToAop (reg, aop->stk_aop[loffset], 0);
-      return;
-    }
+  DD (emitcode ("", ";     storeRegToAop (%s, %s, %d)",
+                reg->name, aopName (aop), loffset));
 
   if (aop->type == AOP_DUMMY)
     return;
@@ -1150,12 +1131,6 @@ storeConstToAop (int c, asmop * aop, int loffset)
 {
   setupXForAop (aop);
 
-  if (aop->stacked && aop->stk_aop[loffset])
-    {
-      storeConstToAop (c, aop->stk_aop[loffset], 0);
-      return;
-    }
-
   /* If the value needed is already in A or B, just store it */
   if (mc6800_reg_a->isLitConst && mc6800_reg_a->litConst == c)
     {
@@ -1234,12 +1209,6 @@ static void
 storeImmToAop (char *c, asmop * aop, int loffset)
 {
   setupXForAop (aop);
-
-  if (aop->stacked && aop->stk_aop[loffset])
-    {
-      storeImmToAop (c, aop->stk_aop[loffset], 0);
-      return;
-    }
 
   switch (aop->type)
     {
@@ -1368,18 +1337,6 @@ transferAopAop (asmop *srcaop, int srcofs, asmop *dstaop, int dstofs)
       && operandsEqu (srcaop->op, dstaop->op) && srcofs == dstofs && dstaop->type == srcaop->type)
     return;
 
-  if (srcaop->stacked && srcaop->stk_aop[srcofs])
-    {
-      transferAopAop (srcaop->stk_aop[srcofs], 0, dstaop, dstofs);
-      return;
-    }
-
-  if (dstaop->stacked && dstaop->stk_aop[srcofs])
-    {
-      transferAopAop (srcaop, srcofs, dstaop->stk_aop[dstofs], 0);
-      return;
-    }
-
 //  DD(emitcode ("", "; transferAopAop (%s, %d, %s, %d)",
 //            aopName (srcaop), srcofs, aopName (dstaop), dstofs));
 //  DD(emitcode ("", "; srcaop->type = %d", srcaop->type));
@@ -1455,12 +1412,6 @@ accopWithAop (const char *op, reg_info *acc, asmop *aop, int loffset)
   wassertl (acc == mc6800_reg_a || acc == mc6800_reg_b, "accopWithAop: register must be A or B");
   SNPRINTF (accop, sizeof (accop), "%s%c", op, acc == mc6800_reg_a ? 'a' : 'b');
   setupXForAop (aop);
-
-  if (aop->stacked && aop->stk_aop[loffset])
-    {
-      accopWithAop (op, acc, aop->stk_aop[loffset], 0);
-      return;
-    }
 
   if (aop->type == AOP_DUMMY)
     return;
@@ -1545,12 +1496,6 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
   reg_info * reg;
 
   setupXForAop (aop);
-
-  if (aop->stacked && aop->stk_aop[loffset])
-    {
-      rmwWithAop (rmwop, aop->stk_aop[loffset], 0);
-      return;
-    }
 
   /* If we need a register: */
   /*   use A if it's free,  */
@@ -2355,23 +2300,6 @@ freeAsmop (operand * op, asmop * aaop, iCode * ic, bool pop)
     goto dealloc;
 
   aop->freed = 1;
-
-  if (aop->stacked)
-    {
-      int stackAdjust;
-      int loffset;
-
-      DD (emitcode ("", "; freeAsmop restoring stacked %s", aopName (aop)));
-      aop->stacked = 0;
-      stackAdjust = 0;
-      for (loffset = 0; loffset < aop->size; loffset++)
-        if (aop->stk_aop[loffset])
-          {
-            transferAopAop (aop->stk_aop[loffset], 0, aop, loffset);
-            stackAdjust++;
-          }
-      pullNull (stackAdjust);
-    }
 
 dealloc:
   /* all other cases just dealloc */
