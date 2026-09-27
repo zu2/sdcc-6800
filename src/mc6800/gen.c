@@ -1878,7 +1878,27 @@ setupXForAop (asmop * aop)
   if (shift >= -limit && shift <= limit)
     adjustX (shift);
   else
-    setupXFromSP (mc6800_reg_x->stackOffset + shift);
+    {
+      const iCode *ic = genLine.lineElement.ic;
+      int opmask = 0;
+      bool afree = mc6800_reg_a->isFree, bfree = mc6800_reg_b->isFree, dfree = mc6800_reg_d->isFree;
+      if (ic && ic->op != IFX && ic->op != JUMPTABLE)
+        {
+          if (IC_LEFT (ic) && IS_SYMOP (IC_LEFT (ic)) && AOP (IC_LEFT (ic)))
+            opmask |= AOP (IC_LEFT (ic))->regmask;
+          if (IC_RIGHT (ic) && IS_SYMOP (IC_RIGHT (ic)) && AOP (IC_RIGHT (ic)))
+            opmask |= AOP (IC_RIGHT (ic))->regmask;
+        }
+      if (opmask & MC6800MASK_A)
+        mc6800_reg_a->isFree = false;
+      if (opmask & MC6800MASK_B)
+        mc6800_reg_b->isFree = false;
+      mc6800_reg_d->isFree = mc6800_reg_a->isFree && mc6800_reg_b->isFree;
+      setupXFromSP (mc6800_reg_x->stackOffset + shift);
+      mc6800_reg_a->isFree = afree;
+      mc6800_reg_b->isFree = bfree;
+      mc6800_reg_d->isFree = dfree;
+    }
 }
 
 /*-----------------------------------------------------------------*/
