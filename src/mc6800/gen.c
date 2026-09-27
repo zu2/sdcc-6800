@@ -4520,6 +4520,7 @@ genMinus16 (iCode *ic)
     }
   else if (IS_AOP_D (rightOp))
     {
+      setupXForAop (leftOp);
       mc6800_emitOp ("coma", MODE_INH, "");
       mc6800_emitOp ("comb", MODE_INH, "");
       accopWithAop ("adc", mc6800_reg_b, leftOp, 0);
