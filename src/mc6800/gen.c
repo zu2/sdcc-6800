@@ -3181,8 +3181,6 @@ genSend (set *sendSet)
         }
       aopOp (IC_LEFT (send1), send1, false);
       aopOp (IC_LEFT (send2), send2, false);
-      setupXForAop (AOP (IC_LEFT (send1)));
-      setupXForAop (AOP (IC_LEFT (send2)));
       wassert (AOP_SIZE (IC_LEFT (send1)) == 1 && AOP_SIZE (IC_LEFT (send2)) == 1);
       if (IS_AOP_A (AOP (IC_LEFT (send1))) && IS_AOP_B (AOP (IC_LEFT (send2))))
         {
@@ -3190,14 +3188,17 @@ genSend (set *sendSet)
           transferRegReg (mc6800_reg_b, mc6800_reg_a, false);
           pullReg (mc6800_reg_b);
         }
-      else if (IS_AOP_B (AOP (IC_LEFT (send2))))
+      else if (IS_AOP_A (AOP (IC_LEFT (send2))) || IS_AOP_B (AOP (IC_LEFT (send2))))
         {
           loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send2)), 0);
+          setupXForAop (AOP (IC_LEFT (send1)));
           loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
         }
       else
         {
+          setupXForAop (AOP (IC_LEFT (send1)));
           loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
+          setupXForAop (AOP (IC_LEFT (send2)));
           loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send2)), 0);
         }
       freeAsmop (IC_LEFT (send2), NULL, send2, true);
@@ -7967,10 +7968,10 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
   size = getSize (operandType (result));
 
   derefaop = aopDerefAop (AOP (left), litOffset);
+  derefaop->size = size;
   setupXForAop (AOP (result));
   setupXForAop (derefaop);
   freeAsmop (left, NULL, ic, true);
-  derefaop->size = size;
 
   etype = getSpec (operandType (result));
   blen = SPEC_BLEN (etype);
@@ -8697,13 +8698,13 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
   wassert (!rematOffset);
 
   derefaop = aopDerefAop (AOP (result), litOffset);
+  derefaop->size = size;
   if (!IS_AOP_WITH_X (AOP (right)))
     {
       setupXForAop (derefaop);
       setupXForAop (AOP (right));
     }
   freeAsmop (result, NULL, ic, true);
-  derefaop->size = size;
 
   if ((IS_AOP_A (AOP (right)) || IS_AOP_B (AOP (right))) && AOP (right)->aopu.aop_reg[0]->isDead)
     reg = AOP (right)->aopu.aop_reg[0];
@@ -8837,16 +8838,15 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
   wassert (!rematOffset);
 
   derefaop = aopDerefAop (AOP (result), litOffset);
+  derefaop->size = size;
+  if (derefaop->type == AOP_SOF && !IS_AOP_X (AOP (right)))
+    needrestorex = pushRegIfSurv (mc6800_reg_x);
   if (!IS_AOP_WITH_X (AOP (right)))
     {
       setupXForAop (derefaop);
       setupXForAop (AOP (right));
     }
   freeAsmop (result, NULL, ic, true);
-  derefaop->size = size;
-
-  if (derefaop->type == AOP_SOF && !IS_AOP_X (AOP (right)))
-    needrestorex = pushRegIfSurv (mc6800_reg_x);
 
   if (IS_AOP_X (AOP (right)))
     {
