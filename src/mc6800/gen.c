@@ -687,6 +687,7 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
       mc6800_emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
       freeTemp ();
       mc6800_dirtyReg (mc6800_reg_d, false);
+      mc6800_useReg (reg);
       return;
     }
   if (aop->type == AOP_STL
@@ -707,6 +708,7 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         }
       freeTemp ();
       mc6800_dirtyReg (reg, false);
+      mc6800_useReg (reg);
       return;
     }
   if (aop->type == AOP_STL)
@@ -714,6 +716,8 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
       setupXFromSP (_G.stackOfs + aop->aopu.aop_stk);
       if (regidx != X_IDX)
         transferRegReg (mc6800_reg_x, reg, false);
+      else
+        mc6800_useReg (reg);
       return;
     }
 
@@ -3274,8 +3278,8 @@ genCall (iCode * ic)
                               OP_SYMBOL (IC_LEFT (ic))->rname : OP_SYMBOL (IC_LEFT (ic))->name));
     }
 
-  mc6800_dirtyReg (mc6800_reg_a, false);
-  mc6800_dirtyReg (mc6800_reg_b, false);
+  mc6800_dirtyReg (mc6800_reg_a, true);
+  mc6800_dirtyReg (mc6800_reg_b, true);
   mc6800_dirtyReg (mc6800_reg_x, true);
 
   if (!bigreturn &&
@@ -3364,8 +3368,8 @@ genPcall (iCode * ic)
       mc6800_emitOp ("jsr", MODE_EXT, "0x%04X", ulFromVal (OP_VALUE (IC_LEFT (ic))));
     }
 
-  mc6800_dirtyReg (mc6800_reg_a, false);
-  mc6800_dirtyReg (mc6800_reg_b, false);
+  mc6800_dirtyReg (mc6800_reg_a, true);
+  mc6800_dirtyReg (mc6800_reg_b, true);
   mc6800_dirtyReg (mc6800_reg_x, true);
 
   /* if we need assign a result value */
@@ -4032,6 +4036,7 @@ genPlus16 (iCode *ic)
         {
           loadRegFromAop (mc6800_reg_b, other, 0);
           mc6800_emitOp ("clra", MODE_INH, "");
+          mc6800_useReg (mc6800_reg_a);
         }
       tmp = allocTemp ();
       delta = 1 + _G.stackOfs + stl->aopu.aop_stk + _G.stackPushes;
