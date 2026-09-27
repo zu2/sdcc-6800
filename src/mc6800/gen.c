@@ -2485,6 +2485,9 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
       strcpy (rs, s);
       return rs;
     case AOP_IDX:
+      if (!regalloc_dry_run && mc6800_reg_x->aop != aop
+          && !IS_AOP_X (AOP (IC_LEFT ((iCode *) hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (aop->op)))))))
+        werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "AOP_IDX without ldx");
       xofs = aop->aopu.aop_stk + offset;
       if (xofs < 0 || xofs > 255)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "index offset out of range");
