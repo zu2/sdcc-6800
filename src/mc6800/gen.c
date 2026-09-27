@@ -1782,6 +1782,7 @@ setupXForAop (asmop * aop)
           UNIMPLEMENTED;
           return;
         }
+      setupXForAop (AOP (IC_LEFT (dic)));
       loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (dic)), 0);
       mc6800_freeReg (mc6800_reg_x);
       mc6800_reg_x->aop = aop;
