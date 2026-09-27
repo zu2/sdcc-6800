@@ -10478,7 +10478,15 @@ drymc6800iCode (iCode *ic)
 
   init_aop_pass();
 
+  iCode *ifx = (ic->op != IFX && ic->op != JUMPTABLE && IC_RESULT (ic)) ? ifxForOp (IC_RESULT (ic), ic) : NULL;
+  bool ifxgenerated = ifx && ifx->generated;
+  if (ifx)
+    ifx->generated = false;
+
   genmc6800iCode (ic);
+
+  if (ifx)
+    ifx->generated = ifxgenerated;
 
   destroy_line_list ();
   /*freeTrace (&_G.trace.aops);*/
