@@ -3402,7 +3402,6 @@ genPcall (iCode * ic)
 {
   sym_link *dtype;
   sym_link *etype;
-  iCode * sendic;
   const char *tmp = NULL;
 
   D (emitcode (";", "genPcall"));
@@ -3418,13 +3417,6 @@ genPcall (iCode * ic)
   /* if caller saves & we have not saved then */
   if (!ic->regsSaved)
     saveRegisters (ic);
-
-  /* Go through the send set and mark any registers used by iTemps as */
-  /* in use so we don't clobber them while setting up the return address */
-  for (sendic = setFirstItem (_G.sendSet); sendic; sendic = setNextItem (_G.sendSet))
-    {
-      updateiTempRegisterUse (IC_LEFT (sendic));
-    }
 
   if (!IS_LITERAL (etype))
     {
