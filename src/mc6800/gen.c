@@ -1878,27 +1878,7 @@ setupXForAop (asmop * aop)
   if (shift >= -limit && shift <= limit)
     adjustX (shift);
   else
-    {
-      const iCode *ic = genLine.lineElement.ic;
-      int opmask = 0;
-      bool afree = mc6800_reg_a->isFree, bfree = mc6800_reg_b->isFree, dfree = mc6800_reg_d->isFree;
-      if (ic && ic->op != IFX && ic->op != JUMPTABLE)
-        {
-          if (IC_LEFT (ic) && IS_SYMOP (IC_LEFT (ic)) && AOP (IC_LEFT (ic)))
-            opmask |= AOP (IC_LEFT (ic))->regmask;
-          if (IC_RIGHT (ic) && IS_SYMOP (IC_RIGHT (ic)) && AOP (IC_RIGHT (ic)))
-            opmask |= AOP (IC_RIGHT (ic))->regmask;
-        }
-      if (opmask & MC6800MASK_A)
-        mc6800_reg_a->isFree = false;
-      if (opmask & MC6800MASK_B)
-        mc6800_reg_b->isFree = false;
-      mc6800_reg_d->isFree = mc6800_reg_a->isFree && mc6800_reg_b->isFree;
-      setupXFromSP (mc6800_reg_x->stackOffset + shift);
-      mc6800_reg_a->isFree = afree;
-      mc6800_reg_b->isFree = bfree;
-      mc6800_reg_d->isFree = dfree;
-    }
+    setupXFromSP (mc6800_reg_x->stackOffset + shift);
 }
 
 /*-----------------------------------------------------------------*/
@@ -4491,6 +4471,11 @@ genMinus16 (iCode *ic)
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
 
+  if (IS_AOP_WITH_A (rightOp))
+    mc6800_useReg (mc6800_reg_a);
+  if (IS_AOP_WITH_B (rightOp))
+    mc6800_useReg (mc6800_reg_b);
+
   if (rightOp->type == AOP_STL && leftOp->type == AOP_STL)
     {
       loadRegFromConst (mc6800_reg_d, leftOp->aopu.aop_stk - rightOp->aopu.aop_stk);
@@ -5600,6 +5585,8 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
                 tlbl_NE = newiTempLabel (NULL);
               emitBranch ("bne", tlbl_NE);
               pullOrFreeReg (mc6800_reg_a, needpulla);
+              if (IS_AOP_WITH_A (AOP (left)))
+                mc6800_useReg (mc6800_reg_a);
               needpulla = false;
             }
           offset++;
@@ -5889,6 +5876,8 @@ genAnd (iCode * ic, iCode * ifx)
       symbol *tlbl = NULL;
 
       needpulla = pushRegIfSurv (mc6800_reg_a);
+      if (IS_AOP_WITH_A (AOP (left)))
+        mc6800_useReg (mc6800_reg_a);
 
       offset = 0;
       while (size--)
@@ -5959,6 +5948,10 @@ genAnd (iCode * ic, iCode * ifx)
   needpulla = pushRegIfSurv (mc6800_reg_a);
   if (IS_AOP_D (AOP (left)))
     needpullb = pushRegIfSurv (mc6800_reg_b);
+  if (IS_AOP_WITH_A (AOP (left)))
+    mc6800_useReg (mc6800_reg_a);
+  if (IS_AOP_D (AOP (left)))
+    mc6800_useReg (mc6800_reg_b);
 
   offset = 0;
   while (size--)
@@ -6124,6 +6117,10 @@ genOr (iCode * ic, iCode * ifx)
       needpulla = pushRegIfSurv (mc6800_reg_a);
       if (IS_AOP_D (AOP (left)))
         needpullb = pushRegIfSurv (mc6800_reg_b);
+      if (IS_AOP_WITH_A (AOP (left)))
+        mc6800_useReg (mc6800_reg_a);
+      if (IS_AOP_D (AOP (left)))
+        mc6800_useReg (mc6800_reg_b);
 
       offset = 0;
       while (size--)
@@ -6196,6 +6193,10 @@ genOr (iCode * ic, iCode * ifx)
   needpulla = pushRegIfSurv (mc6800_reg_a);
   if (IS_AOP_D (AOP (left)))
     needpullb = pushRegIfSurv (mc6800_reg_b);
+  if (IS_AOP_WITH_A (AOP (left)))
+    mc6800_useReg (mc6800_reg_a);
+  if (IS_AOP_D (AOP (left)))
+    mc6800_useReg (mc6800_reg_b);
 
   offset = 0;
   while (size--)
@@ -6298,6 +6299,10 @@ genXor (iCode * ic, iCode * ifx)
   needpulla = pushRegIfSurv (mc6800_reg_a);
   if (IS_AOP_D (AOP (left)))
     needpullb = pushRegIfSurv (mc6800_reg_b);
+  if (IS_AOP_WITH_A (AOP (left)))
+    mc6800_useReg (mc6800_reg_a);
+  if (IS_AOP_D (AOP (left)))
+    mc6800_useReg (mc6800_reg_b);
 
   if (AOP_TYPE (result) == AOP_CRY)
     {
