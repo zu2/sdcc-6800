@@ -850,7 +850,18 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
   int regidx = reg->rIdx;
 
   if (regidx != X_IDX)
-    setupXForAop (aop);
+    {
+      bool afree = mc6800_reg_a->isFree, bfree = mc6800_reg_b->isFree, dfree = mc6800_reg_d->isFree;
+      if (regidx == A_IDX || regidx == D_IDX)
+        mc6800_reg_a->isFree = false;
+      if (regidx == B_IDX || regidx == D_IDX)
+        mc6800_reg_b->isFree = false;
+      mc6800_reg_d->isFree = false;
+      setupXForAop (aop);
+      mc6800_reg_a->isFree = afree;
+      mc6800_reg_b->isFree = bfree;
+      mc6800_reg_d->isFree = dfree;
+    }
 
   D (emitcode (";     storeRegToAop", ""));
   DD (emitcode ("", ";     storeRegToAop (%s, %s, %d), stacked=%d",
