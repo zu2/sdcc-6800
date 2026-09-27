@@ -1467,44 +1467,36 @@ accopWithAop (const char *op, reg_info *acc, asmop *aop, int loffset)
 
   if (aop->type == AOP_REG)
     {
-  if (loffset < aop->size)
-    {
-      reg_info *reg = aop->aopu.aop_reg[loffset];
+      if (loffset < aop->size)
+        {
+          reg_info *reg = aop->aopu.aop_reg[loffset];
 
-      if ((reg->rIdx == XL_IDX || reg->rIdx == XH_IDX) && _G.tempOfs + 1 <= NUM_TEMP_REGS)
-        {
-          const char *tmp = allocTemp ();
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp (accop, MODE_DIR, (reg->rIdx == XL_IDX) ? "*%s+1" : "*%s", tmp);
-          freeTemp ();
-        }
-      else if (reg->rIdx == B_IDX && aop->size == 1
-               && (!strcmp (accop, "adda") || !strcmp (accop, "suba") || !strcmp (accop, "cmpa")))
-        {
-          mc6800_emitOp (!strcmp (accop, "adda") ? "aba" : !strcmp (accop, "suba") ? "sba" : "cba", MODE_INH, "");
-        }
-      else if ((reg->rIdx == A_IDX || reg->rIdx == B_IDX) && _G.tempOfs < NUM_TEMP_REGS)
-        {
-          const char *tmp = allocTemp ();
-          mc6800_emitOpWithAcc ("sta", reg, MODE_DIR, "*%s", tmp);
-          mc6800_emitOp (accop, MODE_DIR, "*%s", tmp);
-          freeTemp ();
+          if ((reg->rIdx == XL_IDX || reg->rIdx == XH_IDX) && _G.tempOfs + 1 <= NUM_TEMP_REGS)
+            {
+              const char *tmp = allocTemp ();
+              mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+              mc6800_emitOp (accop, MODE_DIR, (reg->rIdx == XL_IDX) ? "*%s+1" : "*%s", tmp);
+              freeTemp ();
+            }
+          else if (reg->rIdx == B_IDX && aop->size == 1
+                   && (!strcmp (accop, "adda") || !strcmp (accop, "suba") || !strcmp (accop, "cmpa")))
+            {
+              mc6800_emitOp (!strcmp (accop, "adda") ? "aba" : !strcmp (accop, "suba") ? "sba" : "cba", MODE_INH, "");
+            }
+          else if ((reg->rIdx == A_IDX || reg->rIdx == B_IDX) && _G.tempOfs < NUM_TEMP_REGS)
+            {
+              const char *tmp = allocTemp ();
+              mc6800_emitOpWithAcc ("sta", reg, MODE_DIR, "*%s", tmp);
+              mc6800_emitOp (accop, MODE_DIR, "*%s", tmp);
+              freeTemp ();
+            }
+          else
+            wassertl (0, "no temporary for register operand");
         }
       else
         {
-          wassertl (reg->rIdx == A_IDX || reg->rIdx == B_IDX, "no temporary for register operand");
-          wassertl (mc6800_reg_x->isFree && mc6800_reg_x->isDead, "X is not free for register operand");
-          pushReg (reg, false);
-          mc6800_emitOp ("tsx", MODE_INH, "");
-          mc6800_dirtyReg (mc6800_reg_x, false);
-          mc6800_emitOp (accop, MODE_IDX, "0,x");
-          pullNull (1);
+          mc6800_emitOp (accop, MODE_IMM, "#0");
         }
-    }
-    else
-      {
-        mc6800_emitOp (accop, MODE_IMM, "#0");
-      }
     }
   else
     {
