@@ -2101,11 +2101,11 @@ sameRegs (asmop *aop1, asmop *aop2)
                     (IS_ITEMP (aop2->op) && OP_SYMBOL (aop2->op)->usl.spillLoc ? OP_SYMBOL (aop2->op)->usl.spillLoc : OP_SYMBOL (aop2->op)));
           return (aop1->aopu.aop_stk == aop2->aopu.aop_stk);
         case AOP_DIR:
+        case AOP_EXT:
           if (regalloc_dry_run)
             return (aop1->op && aop2->op && IS_SYMOP (aop1->op) && IS_SYMOP (aop2->op) &&
                     (IS_ITEMP (aop1->op) && OP_SYMBOL (aop1->op)->usl.spillLoc ? OP_SYMBOL (aop1->op)->usl.spillLoc : OP_SYMBOL (aop1->op)) ==
                     (IS_ITEMP (aop2->op) && OP_SYMBOL (aop2->op)->usl.spillLoc ? OP_SYMBOL (aop2->op)->usl.spillLoc : OP_SYMBOL (aop2->op)));
-        case AOP_EXT:
           return (!strcmp (aop1->aopu.aop_dir, aop2->aopu.aop_dir));
         default:
           break;
@@ -2270,7 +2270,7 @@ aopOp (operand *op, iCode * ic, bool result)
           else if (sym->usl.spillLoc)
             sym->aop = op->aop = aop = aopForSym (ic, sym->usl.spillLoc, result);
           else
-            sym->aop = op->aop = aop = newAsmop (AOP_DIR);
+            sym->aop = op->aop = aop = newAsmop (options.xdata_spill ? AOP_EXT : AOP_DIR);
           aop->size = getSize (sym->type);
           aop->op = op;
           if (!result)
