@@ -6261,7 +6261,8 @@ genAnd (iCode * ic, iCode * ifx)
   int bitpos = -1;
   unsigned char bytemask;
   bool needpulla = false;
-  bool needpullb = false;
+  bool needpull = false;
+  reg_info *acc;
 
   D (emitcode (";     genAnd", ""));
 
@@ -6465,27 +6466,17 @@ genAnd (iCode * ic, iCode * ifx)
 
   size = AOP_SIZE (result);
 
-  if (AOP_SIZE (result) == 1 && !IS_AOP_WITH_B (AOP (right))
-  &&  !aopIsLitVal (right->aop, 0, 1, 0x00) && !aopIsLitVal (right->aop, 0, 1, 0xff)
-  &&  (IS_AOP_B (AOP (result)) || (IS_AOP_B (AOP (left)) && mc6800_reg_b->isDead)))
+  if (mc6800_reg_b->isFree)
+    acc = mc6800_reg_b;
+  else if (mc6800_reg_a->isFree)
+    acc = mc6800_reg_a;
+  else
     {
-      setupXForAop (AOP (left));
-      loadRegFromAop (mc6800_reg_b, AOP (left), 0);
-      setupXForAop (AOP (right));
-      accopWithAop ("and", mc6800_reg_b, AOP (right), 0);
-      mc6800_dirtyReg (mc6800_reg_b, false);
-      setupXForAop (AOP (result));
-      storeRegToAop (mc6800_reg_b, AOP (result), 0);
-      goto release;
+      acc = IS_AOP_WITH_B (AOP (right)) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfSurv (acc);
+      if (AOP (left)->regmask & acc->mask)
+        mc6800_useReg (acc);
     }
-
-  needpulla = pushRegIfSurv (mc6800_reg_a);
-  if (IS_AOP_D (AOP (left)))
-    needpullb = pushRegIfSurv (mc6800_reg_b);
-  if (IS_AOP_WITH_A (AOP (left)))
-    mc6800_useReg (mc6800_reg_a);
-  if (IS_AOP_D (AOP (left)))
-    mc6800_useReg (mc6800_reg_b);
 
   offset = 0;
   while (size--)
@@ -6495,56 +6486,45 @@ genAnd (iCode * ic, iCode * ifx)
           if (isOperandVolatile (left, false))
             {
               setupXForAop (AOP (left));
-              loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              mc6800_freeReg (mc6800_reg_a);
+              loadRegFromAop (acc, AOP (left), offset);
+              mc6800_freeReg (acc);
             }
           if (isOperandVolatile (right, false))
             {
               setupXForAop (AOP (right));
-              loadRegFromAop (mc6800_reg_a, AOP (right), offset);
-              mc6800_freeReg (mc6800_reg_a);
+              loadRegFromAop (acc, AOP (right), offset);
+              mc6800_freeReg (acc);
             }
           setupXForAop (AOP (result));
           storeConstToAop (0, AOP (result), offset);
         }
-      else if (aopIsLitVal (right->aop, offset, 1, 0xff) && !isOperandVolatile (left, false))
+      else if (!aopIsLitVal (right->aop, offset, 1, 0xff) || !sameRegs (AOP (left), AOP (result)))
         {
+          reg_info *reg = acc;
+
+          if (AOP_TYPE (result) == AOP_REG && !IS_AOP_WITH_X (AOP (result))
+              && !(AOP (right)->regmask & AOP (result)->aopu.aop_reg[offset]->mask))
+            reg = AOP (result)->aopu.aop_reg[offset];
+          else if (AOP_TYPE (left) == AOP_REG && !IS_AOP_WITH_X (AOP (left)) && offset < AOP_SIZE (left)
+                   && AOP (left)->aopu.aop_reg[offset]->isDead)
+            reg = AOP (left)->aopu.aop_reg[offset];
           setupXForAop (AOP (left));
-          transferAopAop (left->aop, offset, result->aop, offset);
-        }
-      else if (aopIsLitVal (left->aop, offset, 1, 0xff) && !isOperandVolatile (right, false))
-        {
-          setupXForAop (AOP (right));
-          transferAopAop (right->aop, offset, result->aop, offset);
-        }
-      else if (IS_AOP_D (AOP (left)) && offset == 0)
-        {
-          setupXForAop (AOP (right));
-          accopWithAop ("and", mc6800_reg_b, AOP (right), offset);
-          mc6800_dirtyReg (mc6800_reg_b, false);
+          loadRegFromAop (reg, AOP (left), offset);
+          if (!aopIsLitVal (right->aop, offset, 1, 0xff))
+            {
+              setupXForAop (AOP (right));
+              accopWithAop ("and", reg, AOP (right), offset);
+              mc6800_dirtyReg (reg, false);
+            }
           setupXForAop (AOP (result));
-          storeRegToAop (mc6800_reg_b, AOP (result), offset);
-        }
-      else
-        {
-          setupXForAop (AOP (left));
-          loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          setupXForAop (AOP (right));
-          accopWithAop ("and", mc6800_reg_a, AOP (right), offset);
-          setupXForAop (AOP (result));
-          storeRegToAop (mc6800_reg_a, AOP (result), offset);
-          mc6800_freeReg (mc6800_reg_a);
-        }
-      if (AOP_TYPE (result) == AOP_REG && size && AOP (result)->aopu.aop_reg[offset]->rIdx == A_IDX)
-        {
-          pushReg (mc6800_reg_a, true);
-          needpulla = true;
+          storeRegToAop (reg, AOP (result), offset);
+          if (!(AOP (result)->regmask & reg->mask))
+            mc6800_freeReg (reg);
         }
       offset++;
     }
 
-  pullOrFreeReg (mc6800_reg_b, needpullb);
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+  pullOrFreeReg (acc, needpull);
 
 release:
   freeAsmop (left, NULL, ic, true);
@@ -6564,6 +6544,8 @@ genOr (iCode * ic, iCode * ifx)
   unsigned char bytemask;
   bool needpulla = false;
   bool needpullb = false;
+  bool needpull = false;
+  reg_info *acc;
 
   D (emitcode (";     genOr", ""));
 
@@ -6730,32 +6712,19 @@ genOr (iCode * ic, iCode * ifx)
       goto release;
     }
 
-  if (AOP_TYPE (right) == AOP_LIT)
-    lit = ullFromVal (AOP (right)->aopu.aop_lit);
-
   size = AOP_SIZE (result);
 
-  if (AOP_SIZE (result) == 1 && !IS_AOP_WITH_B (AOP (right))
-  &&  !aopIsLitVal (right->aop, 0, 1, 0x00) && !aopIsLitVal (right->aop, 0, 1, 0xff)
-  &&  (IS_AOP_B (AOP (result)) || (IS_AOP_B (AOP (left)) && mc6800_reg_b->isDead)))
+  if (mc6800_reg_b->isFree)
+    acc = mc6800_reg_b;
+  else if (mc6800_reg_a->isFree)
+    acc = mc6800_reg_a;
+  else
     {
-      setupXForAop (AOP (left));
-      loadRegFromAop (mc6800_reg_b, AOP (left), 0);
-      setupXForAop (AOP (right));
-      accopWithAop ("ora", mc6800_reg_b, AOP (right), 0);
-      mc6800_dirtyReg (mc6800_reg_b, false);
-      setupXForAop (AOP (result));
-      storeRegToAop (mc6800_reg_b, AOP (result), 0);
-      goto release;
+      acc = IS_AOP_WITH_B (AOP (right)) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfSurv (acc);
+      if (AOP (left)->regmask & acc->mask)
+        mc6800_useReg (acc);
     }
-
-  needpulla = pushRegIfSurv (mc6800_reg_a);
-  if (IS_AOP_D (AOP (left)))
-    needpullb = pushRegIfSurv (mc6800_reg_b);
-  if (IS_AOP_WITH_A (AOP (left)))
-    mc6800_useReg (mc6800_reg_a);
-  if (IS_AOP_D (AOP (left)))
-    mc6800_useReg (mc6800_reg_b);
 
   offset = 0;
   while (size--)
@@ -6765,50 +6734,39 @@ genOr (iCode * ic, iCode * ifx)
           if (isOperandVolatile (left, false))
             {
               setupXForAop (AOP (left));
-              loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              mc6800_freeReg (mc6800_reg_a);
+              loadRegFromAop (acc, AOP (left), offset);
+              mc6800_freeReg (acc);
             }
-          setupXForAop (AOP (right));
-          transferAopAop (AOP (right), offset, AOP (result), offset);
-        }
-      else if (aopIsLitVal (right->aop, offset, 1, 0x00))
-        {
-          setupXForAop (AOP (left));
-          transferAopAop (left->aop, offset, result->aop, offset);
-        }
-      else if (aopIsLitVal (left->aop, offset, 1, 0x00))
-        {
-          setupXForAop (AOP (right));
-          transferAopAop (right->aop, offset, result->aop, offset);
-        }
-      else if (IS_AOP_D (AOP (left)) && offset == 0)
-        {
-          setupXForAop (AOP (right));
-          accopWithAop ("ora", mc6800_reg_b, AOP (right), offset);
-          mc6800_dirtyReg (mc6800_reg_b, false);
           setupXForAop (AOP (result));
-          storeRegToAop (mc6800_reg_b, AOP (result), offset);
+          storeConstToAop (0xff, AOP (result), offset);
         }
-      else
+      else if (!aopIsLitVal (right->aop, offset, 1, 0x00) || !sameRegs (AOP (left), AOP (result)))
         {
+          reg_info *reg = acc;
+
+          if (AOP_TYPE (result) == AOP_REG && !IS_AOP_WITH_X (AOP (result))
+              && !(AOP (right)->regmask & AOP (result)->aopu.aop_reg[offset]->mask))
+            reg = AOP (result)->aopu.aop_reg[offset];
+          else if (AOP_TYPE (left) == AOP_REG && !IS_AOP_WITH_X (AOP (left)) && offset < AOP_SIZE (left)
+                   && AOP (left)->aopu.aop_reg[offset]->isDead)
+            reg = AOP (left)->aopu.aop_reg[offset];
           setupXForAop (AOP (left));
-          loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          setupXForAop (AOP (right));
-          accopWithAop ("ora", mc6800_reg_a, AOP (right), offset);
+          loadRegFromAop (reg, AOP (left), offset);
+          if (!aopIsLitVal (right->aop, offset, 1, 0x00))
+            {
+              setupXForAop (AOP (right));
+              accopWithAop ("ora", reg, AOP (right), offset);
+              mc6800_dirtyReg (reg, false);
+            }
           setupXForAop (AOP (result));
-          storeRegToAop (mc6800_reg_a, AOP (result), offset);
-          mc6800_freeReg (mc6800_reg_a);
-        }
-      if (AOP_TYPE (result) == AOP_REG && size && AOP (result)->aopu.aop_reg[offset]->rIdx == A_IDX)
-        {
-          pushReg (mc6800_reg_a, true);
-          needpulla = true;
+          storeRegToAop (reg, AOP (result), offset);
+          if (!(AOP (result)->regmask & reg->mask))
+            mc6800_freeReg (reg);
         }
       offset++;
     }
 
-  pullOrFreeReg (mc6800_reg_b, needpullb);
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+  pullOrFreeReg (acc, needpull);
 
 release:
   freeAsmop (left, NULL, ic, true);
@@ -6826,6 +6784,8 @@ genXor (iCode * ic, iCode * ifx)
   int size, offset = 0;
   bool needpulla = false;
   bool needpullb = false;
+  bool needpull = false;
+  reg_info *acc;
 
   D (emitcode (";     genXor", ""));
 
@@ -6854,36 +6814,17 @@ genXor (iCode * ic, iCode * ifx)
       left = tmp;
     }
 
-  if (AOP_TYPE (result) != AOP_CRY && AOP_SIZE (result) == 1 && !IS_AOP_WITH_B (AOP (right))
-  &&  !aopIsLitVal (right->aop, 0, 1, 0x00)
-  &&  (IS_AOP_B (AOP (result)) || (IS_AOP_B (AOP (left)) && mc6800_reg_b->isDead)))
-    {
-      setupXForAop (AOP (left));
-      loadRegFromAop (mc6800_reg_b, AOP (left), 0);
-      if (aopIsLitVal (right->aop, 0, 1, 0xff))
-        rmwWithReg ("com", mc6800_reg_b);
-      else
-        {
-          setupXForAop (AOP (right));
-          accopWithAop ("eor", mc6800_reg_b, AOP (right), 0);
-        }
-      mc6800_dirtyReg (mc6800_reg_b, false);
-      setupXForAop (AOP (result));
-      storeRegToAop (mc6800_reg_b, AOP (result), 0);
-      goto release;
-    }
-
-  needpulla = pushRegIfSurv (mc6800_reg_a);
-  if (IS_AOP_D (AOP (left)))
-    needpullb = pushRegIfSurv (mc6800_reg_b);
-  if (IS_AOP_WITH_A (AOP (left)))
-    mc6800_useReg (mc6800_reg_a);
-  if (IS_AOP_D (AOP (left)))
-    mc6800_useReg (mc6800_reg_b);
-
   if (AOP_TYPE (result) == AOP_CRY)
     {
       symbol *tlbl;
+
+      needpulla = pushRegIfSurv (mc6800_reg_a);
+      if (IS_AOP_D (AOP (left)))
+        needpullb = pushRegIfSurv (mc6800_reg_b);
+      if (IS_AOP_WITH_A (AOP (left)))
+        mc6800_useReg (mc6800_reg_a);
+      if (IS_AOP_D (AOP (left)))
+        mc6800_useReg (mc6800_reg_b);
 
       tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
       size = (AOP_SIZE (left) >= AOP_SIZE (right)) ? AOP_SIZE (left) : AOP_SIZE (right);
@@ -6941,46 +6882,51 @@ genXor (iCode * ic, iCode * ifx)
     }
 
   size = AOP_SIZE (result);
+
+  if (mc6800_reg_b->isFree)
+    acc = mc6800_reg_b;
+  else if (mc6800_reg_a->isFree)
+    acc = mc6800_reg_a;
+  else
+    {
+      acc = IS_AOP_WITH_B (AOP (right)) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfSurv (acc);
+      if (AOP (left)->regmask & acc->mask)
+        mc6800_useReg (acc);
+    }
+
   offset = 0;
   while (size--)
     {
-      if (IS_AOP_D (AOP (left)) && offset == 0)
+      if (!aopIsLitVal (right->aop, offset, 1, 0x00) || !sameRegs (AOP (left), AOP (result)))
         {
+          reg_info *reg = acc;
+
+          if (AOP_TYPE (result) == AOP_REG && !IS_AOP_WITH_X (AOP (result))
+              && !(AOP (right)->regmask & AOP (result)->aopu.aop_reg[offset]->mask))
+            reg = AOP (result)->aopu.aop_reg[offset];
+          else if (AOP_TYPE (left) == AOP_REG && !IS_AOP_WITH_X (AOP (left)) && offset < AOP_SIZE (left)
+                   && AOP (left)->aopu.aop_reg[offset]->isDead)
+            reg = AOP (left)->aopu.aop_reg[offset];
+          setupXForAop (AOP (left));
+          loadRegFromAop (reg, AOP (left), offset);
           if (aopIsLitVal (right->aop, offset, 1, 0xff))
-            rmwWithReg ("com", mc6800_reg_b);
+            rmwWithReg ("com", reg);
           else if (!aopIsLitVal (right->aop, offset, 1, 0x00))
             {
               setupXForAop (AOP (right));
-              accopWithAop ("eor", mc6800_reg_b, right->aop, offset);
-              mc6800_dirtyReg (mc6800_reg_b, false);
+              accopWithAop ("eor", reg, AOP (right), offset);
+              mc6800_dirtyReg (reg, false);
             }
           setupXForAop (AOP (result));
-          storeRegToAop (mc6800_reg_b, AOP (result), offset);
-          offset++;
-          continue;
+          storeRegToAop (reg, AOP (result), offset);
+          if (!(AOP (result)->regmask & reg->mask))
+            mc6800_freeReg (reg);
         }
-      setupXForAop (AOP (left));
-      loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-      if (aopIsLitVal (right->aop, offset, 1, 0xff))
-        rmwWithReg ("com", mc6800_reg_a);
-      else if (!aopIsLitVal (right->aop, offset, 1, 0x00))
-        {
-          setupXForAop (AOP (right));
-          accopWithAop ("eor", mc6800_reg_a, right->aop, offset);
-        }
-      setupXForAop (AOP (result));
-      storeRegToAop (mc6800_reg_a, AOP (result), offset);
-      if (AOP_TYPE (result) == AOP_REG && size && AOP (result)->aopu.aop_reg[offset]->rIdx == A_IDX)
-        {
-          pushReg (mc6800_reg_a, true);
-          needpulla = true;
-        }
-      mc6800_freeReg (mc6800_reg_a);
       offset++;
     }
 
-  pullOrFreeReg (mc6800_reg_b, needpullb);
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+  pullOrFreeReg (acc, needpull);
 
 release:
 
