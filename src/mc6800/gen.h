@@ -72,7 +72,6 @@ void genmc6800Code (iCode *);
 void mc6800_emitDebuggerSymbol (const char *);
 
 
-iCode *hasIncmc6800 (operand *op, const iCode *ic, int osize);
 extern bool mc6800_assignment_optimal;
 
 #define NUM_TEMP_REGS 8

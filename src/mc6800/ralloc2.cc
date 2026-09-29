@@ -456,8 +456,6 @@ static bool inst_sane(const assignment &a, unsigned short int i, const G_t &G, c
 }
 
 // Cost function.
-// Increments of a pointer that the pointer get or set before them generates.
-static std::set<const iCode *> ptr_inc_ics;
 
 template <class G_t, class I_t>
 static float instruction_cost(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
@@ -480,7 +478,7 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
   std::cout.flush();
 #endif
 
-  if(ic->generated || ptr_inc_ics.count(ic))
+  if(ic->generated)
     return(0.0f);
 
   if(!ABXinst_ok(a, i, G, I))
@@ -662,18 +660,6 @@ static void extra_ic_generated(iCode *ic)
       OP_SYMBOL (IC_RESULT (ic))->regType = REG_CND;
       ic->next->next->generated = true;
     }
-  if(ic->op == GET_VALUE_AT_ADDRESS && !ic->generated)
-    {
-      iCode *inc;
-      if (inc = hasIncmc6800 (IC_LEFT (ic), ic, getSize (operandType (IC_RESULT (ic)))))
-        ptr_inc_ics.insert(inc);
-    }
-  if(POINTER_SET (ic))
-    {
-      iCode *inc;
-      if (inc = hasIncmc6800 (IC_RESULT (ic), ic, getSize (operandType (IC_RIGHT (ic)))))
-        ptr_inc_ics.insert(inc);
-    }
 }
 
 template <class T_t, class G_t, class I_t>
@@ -747,8 +733,6 @@ static bool tree_dec_ralloc(T_t &T, G_t &G, const I_t &I)
 
 iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
 {
-  ptr_inc_ics.clear();
-
 #ifdef DEBUG_RALLOC_DEC
   std::cout << "Processing " << currFunc->name << " from " << dstFileName << "\n"; std::cout.flush();
 #endif

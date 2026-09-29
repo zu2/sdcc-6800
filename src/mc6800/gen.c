@@ -6183,49 +6183,6 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
 }
 
 /*-----------------------------------------------------------------*/
-/* hasIncmc6800 - operand is incremented before any other use        */
-/*-----------------------------------------------------------------*/
-iCode *
-hasIncmc6800 (operand *op, const iCode *ic, int osize)
-{
-  sym_link *type = operandType (op);
-  iCode *lic = ic->next;
-  int isize;
-
-  /* this could from a cast, e.g.: "(char xdata *) 0x7654;" */
-  if (!IS_SYMOP (op))
-    return NULL;
-
-  if (IS_BITVAR (getSpec (type)) || !IS_PTR (type))
-    return NULL;
-  if (IS_AGGREGATE (type->next))
-    return NULL;
-  if (osize != (isize = getSize (type->next)))
-    return NULL;
-
-  while (lic)
-    {
-      /* if operand of the form op = op + <sizeof *op> */
-      if (lic->op == '+' && isOperandEqual (IC_LEFT (lic), op) &&
-          isOperandEqual (IC_RESULT (lic), op) &&
-          isOperandLiteral (IC_RIGHT (lic)) && operandLitValue (IC_RIGHT (lic)) == isize)
-        {
-          return lic;
-        }
-      /* if the operand used or deffed */
-      if (bitVectBitValue (OP_USES (op), lic->key) || lic->defKey == op->key)
-        {
-          return NULL;
-        }
-      /* if GOTO or IFX */
-      if (lic->op == IFX || lic->op == GOTO || lic->op == LABEL)
-        break;
-      lic = lic->next;
-    }
-  return NULL;
-}
-
-/*-----------------------------------------------------------------*/
 /* isLiteralBit - test if lit == 2^n                               */
 /*-----------------------------------------------------------------*/
 static int
@@ -8685,7 +8642,7 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
 /* genPointerGet - generate code for pointer get                   */
 /*-----------------------------------------------------------------*/
 static void
-genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
+genPointerGet (iCode * ic, iCode * ifx)
 {
   operand *left = IC_LEFT (ic);
   operand *right = IC_RIGHT (ic);
@@ -8698,7 +8655,6 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   bool needpullb = false;
   bool needpullx = false;
   reg_info *acc = mc6800_reg_a;
-  bool xptr = false;
 
   D (emitcode (";     genPointerGet", ""));
 
@@ -8731,8 +8687,6 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   /* if bit then unpack */
   if (IS_BITVAR (retype))
     {
-      /* hasIncmc6800() will be false for bitfields, so no need */
-      /* to consider post-increment in this case. */
       genUnpackBits (result, left, right, ifx);
       goto release;
     }
@@ -8745,16 +8699,10 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
   setupXForAop (AOP (left));
   loadRegFromAop (mc6800_reg_x, AOP (left), 0);
   /* so x now contains the address */
-  xptr = (AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT) && !IS_AOP_WITH_X (AOP (result)) && AOP_TYPE (result) != AOP_SOF;
 
   if (stackBasedOffset (right))
-    {
-      addSPToX ();
-      xptr = false;
-    }
+    addSPToX ();
   decodePointerOffset (right, &litOffset, &rematOffset);
-  if (rematOffset || litOffset < 0 || litOffset + size - 1 > 0xff)
-    xptr = false;
 
   if (rematOffset)
     {
@@ -8947,11 +8895,6 @@ genPointerGet (iCode * ic, iCode * pi, iCode * ifx)
     }
 
 release:
-  if (pi && xptr)
-    {
-      addConstToX ((int) operandLitValue (IC_RIGHT (pi)));
-      storeRegToAop (mc6800_reg_x, AOP (left), 0);
-    }
   size = AOP_SIZE (result);
 
   pullOrFreeReg (mc6800_reg_x, needpullx);
@@ -8960,26 +8903,6 @@ release:
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
 
-  if (pi && !xptr)
-    {
-      int i;
-
-      for (i = A_IDX; i <= XH_IDX; i++)
-        {
-          reg_info *reg = mc6800_regWithIdx (i);
-          bool live = bitVectBitValue (ic->rSurv, i) || (AOP (result)->regmask & reg->mask);
-
-          reg->isDead = !live || (AOP (left)->regmask & reg->mask);
-          reg->isFree = !live && !(AOP (left)->regmask & reg->mask);
-        }
-      mc6800_reg_d->isFree = mc6800_reg_a->isFree && mc6800_reg_b->isFree;
-      mc6800_reg_d->isDead = mc6800_reg_a->isDead && mc6800_reg_b->isDead;
-      mc6800_reg_x->isFree = mc6800_reg_xl->isFree && mc6800_reg_xh->isFree;
-      mc6800_reg_x->isDead = mc6800_reg_xl->isDead && mc6800_reg_xh->isDead;
-      genPlus (pi);
-    }
-  if (pi)
-    pi->generated = 1;
   freeAsmop (left, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 
@@ -9398,7 +9321,7 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
 /* genPointerSet - stores the value into a pointer location        */
 /*-----------------------------------------------------------------*/
 static void
-genPointerSet (iCode * ic, iCode * pi)
+genPointerSet (iCode * ic)
 {
   operand *left = IC_LEFT (ic);
   operand *right = IC_RIGHT (ic);
@@ -9411,7 +9334,6 @@ genPointerSet (iCode * ic, iCode * pi)
   char *rematOffset = NULL;
   wassert (operandType (result)->next);
   bool bit_field = IS_BITVAR (operandType (result)->next);
-  bool xptr = false;
 
   D (emitcode (";     genPointerSet", ""));
 
@@ -9471,8 +9393,6 @@ genPointerSet (iCode * ic, iCode * pi)
       if (stackBasedOffset (left))
         addSPToX ();
       decodePointerOffset (left, &litOffset, &rematOffset);
-      xptr = (AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) && !stackBasedOffset (left)
-             && !rematOffset && litOffset >= 0 && litOffset + size - 1 <= 0xff && AOP_TYPE (right) != AOP_SOF;
 
       if (rematOffset)
         {
@@ -9600,36 +9520,10 @@ genPointerSet (iCode * ic, iCode * pi)
         }
     }
 
-  if (pi && xptr)
-    {
-      addConstToX ((int) operandLitValue (IC_RIGHT (pi)));
-      storeRegToAop (mc6800_reg_x, AOP (result), 0);
-    }
-
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
   pullOrFreeReg (mc6800_reg_x, needpullx);
 
-  if (pi && !xptr)
-    {
-      int i;
-
-      for (i = A_IDX; i <= XH_IDX; i++)
-        {
-          reg_info *reg = mc6800_regWithIdx (i);
-          bool live = bitVectBitValue (ic->rSurv, i);
-
-          reg->isDead = !live || (AOP (result)->regmask & reg->mask);
-          reg->isFree = !live && !(AOP (result)->regmask & reg->mask);
-        }
-      mc6800_reg_d->isFree = mc6800_reg_a->isFree && mc6800_reg_b->isFree;
-      mc6800_reg_d->isDead = mc6800_reg_a->isDead && mc6800_reg_b->isDead;
-      mc6800_reg_x->isFree = mc6800_reg_xl->isFree && mc6800_reg_xh->isFree;
-      mc6800_reg_x->isDead = mc6800_reg_xl->isDead && mc6800_reg_xh->isDead;
-      genPlus (pi);
-    }
-  if (pi)
-    pi->generated = 1;
   freeAsmop (result, NULL, ic, true);
   freeAsmop (right, NULL, ic, true);
 }
@@ -10975,7 +10869,7 @@ genmc6800iCode (iCode *ic)
     case GET_VALUE_AT_ADDRESS:
       if (OP_SYMBOL (IC_RESULT (ic))->regType == REG_CND && ic->next && ic->next->op != IFX)
         break;
-      genPointerGet (ic, hasIncmc6800 (IC_LEFT (ic), ic, getSize (operandType (IC_RESULT (ic)))), ifxForOp (IC_RESULT (ic), ic));
+      genPointerGet (ic, ifxForOp (IC_RESULT (ic), ic));
       break;
 
     case '=':
@@ -10983,7 +10877,7 @@ genmc6800iCode (iCode *ic)
           && ic->next && (ic->next->op == '-' || ic->next->op == '+'))
         break;
       if (POINTER_SET (ic))
-        genPointerSet (ic, hasIncmc6800 (IC_RESULT (ic), ic, getSize (operandType (IC_RIGHT (ic)))));
+        genPointerSet (ic);
       else
         genAssign (ic);
       break;
