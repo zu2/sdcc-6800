@@ -1480,19 +1480,6 @@ rmwWithReg (char *rmwop, reg_info * reg)
 static void
 rmwWithAop (char *rmwop, asmop * aop, int loffset)
 {
-  bool needpull = false;
-  reg_info * reg;
-
-
-  /* If we need a register: */
-  /*   use A if it's free,  */
-  /*   otherwise use B if it's free */
-  /*   otherwise use A (and preserve original value via the stack) */
-  if (!mc6800_reg_a->isFree && mc6800_reg_b->isFree)
-    reg = mc6800_reg_b;
-  else
-    reg = mc6800_reg_a;
-
   switch (aop->type)
     {
     case AOP_REG:
@@ -1500,23 +1487,6 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
       break;
     case AOP_DUMMY:
       break;
-    case AOP_SOF:
-      {
-        int offset = aop->size - 1 - loffset;
-        offset += _G.stackOfs + _G.stackPushes + aop->aopu.aop_stk + 1;
-        if ((offset > 0xff) || (offset < 0))
-          {
-            /* Indexed addressing only supports an offset of 0 to 255. */
-            needpull = pushRegIfUsed (reg);
-            loadRegFromAop (reg, aop, loffset);
-            rmwWithReg (rmwop, reg);
-            if (strcmp ("tst", rmwop))
-              storeRegToAop (reg, aop, loffset);
-            pullOrFreeReg (reg, needpull);
-            break;
-          }
-        /* If the offset is small enough, fall through to default case */
-      }
     default:
       mc6800_emitOp (rmwop, aop->type == AOP_SOF ? MODE_IDX : MODE_EXT, aopAdrStr (aop, loffset, false) + (aop->type == AOP_DIR ? 1 : 0));
       mc6800_dirtyRegAop (aop, loffset);
