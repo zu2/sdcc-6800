@@ -1564,17 +1564,15 @@ setupXForAop (asmop * aop)
 
   if (aop->type == AOP_IDX)
     {
-      iCode *dic = hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (aop->op)));
-
-      if (IS_AOP_X (AOP (IC_LEFT (dic))) || mc6800_reg_x->aop == aop)
+      if (IS_AOP_X (AOP (aop->pointer)) || mc6800_reg_x->aop == aop)
         return;
       if (!mc6800_reg_x->isFree && !mc6800_reg_x->isDead)
         {
           UNIMPLEMENTED;
           return;
         }
-      setupXForAop (AOP (IC_LEFT (dic)));
-      loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (dic)), 0);
+      setupXForAop (AOP (aop->pointer));
+      loadRegFromAop (mc6800_reg_x, AOP (aop->pointer), 0);
       mc6800_freeReg (mc6800_reg_x);
       mc6800_reg_x->aop = aop;
       return;
@@ -1630,7 +1628,7 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
       asmop *aop = operands[i];
 
       if (aop->type == AOP_IDX)
-        aop = AOP (IC_LEFT ((iCode *) hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (aop->op)))));
+        aop = AOP (aop->pointer);
       if (aop->type != AOP_SOF)
         continue;
       xbases->lower[xbases->count] = _G.stackOfs + aop->aopu.aop_stk;
@@ -1663,7 +1661,7 @@ switchXToAop (struct xbases *xbases, asmop *aop)
 
   if (aop->type == AOP_IDX)
     {
-      asmop *pointer = AOP (IC_LEFT ((iCode *) hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (aop->op)))));
+      asmop *pointer = AOP (aop->pointer);
 
       if (mc6800_reg_x->aop == aop || IS_AOP_X (pointer))
         return;
@@ -2302,6 +2300,7 @@ aopOp (operand *op, iCode * ic, bool result)
       sym->aop = op->aop = aop = newAsmop (AOP_IDX);
       aop->size = getSize (operandType (op));
       aop->op = op;
+      aop->pointer = IC_LEFT (ic->prev);
       aop->aopu.aop_stk = (int) operandLitValue (IC_RIGHT (ic->prev));
       return;
     }
@@ -2426,7 +2425,7 @@ freeAsmop (operand * op, asmop * aaop, iCode * ic, bool pop)
     return;
 
   if (aop->type == AOP_IDX && !aop->freed)
-    freeAsmop (IC_LEFT ((iCode *) hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (aop->op)))), NULL, ic, pop);
+    freeAsmop (aop->pointer, NULL, ic, pop);
 
   if (aop->freed)
     goto dealloc;
@@ -2611,7 +2610,7 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
       return rs;
     case AOP_IDX:
       if (!regalloc_dry_run && mc6800_reg_x->aop != aop
-          && !IS_AOP_X (AOP (IC_LEFT ((iCode *) hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (aop->op)))))))
+          && !IS_AOP_X (AOP (aop->pointer)))
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "AOP_IDX without ldx");
       xofs = aop->aopu.aop_stk + offset;
       if (xofs < 0 || xofs > 255)

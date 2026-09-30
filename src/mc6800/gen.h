@@ -53,6 +53,7 @@ typedef struct asmop
     short size;			/* total size */
     short regmask;              /* register mask if AOP_REG */
     operand *op;		/* originating operand */
+    operand *pointer;
     unsigned code:1;		/* is in Code space */
     unsigned freed:1;		/* already freed    */
     union
