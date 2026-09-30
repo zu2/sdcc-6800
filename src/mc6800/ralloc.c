@@ -153,11 +153,9 @@ mc6800_useReg (reg_info * reg)
   switch (reg->rIdx)
     {
       case A_IDX:
-        mc6800_reg_d->aop = NULL;
         mc6800_reg_d->isFree = 0;
         break;
       case B_IDX:
-        mc6800_reg_d->aop = NULL;
         mc6800_reg_d->isFree = 0;
         break;
       case XL_IDX:
@@ -175,9 +173,7 @@ mc6800_useReg (reg_info * reg)
         mc6800_reg_xh->isFree = 0;
         break;
       case D_IDX:
-        mc6800_reg_a->aop = NULL;
         mc6800_reg_a->isFree = 0;
-        mc6800_reg_b->aop = NULL;
         mc6800_reg_b->isFree = 0;
         break;
       default:
@@ -195,45 +191,18 @@ mc6800_dirtyReg (reg_info * reg, bool freereg)
 
   switch (reg->rIdx)
     {
-      case A_IDX:
-        mc6800_reg_d->aop = NULL;
-	mc6800_reg_d->isLitConst = 0;
-	mc6800_reg_a->aop = NULL;
-	mc6800_reg_a->isLitConst = 0;
-        break;
-      case B_IDX:
-        mc6800_reg_d->aop = NULL;
-	mc6800_reg_d->isLitConst = 0;
-	mc6800_reg_b->aop = NULL;
-	mc6800_reg_b->isLitConst = 0;
-        break;
       case XL_IDX:
         mc6800_reg_x->aop = NULL;
-        mc6800_reg_x->isLitConst = 0;
         mc6800_reg_xl->aop = NULL;
-        mc6800_reg_xl->isLitConst = 0;
         break;
       case XH_IDX:
         mc6800_reg_x->aop = NULL;
-        mc6800_reg_x->isLitConst = 0;
         mc6800_reg_xh->aop = NULL;
-        mc6800_reg_xh->isLitConst = 0;
         break;
       case X_IDX:
 	mc6800_reg_x->aop = NULL;
-	mc6800_reg_x->isLitConst = 0;
         mc6800_reg_xl->aop = NULL;
-        mc6800_reg_xl->isLitConst = 0;
         mc6800_reg_xh->aop = NULL;
-        mc6800_reg_xh->isLitConst = 0;
-        break;
-      case D_IDX:
-        mc6800_reg_d->aop = NULL;
-	mc6800_reg_d->isLitConst = 0;
-        mc6800_reg_a->aop = NULL;
-	mc6800_reg_a->isLitConst = 0;
-        mc6800_reg_b->aop = NULL;
-	mc6800_reg_b->isLitConst = 0;
         break;
       default:
         break;

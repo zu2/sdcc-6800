@@ -63,12 +63,9 @@ typedef struct reg_info
     short rIdx;			/* index into register table */
     char *name;
     short mask;			/* bitmask for pair allocation */
-    struct asmop *aop;		/* last operand */
-    int aopofs;			/* last operand offset */
+    struct asmop *aop;
     unsigned isFree:1;		/* is currently unassigned */
     unsigned isDead:1;      /* does not need to survive current instruction */
-    unsigned isLitConst:1;      /* has an literal constant loaded */
-    int litConst;		/* last literal constant */
     int stackOffset;
   }
 reg_info;
