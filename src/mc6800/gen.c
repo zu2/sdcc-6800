@@ -1676,7 +1676,7 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
       asmop *aop = operands[i];
       int first, last;
 
-      if (aop->type != AOP_SOF)
+      if (!aop || aop->type != AOP_SOF)
         continue;
       onstack = true;
       if (regalloc_dry_run && !mc6800_dry_stack_size)
@@ -1709,7 +1709,7 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
       asmop *aop = operands[i];
       asmop *pointer;
 
-      if (aop->type != AOP_IDX)
+      if (!aop || aop->type != AOP_IDX)
         continue;
       pointer = AOP (aop->pointer);
       if (IS_AOP_X (pointer))
@@ -4135,6 +4135,7 @@ genPlus1 (iCode *ic)
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
+  struct xbases xbases;
 
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RIGHT (ic), ic, false);
@@ -4168,10 +4169,11 @@ genPlus1 (iCode *ic)
       rightOp = leftOp;
       leftOp = AOP (IC_RIGHT (ic));
     }
+  setupXBases (&xbases, leftOp, rightOp, result);
 
-  setupXForAop (leftOp);
+  switchXToAop (&xbases, leftOp);
   loadRegFromAop (reg, leftOp, 0);
-  setupXForAop (rightOp);
+  switchXToAop (&xbases, rightOp);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
       accopWithAop ("add", reg, rightOp, 0);
@@ -4180,8 +4182,9 @@ genPlus1 (iCode *ic)
           mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
         }
     }
-  setupXForAop (result);
+  switchXToAop (&xbases, result);
   storeRegToAop (reg, result, 0);
+  freeXBases (&xbases);
   pullOrFreeReg (mc6800_reg_b, needpullb);
 
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
@@ -4200,6 +4203,7 @@ genPlus2 (iCode *ic)
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
+  struct xbases xbases;
 
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RIGHT (ic), ic, false);
@@ -4217,6 +4221,7 @@ genPlus2 (iCode *ic)
 
   needpullb = pushRegIfSurv (mc6800_reg_b);
   needpulla = pushRegIfSurv (mc6800_reg_a);
+  setupXBases (&xbases, leftOp, rightOp, result);
 
   if (leftOp->type == AOP_STL || rightOp->type == AOP_STL)
     {
@@ -4226,7 +4231,7 @@ genPlus2 (iCode *ic)
       int delta;
 
       wassertl (other->type != AOP_STL, "both operands on the stack");
-      setupXForAop (other);
+      switchXToAop (&xbases, other);
       if (other->size > 1)
         {
           loadRegFromAop (mc6800_reg_d, other, 0);
@@ -4257,18 +4262,19 @@ genPlus2 (iCode *ic)
       else
         {
           freeTemp ();
-          setupXForAop (result);
+          switchXToAop (&xbases, result);
           storeRegToAop (mc6800_reg_d, result, 0);
         }
+      freeXBases (&xbases);
       pullOrFreeReg (mc6800_reg_a, needpulla);
       pullOrFreeReg (mc6800_reg_b, needpullb);
       goto release;
     }
 
-  setupXForAop (leftOp);
+  switchXToAop (&xbases, leftOp);
   loadRegFromAop (mc6800_reg_b, leftOp, 0);
   loadRegFromAop (mc6800_reg_a, leftOp, 1);
-  setupXForAop (rightOp);
+  switchXToAop (&xbases, rightOp);
   if (aopIsLitVal (rightOp, 0, 1, 0x00))
     accopWithAop ("add", mc6800_reg_a, rightOp, 1);
   else
@@ -4278,8 +4284,9 @@ genPlus2 (iCode *ic)
     }
   if (topbytemask != 0xff)
     mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
-  setupXForAop (result);
+  switchXToAop (&xbases, result);
   storeRegToAop (mc6800_reg_d, result, 0);
+  freeXBases (&xbases);
 
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -4546,6 +4553,7 @@ genMinus1 (iCode *ic)
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
   bool maskedtopbyte = (topbytemask != 0xff);
+  struct xbases xbases;
 
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RIGHT (ic), ic, false);
@@ -4578,7 +4586,8 @@ genMinus1 (iCode *ic)
           transferRegReg (mc6800_reg_a, mc6800_reg_b, false);
         }
       needpulla = pushRegIfSurv (mc6800_reg_a);
-      setupXForAop (leftOp);
+      setupXBases (&xbases, leftOp, NULL, result);
+      switchXToAop (&xbases, leftOp);
       loadRegFromAop (mc6800_reg_a, leftOp, 0);
       mc6800_emitOp ("sba", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
@@ -4586,8 +4595,9 @@ genMinus1 (iCode *ic)
         {
           mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
         }
-      setupXForAop (result);
+      switchXToAop (&xbases, result);
       storeRegToAop (mc6800_reg_a, result, 0);
+      freeXBases (&xbases);
       pullOrFreeReg (mc6800_reg_a, needpulla);
       pullOrFreeReg (mc6800_reg_b, needpullb);
       goto release;
@@ -4606,20 +4616,22 @@ genMinus1 (iCode *ic)
       reg = mc6800_reg_b;
       needpullb = pushRegIfSurv (mc6800_reg_b);
     }
+  setupXBases (&xbases, leftOp, rightOp, result);
 
-  setupXForAop (leftOp);
+  switchXToAop (&xbases, leftOp);
   loadRegFromAop (reg, leftOp, 0);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
-      setupXForAop (rightOp);
+      switchXToAop (&xbases, rightOp);
       accopWithAop ("sub", reg, rightOp, 0);
       if (maskedtopbyte)
         {
           mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
         }
     }
-  setupXForAop (result);
+  switchXToAop (&xbases, result);
   storeRegToAop (reg, result, 0);
+  freeXBases (&xbases);
   pullOrFreeReg (mc6800_reg_b, needpullb);
 
 release:
@@ -4638,6 +4650,7 @@ genMinus2 (iCode *ic)
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
+  struct xbases xbases;
 
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RIGHT (ic), ic, false);
@@ -4652,6 +4665,7 @@ genMinus2 (iCode *ic)
     mc6800_useReg (mc6800_reg_a);
   if (IS_AOP_WITH_B (rightOp))
     mc6800_useReg (mc6800_reg_b);
+  setupXBases (&xbases, leftOp, rightOp, AOP (IC_RESULT (ic)));
 
   if (rightOp->type == AOP_STL && leftOp->type == AOP_STL)
     {
@@ -4662,7 +4676,7 @@ genMinus2 (iCode *ic)
       const char *tmp;
       int delta;
 
-      setupXForAop (leftOp);
+      switchXToAop (&xbases, leftOp);
       loadRegFromAop (mc6800_reg_b, leftOp, 0);
       loadRegFromAop (mc6800_reg_a, leftOp, 1);
       tmp = allocTemp ();
@@ -4693,13 +4707,13 @@ genMinus2 (iCode *ic)
   else if (leftOp->type == AOP_STL)
     {
       loadRegFromAop (mc6800_reg_d, leftOp, 0);
-      setupXForAop (rightOp);
+      switchXToAop (&xbases, rightOp);
       accopWithAop ("sub", mc6800_reg_b, rightOp, 0);
       accopWithAop ("sbc", mc6800_reg_a, rightOp, 1);
     }
   else if (IS_AOP_D (rightOp))
     {
-      setupXForAop (leftOp);
+      switchXToAop (&xbases, leftOp);
       mc6800_emitOp ("coma", MODE_INH, "");
       mc6800_emitOp ("comb", MODE_INH, "");
       accopWithAop ("adc", mc6800_reg_b, leftOp, 0);
@@ -4707,10 +4721,10 @@ genMinus2 (iCode *ic)
     }
   else
     {
-      setupXForAop (leftOp);
+      switchXToAop (&xbases, leftOp);
       loadRegFromAop (mc6800_reg_b, leftOp, 0);
       loadRegFromAop (mc6800_reg_a, leftOp, 1);
-      setupXForAop (rightOp);
+      switchXToAop (&xbases, rightOp);
       if (aopIsLitVal (rightOp, 0, 1, 0x00))
         accopWithAop ("sub", mc6800_reg_a, rightOp, 1);
       else
@@ -4721,8 +4735,9 @@ genMinus2 (iCode *ic)
     }
   if (topbytemask != 0xff)
     mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
-  setupXForAop (AOP (IC_RESULT (ic)));
+  switchXToAop (&xbases, AOP (IC_RESULT (ic)));
   storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
+  freeXBases (&xbases);
 
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -5025,6 +5040,7 @@ genCmp1 (iCode * ic, iCode * ifx, int opcode, int sign)
   operand *right = IC_RIGHT (ic);
   reg_info *reg;
   bool needpull = false;
+  struct xbases xbases;
 
   aopOp (left, ic, false);
   aopOp (right, ic, false);
@@ -5045,11 +5061,16 @@ genCmp1 (iCode * ic, iCode * ifx, int opcode, int sign)
     {
       reg = (mc6800_reg_b->isDead && !IS_AOP_B (AOP (right))) ? mc6800_reg_b : mc6800_reg_a;
       needpull = pushRegIfSurv (reg);
-      setupXForAop (AOP (left));
+    }
+  setupXBases (&xbases, AOP (left), AOP (right), NULL);
+  if (!IS_AOP_A (AOP (left)) && !IS_AOP_B (AOP (left)))
+    {
+      switchXToAop (&xbases, AOP (left));
       loadRegFromAop (reg, AOP (left), 0);
     }
-  setupXForAop (AOP (right));
+  switchXToAop (&xbases, AOP (right));
   accopWithAop ("cmp", reg, AOP (right), 0);
+  freeXBases (&xbases);
   mc6800_freeReg (reg);
   freeAsmop (right, NULL, ic, false);
   freeAsmop (left, NULL, ic, false);
@@ -5102,6 +5123,7 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
   operand *right = IC_RIGHT (ic);
   reg_info *reg;
   bool needpull = false;
+  struct xbases xbases;
 
   aopOp (left, ic, false);
   aopOp (right, ic, false);
@@ -5172,11 +5194,13 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
         }
       else
         {
-          setupXForAop (AOP (left));
+          setupXBases (&xbases, AOP (left), AOP (right), NULL);
+          switchXToAop (&xbases, AOP (left));
           loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-          setupXForAop (AOP (right));
+          switchXToAop (&xbases, AOP (right));
           accopWithAop ("sub", mc6800_reg_b, AOP (right), 0);
           accopWithAop ("sbc", mc6800_reg_a, AOP (right), 1);
+          freeXBases (&xbases);
         }
       pullOrFreeReg (mc6800_reg_a, needpulla);
       pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -5238,6 +5262,7 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
     }
   else
     {
+      setupXBases (&xbases, AOP (left), AOP (right), NULL);
       if (!IS_AOP_D (AOP (left)))
         {
           if (IS_AOP_X (AOP (left)))
@@ -5251,7 +5276,7 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
             }
           else
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               loadRegFromAop (mc6800_reg_d, AOP (left), 0);
             }
         }
@@ -5286,10 +5311,11 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
         }
       else
         {
-          setupXForAop (AOP (right));
+          switchXToAop (&xbases, AOP (right));
           accopWithAop ("sub", mc6800_reg_b, AOP (right), 0);
           accopWithAop ("sbc", mc6800_reg_a, AOP (right), 1);
         }
+      freeXBases (&xbases);
     }
   mc6800_freeReg (mc6800_reg_d);
   reg = mc6800_reg_b;
@@ -5883,6 +5909,7 @@ genAnd (iCode * ic, iCode * ifx)
   bool needpulla = false;
   bool needpull = false;
   reg_info *acc;
+  struct xbases xbases;
 
   D (emitcode (";     genAnd", ""));
 
@@ -5951,6 +5978,7 @@ genAnd (iCode * ic, iCode * ifx)
       needpulla = pushRegIfSurv (mc6800_reg_a);
 
       /* this generates ugly code, but meets volatility requirements */
+      setupXBases (&xbases, AOP (left), AOP (right), NULL);
       loadRegFromConst (mc6800_reg_a, 0);
       mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
 
@@ -5965,16 +5993,17 @@ genAnd (iCode * ic, iCode * ifx)
             }
           else
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
             }
-          setupXForAop (AOP (right));
+          switchXToAop (&xbases, AOP (right));
           accopWithAop ("and", mc6800_reg_a, AOP (right), offset);
           mc6800_emitOp ("oraa", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
           offset++;
         }
 
+      freeXBases (&xbases);
       mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
@@ -6026,6 +6055,7 @@ genAnd (iCode * ic, iCode * ifx)
       needpulla = pushRegIfSurv (mc6800_reg_a);
       if (IS_AOP_WITH_A (AOP (left)))
         mc6800_useReg (mc6800_reg_a);
+      setupXBases (&xbases, AOP (left), AOP (right), NULL);
 
       offset = 0;
       while (size--)
@@ -6038,7 +6068,7 @@ genAnd (iCode * ic, iCode * ifx)
             }
           else if (AOP_TYPE (right) == AOP_LIT && bytemask == 0xff)
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               rmwWithAop ("tst", AOP (left), offset);
               if (size)
                 {
@@ -6049,7 +6079,7 @@ genAnd (iCode * ic, iCode * ifx)
             }
           else if (IS_AOP_D (AOP (left)) && offset == 0)
             {
-              setupXForAop (AOP (right));
+              switchXToAop (&xbases, AOP (right));
               accopWithAop ("bit", mc6800_reg_b, AOP (right), offset);
               if (size)
                 {
@@ -6060,9 +6090,9 @@ genAnd (iCode * ic, iCode * ifx)
             }
           else
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              setupXForAop (AOP (right));
+              switchXToAop (&xbases, AOP (right));
               accopWithAop ("bit", mc6800_reg_a, AOP (right), offset);
               mc6800_freeReg (mc6800_reg_a);
               if (size)
@@ -6074,8 +6104,12 @@ genAnd (iCode * ic, iCode * ifx)
             }
           offset++;
         }
+      freeXBases (&xbases);
       if (tlbl)
-        emitLabel (tlbl);
+        {
+          emitLabel (tlbl);
+          mc6800_dirtyReg (mc6800_reg_x, false);
+        }
 
       pullOrFreeReg (mc6800_reg_a, needpulla);
 
@@ -6097,6 +6131,7 @@ genAnd (iCode * ic, iCode * ifx)
       if (AOP (left)->regmask & acc->mask)
         mc6800_useReg (acc);
     }
+  setupXBases (&xbases, AOP (left), AOP (right), AOP (result));
 
   offset = 0;
   while (size--)
@@ -6105,17 +6140,17 @@ genAnd (iCode * ic, iCode * ifx)
         {
           if (isOperandVolatile (left, false))
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               loadRegFromAop (acc, AOP (left), offset);
               mc6800_freeReg (acc);
             }
           if (isOperandVolatile (right, false))
             {
-              setupXForAop (AOP (right));
+              switchXToAop (&xbases, AOP (right));
               loadRegFromAop (acc, AOP (right), offset);
               mc6800_freeReg (acc);
             }
-          setupXForAop (AOP (result));
+          switchXToAop (&xbases, AOP (result));
           storeConstToAop (0, AOP (result), offset);
         }
       else if (!aopIsLitVal (right->aop, offset, 1, 0xff) || !sameRegs (AOP (left), AOP (result)))
@@ -6128,15 +6163,15 @@ genAnd (iCode * ic, iCode * ifx)
           else if (AOP_TYPE (left) == AOP_REG && !IS_AOP_WITH_X (AOP (left)) && offset < AOP_SIZE (left)
                    && AOP (left)->aopu.aop_reg[offset]->isDead)
             reg = AOP (left)->aopu.aop_reg[offset];
-          setupXForAop (AOP (left));
+          switchXToAop (&xbases, AOP (left));
           loadRegFromAop (reg, AOP (left), offset);
           if (!aopIsLitVal (right->aop, offset, 1, 0xff))
             {
-              setupXForAop (AOP (right));
+              switchXToAop (&xbases, AOP (right));
               accopWithAop ("and", reg, AOP (right), offset);
               mc6800_dirtyReg (reg, false);
             }
-          setupXForAop (AOP (result));
+          switchXToAop (&xbases, AOP (result));
           storeRegToAop (reg, AOP (result), offset);
           if (!(AOP (result)->regmask & reg->mask))
             mc6800_freeReg (reg);
@@ -6144,6 +6179,7 @@ genAnd (iCode * ic, iCode * ifx)
       offset++;
     }
 
+  freeXBases (&xbases);
   pullOrFreeReg (acc, needpull);
 
 release:
@@ -6166,6 +6202,7 @@ genOr (iCode * ic, iCode * ifx)
   bool needpullb = false;
   bool needpull = false;
   reg_info *acc;
+  struct xbases xbases;
 
   D (emitcode (";     genOr", ""));
 
@@ -6223,6 +6260,7 @@ genOr (iCode * ic, iCode * ifx)
       needpulla = pushRegIfSurv (mc6800_reg_a);
 
       /* this generates ugly code, but meets volatility requirements */
+      setupXBases (&xbases, AOP (left), AOP (right), NULL);
       loadRegFromConst (mc6800_reg_a, 0);
       mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
 
@@ -6237,16 +6275,17 @@ genOr (iCode * ic, iCode * ifx)
             }
           else
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
             }
-          setupXForAop (AOP (right));
+          switchXToAop (&xbases, AOP (right));
           accopWithAop ("ora", mc6800_reg_a, AOP (right), offset);
           mc6800_emitOp ("oraa", MODE_DIR, "*%s", tmp);
           mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
           offset++;
         }
 
+      freeXBases (&xbases);
       mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
@@ -6275,6 +6314,7 @@ genOr (iCode * ic, iCode * ifx)
         mc6800_useReg (mc6800_reg_a);
       if (IS_AOP_D (AOP (left)))
         mc6800_useReg (mc6800_reg_b);
+      setupXBases (&xbases, AOP (left), AOP (right), NULL);
 
       offset = 0;
       while (size--)
@@ -6283,7 +6323,7 @@ genOr (iCode * ic, iCode * ifx)
 
           if (AOP_TYPE (right) == AOP_LIT && bytemask == 0x00)
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               rmwWithAop ("tst", AOP (left), offset);
               if (size)
                 {
@@ -6294,7 +6334,7 @@ genOr (iCode * ic, iCode * ifx)
             }
           else if (IS_AOP_D (AOP (left)) && offset == 0)
             {
-              setupXForAop (AOP (right));
+              switchXToAop (&xbases, AOP (right));
               accopWithAop ("ora", mc6800_reg_b, AOP (right), offset);
               mc6800_dirtyReg (mc6800_reg_b, false);
               if (size)
@@ -6306,9 +6346,9 @@ genOr (iCode * ic, iCode * ifx)
             }
           else
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-              setupXForAop (AOP (right));
+              switchXToAop (&xbases, AOP (right));
               accopWithAop ("ora", mc6800_reg_a, AOP (right), offset);
               mc6800_freeReg (mc6800_reg_a);
               if (size)
@@ -6320,8 +6360,12 @@ genOr (iCode * ic, iCode * ifx)
             }
           offset++;
         }
+      freeXBases (&xbases);
       if (tlbl)
-        emitLabel (tlbl);
+        {
+          emitLabel (tlbl);
+          mc6800_dirtyReg (mc6800_reg_x, false);
+        }
 
       pullOrFreeReg (mc6800_reg_b, needpullb);
       pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -6345,6 +6389,7 @@ genOr (iCode * ic, iCode * ifx)
       if (AOP (left)->regmask & acc->mask)
         mc6800_useReg (acc);
     }
+  setupXBases (&xbases, AOP (left), AOP (right), AOP (result));
 
   offset = 0;
   while (size--)
@@ -6353,11 +6398,11 @@ genOr (iCode * ic, iCode * ifx)
         {
           if (isOperandVolatile (left, false))
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               loadRegFromAop (acc, AOP (left), offset);
               mc6800_freeReg (acc);
             }
-          setupXForAop (AOP (result));
+          switchXToAop (&xbases, AOP (result));
           storeConstToAop (0xff, AOP (result), offset);
         }
       else if (!aopIsLitVal (right->aop, offset, 1, 0x00) || !sameRegs (AOP (left), AOP (result)))
@@ -6370,15 +6415,15 @@ genOr (iCode * ic, iCode * ifx)
           else if (AOP_TYPE (left) == AOP_REG && !IS_AOP_WITH_X (AOP (left)) && offset < AOP_SIZE (left)
                    && AOP (left)->aopu.aop_reg[offset]->isDead)
             reg = AOP (left)->aopu.aop_reg[offset];
-          setupXForAop (AOP (left));
+          switchXToAop (&xbases, AOP (left));
           loadRegFromAop (reg, AOP (left), offset);
           if (!aopIsLitVal (right->aop, offset, 1, 0x00))
             {
-              setupXForAop (AOP (right));
+              switchXToAop (&xbases, AOP (right));
               accopWithAop ("ora", reg, AOP (right), offset);
               mc6800_dirtyReg (reg, false);
             }
-          setupXForAop (AOP (result));
+          switchXToAop (&xbases, AOP (result));
           storeRegToAop (reg, AOP (result), offset);
           if (!(AOP (result)->regmask & reg->mask))
             mc6800_freeReg (reg);
@@ -6386,6 +6431,7 @@ genOr (iCode * ic, iCode * ifx)
       offset++;
     }
 
+  freeXBases (&xbases);
   pullOrFreeReg (acc, needpull);
 
 release:
@@ -6406,6 +6452,7 @@ genXor (iCode * ic, iCode * ifx)
   bool needpullb = false;
   bool needpull = false;
   reg_info *acc;
+  struct xbases xbases;
 
   D (emitcode (";     genXor", ""));
 
@@ -6445,6 +6492,7 @@ genXor (iCode * ic, iCode * ifx)
         mc6800_useReg (mc6800_reg_a);
       if (IS_AOP_D (AOP (left)))
         mc6800_useReg (mc6800_reg_b);
+      setupXBases (&xbases, AOP (left), AOP (right), NULL);
 
       tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
       size = (AOP_SIZE (left) >= AOP_SIZE (right)) ? AOP_SIZE (left) : AOP_SIZE (right);
@@ -6459,14 +6507,14 @@ genXor (iCode * ic, iCode * ifx)
                 }
               else
                 {
-                  setupXForAop (AOP (right));
+                  switchXToAop (&xbases, AOP (right));
                   accopWithAop ("eor", mc6800_reg_b, AOP (right), offset);
                   mc6800_dirtyReg (mc6800_reg_b, false);
                 }
             }
           else
             {
-              setupXForAop (AOP (left));
+              switchXToAop (&xbases, AOP (left));
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
               if (AOP_TYPE (right) == AOP_LIT && ((ullFromVal (AOP (right)->aopu.aop_lit) >> (offset * 8)) & 0xff) == 0)
                 {
@@ -6474,7 +6522,7 @@ genXor (iCode * ic, iCode * ifx)
                 }
               else
                 {
-                  setupXForAop (AOP (right));
+                  switchXToAop (&xbases, AOP (right));
                   accopWithAop ("eor", mc6800_reg_a, AOP (right), offset);
                 }
 
@@ -6489,8 +6537,11 @@ genXor (iCode * ic, iCode * ifx)
                *   multiple calls to emitLabel() ?!
                * and we can't genIfxJump, if there is none
                */
+              freeXBases (&xbases);
               if (!regalloc_dry_run)
                 emitLabel (tlbl);
+              if (offset)
+                mc6800_dirtyReg (mc6800_reg_x, false);
               pullOrFreeReg (mc6800_reg_b, needpullb);
               pullOrFreeReg (mc6800_reg_a, needpulla);
               if (ifx)
@@ -6514,6 +6565,7 @@ genXor (iCode * ic, iCode * ifx)
       if (AOP (left)->regmask & acc->mask)
         mc6800_useReg (acc);
     }
+  setupXBases (&xbases, AOP (left), AOP (right), AOP (result));
 
   offset = 0;
   while (size--)
@@ -6528,17 +6580,17 @@ genXor (iCode * ic, iCode * ifx)
           else if (AOP_TYPE (left) == AOP_REG && !IS_AOP_WITH_X (AOP (left)) && offset < AOP_SIZE (left)
                    && AOP (left)->aopu.aop_reg[offset]->isDead)
             reg = AOP (left)->aopu.aop_reg[offset];
-          setupXForAop (AOP (left));
+          switchXToAop (&xbases, AOP (left));
           loadRegFromAop (reg, AOP (left), offset);
           if (aopIsLitVal (right->aop, offset, 1, 0xff))
             rmwWithReg ("com", reg);
           else if (!aopIsLitVal (right->aop, offset, 1, 0x00))
             {
-              setupXForAop (AOP (right));
+              switchXToAop (&xbases, AOP (right));
               accopWithAop ("eor", reg, AOP (right), offset);
               mc6800_dirtyReg (reg, false);
             }
-          setupXForAop (AOP (result));
+          switchXToAop (&xbases, AOP (result));
           storeRegToAop (reg, AOP (result), offset);
           if (!(AOP (result)->regmask & reg->mask))
             mc6800_freeReg (reg);
@@ -6546,6 +6598,7 @@ genXor (iCode * ic, iCode * ifx)
       offset++;
     }
 
+  freeXBases (&xbases);
   pullOrFreeReg (acc, needpull);
 
 release:
