@@ -4309,7 +4309,6 @@ genPlusMANY (iCode *ic)
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RIGHT (ic), ic, false);
   aopOp (IC_RESULT (ic), ic, true);
-  setupXBases (&xbases, AOP (IC_LEFT (ic)), AOP (IC_RIGHT (ic)), AOP (IC_RESULT (ic)));
 
   if (AOP_TYPE (IC_LEFT (ic)) == AOP_LIT)
     {
@@ -4331,6 +4330,7 @@ genPlusMANY (iCode *ic)
       reg = IS_AOP_WITH_B (result) ? mc6800_reg_a : mc6800_reg_b;
       needpull = pushRegIfSurv (reg);
     }
+  setupXBases (&xbases, leftOp, rightOp, result);
 
   offset = 0;
   if (sameRegs (leftOp, result))
@@ -4749,7 +4749,6 @@ genMinusMANY (iCode *ic)
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RIGHT (ic), ic, false);
   aopOp (IC_RESULT (ic), ic, true);
-  setupXBases (&xbases, AOP (IC_LEFT (ic)), AOP (IC_RIGHT (ic)), AOP (IC_RESULT (ic)));
   result = AOP (IC_RESULT (ic));
   size = getDataSize (IC_RESULT (ic));
 
@@ -4762,6 +4761,7 @@ genMinusMANY (iCode *ic)
       reg = IS_AOP_WITH_B (result) ? mc6800_reg_a : mc6800_reg_b;
       needpull = pushRegIfSurv (reg);
     }
+  setupXBases (&xbases, AOP (IC_LEFT (ic)), AOP (IC_RIGHT (ic)), result);
 
   offset = 0;
   if (sameRegs (AOP (IC_LEFT (ic)), result))
@@ -5371,7 +5371,6 @@ genCmpMANY (iCode * ic, iCode * ifx, int opcode, int sign)
   aopOp (left, ic, false);
   aopOp (right, ic, false);
   aopOp (IC_RESULT (ic), ic, true);
-  setupXBases (&xbases, AOP (left), AOP (right), AOP (IC_RESULT (ic)));
 
   if (AOP_TYPE (left) == AOP_LIT && AOP_TYPE (right) != AOP_LIT)
     {
@@ -5406,6 +5405,7 @@ genCmpMANY (iCode * ic, iCode * ifx, int opcode, int sign)
     }
   reg = mc6800_reg_b->isDead ? mc6800_reg_b : mc6800_reg_a;
   needpull = pushRegIfSurv (reg);
+  setupXBases (&xbases, AOP (left), AOP (right), AOP (IC_RESULT (ic)));
   sub = "sub";
   while (size--)
     {
