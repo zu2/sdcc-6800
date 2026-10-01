@@ -9545,6 +9545,132 @@ genAssignLit (operand * result, operand * right)
 }
 
 
+static void
+genAssign1 (operand *result, operand *right)
+{
+  reg_info *acc;
+  bool needpull;
+  struct xbases xbases;
+
+  if (AOP_TYPE (result) == AOP_REG)
+    {
+      setupXForAop (AOP (right));
+      loadRegFromAop (AOP (result)->aopu.aop_reg[0], AOP (right), 0);
+      return;
+    }
+  if (AOP_TYPE (right) == AOP_REG)
+    {
+      setupXForAop (AOP (result));
+      storeRegToAop (AOP (right)->aopu.aop_reg[0], AOP (result), 0);
+      return;
+    }
+
+  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+  needpull = pushRegIfUsed (acc);
+  setupXBases (&xbases, AOP (right), NULL, AOP (result));
+  switchXToAop (&xbases, AOP (right));
+  loadRegFromAop (acc, AOP (right), 0);
+  switchXToAop (&xbases, AOP (result));
+  storeRegToAop (acc, AOP (result), 0);
+  freeXBases (&xbases);
+  pullOrFreeReg (acc, needpull);
+}
+
+static void
+genAssign2 (operand *result, operand *right)
+{
+  reg_info *acc;
+  bool needpull;
+  bool needpullb;
+  bool needpulla;
+  struct xbases xbases;
+  int offset;
+
+  if (IS_AOP_X (AOP (result)) && AOP_SIZE (right) == 1)
+    {
+      const char *tmp = allocTemp ();
+
+      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfUsed (acc);
+      setupXForAop (AOP (right));
+      loadRegFromAop (acc, AOP (right), 0);
+      mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
+      pullOrFreeReg (acc, needpull);
+      mc6800_emitOp ("clr", MODE_EXT, "%s", tmp);
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+      freeTemp ();
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      return;
+    }
+  if (AOP_TYPE (result) == AOP_REG)
+    {
+      setupXForAop (AOP (right));
+      loadRegFromAop (IS_AOP_X (AOP (result)) ? mc6800_reg_x : mc6800_reg_d, AOP (right), 0);
+      return;
+    }
+  if (AOP_TYPE (right) == AOP_REG && AOP_SIZE (right) == 2)
+    {
+      wassertl (!IS_AOP_X (AOP (right)) || AOP_TYPE (result) != AOP_SOF, "X assigned to the stack");
+      setupXForAop (AOP (result));
+      storeRegToAop (IS_AOP_X (AOP (right)) ? mc6800_reg_x : mc6800_reg_d, AOP (result), 0);
+      return;
+    }
+  if (AOP_TYPE (right) == AOP_STL)
+    {
+      needpullb = pushRegIfSurv (mc6800_reg_b);
+      needpulla = pushRegIfSurv (mc6800_reg_a);
+      loadRegFromAop (mc6800_reg_d, AOP (right), 0);
+      setupXForAop (AOP (result));
+      storeRegToAop (mc6800_reg_d, AOP (result), 0);
+      pullOrFreeReg (mc6800_reg_a, needpulla);
+      pullOrFreeReg (mc6800_reg_b, needpullb);
+      return;
+    }
+  if (AOP_SIZE (right) == 2 && AOP_TYPE (result) != AOP_SOF && mc6800_reg_x->isFree)
+    {
+      setupXForAop (AOP (right));
+      loadRegFromAop (mc6800_reg_x, AOP (right), 0);
+      storeRegToAop (mc6800_reg_x, AOP (result), 0);
+      mc6800_freeReg (mc6800_reg_x);
+      return;
+    }
+
+  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+  needpull = pushRegIfUsed (acc);
+  setupXBases (&xbases, AOP (right), NULL, AOP (result));
+  for (offset = 0; offset < 2; offset++)
+    {
+      switchXToAop (&xbases, AOP (right));
+      loadRegFromAop (acc, AOP (right), offset);
+      switchXToAop (&xbases, AOP (result));
+      storeRegToAop (acc, AOP (result), offset);
+    }
+  freeXBases (&xbases);
+  pullOrFreeReg (acc, needpull);
+}
+
+static void
+genAssignMANY (operand *result, operand *right)
+{
+  reg_info *acc;
+  bool needpull;
+  struct xbases xbases;
+  int offset;
+
+  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+  needpull = pushRegIfUsed (acc);
+  setupXBases (&xbases, AOP (right), NULL, AOP (result));
+  for (offset = 0; offset < AOP_SIZE (result); offset++)
+    {
+      switchXToAop (&xbases, AOP (right));
+      loadRegFromAop (acc, AOP (right), offset);
+      switchXToAop (&xbases, AOP (result));
+      storeRegToAop (acc, AOP (result), offset);
+    }
+  freeXBases (&xbases);
+  pullOrFreeReg (acc, needpull);
+}
+
 /*-----------------------------------------------------------------*/
 /* genAssign - generate code for assignment                        */
 /*-----------------------------------------------------------------*/
@@ -9560,10 +9686,6 @@ genAssign (iCode * ic)
 
   aopOp (right, ic, false);
   aopOp (result, ic, true);
-  if (!sameRegs (AOP (right), AOP (result)))
-    setupXForAop (AOP (right));
-  if (!IS_AOP_WITH_X (AOP (right)) && !sameRegs (AOP (right), AOP (result)))
-    setupXForAop (AOP (result));
   if (IS_SYMOP (result) && AOP (result)->op)
   {
     const char *varname = OP_SYMBOL (result)->name;
@@ -9584,14 +9706,26 @@ genAssign (iCode * ic)
     {
       int offset;
 
+      if (!sameRegs (AOP (right), AOP (result)))
+        setupXForAop (AOP (right));
+      if (!IS_AOP_WITH_X (AOP (right)) && !sameRegs (AOP (right), AOP (result)))
+        setupXForAop (AOP (result));
       for (offset = AOP_SIZE (result) - 1; offset >= 0; offset--)
         transferAopAop (AOP (right), offset, AOP (result), offset);
+      goto release;
     }
-  else if (!genAssignLit (result, right))
-    {
-      genCopy (result, right);
-    }
+  if (!isOperandVolatile (right, false)
+      && (operandsEqu (result, right) || sameRegs (AOP (right), AOP (result))))
+    goto release;
 
+  if (AOP_SIZE (result) == 1)
+    genAssign1 (result, right);
+  else if (AOP_SIZE (result) == 2)
+    genAssign2 (result, right);
+  else
+    genAssignMANY (result, right);
+
+release:
   freeAsmop (right, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
 }
