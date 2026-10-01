@@ -90,7 +90,7 @@ extern struct dbuf_s *codeOutBuf;
 static bool operandsEqu (operand * op1, operand * op2);
 static void loadRegFromConst (reg_info * reg, int c);
 static asmop *newAsmop (short type);
-static const char *aopAdrStr (asmop * aop, int loffset, bool bit16);
+static const char *aopGet (asmop * aop, int loffset);
 static void setupXForAop (asmop * aop);
 static void setupXFromSP (int stackOffset);
 static const char *setupTmpFromSP (int stackOffset);
@@ -175,21 +175,23 @@ mc6800_emitOp_o (const char *inst, asmop *aop, int loffset)
   int mode;
   const mc6800opcodedata *opcode = mc6800_getOpcodeData (inst);
 
+  if (!opcode)
+    fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "unknown opcode or invalid operand");
+
   if (loffset > aop->size - 1 && aop->type != AOP_LIT)
     mode = MODE_IMM;
   else if (aop->type == AOP_LIT || aop->type == AOP_IMMD)
     mode = MODE_IMM;
-  else if (aop->type == AOP_DIR)
+  else if (aop->type == AOP_DIR && opcode->mode[MODE_DIR].bytes)
     mode = MODE_DIR;
-  else if (aop->type == AOP_EXT)
+  else if (aop->type == AOP_DIR || aop->type == AOP_EXT)
     mode = MODE_EXT;
   else if (aop->type == AOP_SOF || aop->type == AOP_IDX)
     mode = MODE_IDX;
   else
     fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "unsupported operand");
 
-  if (!opcode
-      || !opcode->mode[mode].bytes
+  if (!opcode->mode[mode].bytes
       || !strcmp (inst, "ldx")
       || !strcmp (inst, "stx")
       || !strcmp (inst, "cpx")
@@ -200,7 +202,12 @@ mc6800_emitOp_o (const char *inst, asmop *aop, int loffset)
   regalloc_dry_run_cost += opcode->mode[mode].bytes;
   regalloc_dry_run_cost_cycles += opcode->mode[mode].cycles;
 
-  emitcode (inst, "%s", aopAdrStr (aop, loffset, false));
+  if (regalloc_dry_run)
+    return;
+  if (aop->type == AOP_DIR && mode == MODE_EXT)
+    emitcode (inst, "%s", aopGet (aop, loffset) + 1);
+  else
+    emitcode (inst, "%s", aopGet (aop, loffset));
 }
 
 static void
@@ -236,7 +243,14 @@ mc6800_emitOpw_o (const char *inst, asmop *aop, int loffset)
   regalloc_dry_run_cost += opcode->mode[mode].bytes;
   regalloc_dry_run_cost_cycles += opcode->mode[mode].cycles;
 
-  emitcode (inst, "%s", aopAdrStr (aop, loffset, true));
+  if (regalloc_dry_run)
+    return;
+  if (aop->type == AOP_LIT)
+    emitcode (inst, "%s", aopLiteralLong (aop->aopu.aop_lit, loffset, 2));
+  else if (mode == MODE_IMM)
+    emitcode (inst, "%s", aopGet (aop, loffset));
+  else
+    emitcode (inst, "%s", aopGet (aop, loffset + 1));
 }
 
 static void
@@ -1006,12 +1020,7 @@ storeConstToAop (int c, asmop * aop, int loffset)
       if (!c && !(aop->op && isOperandVolatile (aop->op, false))
           && (aop->type != AOP_SOF || !mc6800_reg_a->isFree && !mc6800_reg_b->isFree))
         {
-          const char *adr = aopAdrStr (aop, loffset, false);
-
-          if (adr[0] == '*')
-            adr++;
-          /* clr dst : 3 bytes, 6 cycles */
-          mc6800_emitOp ("clr", aop->type == AOP_SOF ? MODE_IDX : MODE_EXT, adr[0] == '*' ? adr + 1 : adr);
+          mc6800_emitOp_o ("clr", aop, loffset);
           break;
         }
       /* fall through */
@@ -1323,7 +1332,7 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
     case AOP_DUMMY:
       break;
     default:
-      mc6800_emitOp (rmwop, aop->type == AOP_SOF ? MODE_IDX : MODE_EXT, aopAdrStr (aop, loffset, false) + (aop->type == AOP_DIR ? 1 : 0));
+      mc6800_emitOp_o (rmwop, aop, loffset);
     }
 
 }
@@ -1487,23 +1496,6 @@ operandConflictsWithX (operand *op)
 }
 
 
-static void
-adjustX (int diff)
-{
-  while (diff > 0)
-    {
-      mc6800_emitOp ("inx", MODE_INH, "");
-      mc6800_reg_x->stackOffset++;
-      diff--;
-    }
-  while (diff < 0)
-    {
-      mc6800_emitOp ("dex", MODE_INH, "");
-      mc6800_reg_x->stackOffset--;
-      diff++;
-    }
-}
-
 static const char *
 setupTmpFromSP (int stackOffset)
 {
@@ -1560,7 +1552,8 @@ setupXFromSP (int stackOffset)
 static void
 setupXForAop (asmop * aop)
 {
-  int lo, hi, shift, limit;
+  int sp, first, last, pages, base;
+  bool far;
 
   if (aop->type == AOP_IDX)
     {
@@ -1579,8 +1572,13 @@ setupXForAop (asmop * aop)
     }
   if (aop->type != AOP_SOF)
     return;
-  if (mc6800_reg_x->aop != &tsxaop)
+
+  sp = -_G.stackPushes;
+
+  if (regalloc_dry_run && !mc6800_dry_stack_size)
     {
+      if (mc6800_reg_x->aop == &tsxaop)
+        return;
       if (!mc6800_reg_x->isFree)
         {
           UNIMPLEMENTED;
@@ -1589,23 +1587,52 @@ setupXForAop (asmop * aop)
       mc6800_emitOp ("tsx", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = &tsxaop;
-      mc6800_reg_x->stackOffset = -_G.stackPushes;
+      mc6800_reg_x->stackOffset = sp;
+      return;
     }
-  if (regalloc_dry_run && !mc6800_dry_stack_size)
-    return;
 
-  lo = _G.stackOfs - mc6800_reg_x->stackOffset + aop->aopu.aop_stk;
-  hi = lo + aop->size - 1;
-  shift = 0;
-  if (hi > 255)
-    shift = hi - 255;
-  if (lo < 0)
-    shift = lo;
-  limit = (mc6800_reg_a->isFree || mc6800_reg_b->isFree) ? 16 : 18;
-  if (shift >= -limit && shift <= limit)
-    adjustX (shift);
+  first = _G.stackOfs + aop->aopu.aop_stk;
+  last = first + aop->size - 1;
+  far = last - sp > 255;
+  pages = (first - (sp - 1)) / 256;
+  if (!far)
+    base = sp;
+  else if (last - 255 > sp - 1 + 256 * pages)
+    base = last - 255;
   else
-    setupXFromSP (mc6800_reg_x->stackOffset + shift);
+    base = sp - 1 + 256 * pages;
+
+  if (mc6800_reg_x->aop == &tsxaop)
+    {
+      if (far && mc6800_reg_x->stackOffset == base)
+        return;
+      if (!far && first - mc6800_reg_x->stackOffset >= 0 && last - mc6800_reg_x->stackOffset <= 255)
+        return;
+    }
+  if (!mc6800_reg_x->isFree)
+    {
+      UNIMPLEMENTED;
+      return;
+    }
+
+  if (far)
+    {
+      const char *tmp = allocTemp ();
+      int i;
+
+      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+      for (i = 0; i < pages; i++)
+        mc6800_emitOp ("inc", MODE_EXT, "%s", tmp);
+      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+      freeTemp ();
+      for (i = sp - 1 + 256 * pages; i < base; i++)
+        mc6800_emitOp ("inx", MODE_INH, "");
+    }
+  else
+    mc6800_emitOp ("tsx", MODE_INH, "");
+  mc6800_dirtyReg (mc6800_reg_x, false);
+  mc6800_reg_x->aop = &tsxaop;
+  mc6800_reg_x->stackOffset = base;
 }
 
 struct xbases
@@ -1679,54 +1706,31 @@ switchXToAop (struct xbases *xbases, asmop *aop)
     }
   if (aop->type != AOP_SOF)
     return;
-  if (regalloc_dry_run && !mc6800_dry_stack_size)
-    {
-      if (mc6800_reg_x->aop == &tsxaop)
-        return;
-      if (!mc6800_reg_x->isFree)
-        {
-          UNIMPLEMENTED;
-          return;
-        }
-      mc6800_emitOp ("tsx", MODE_INH, "");
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      mc6800_reg_x->aop = &tsxaop;
-      mc6800_reg_x->stackOffset = -_G.stackPushes;
-      return;
-    }
   xofs = _G.stackOfs - mc6800_reg_x->stackOffset + aop->aopu.aop_stk;
   if (mc6800_reg_x->aop == &tsxaop && xofs >= 0 && xofs + aop->size - 1 <= 255)
     return;
-  if (!mc6800_reg_x->isFree)
-    {
-      UNIMPLEMENTED;
-      return;
-    }
   for (i = 0; i < xbases->count; i++)
-    if (xbases->lower[i] <= _G.stackOfs + aop->aopu.aop_stk
+    if (xbases->regtemp[i]
+        && xbases->lower[i] <= _G.stackOfs + aop->aopu.aop_stk
         && _G.stackOfs + aop->aopu.aop_stk + aop->size - 1 <= xbases->upper[i])
-      break;
-  if (xbases->regtemp[i])
-    {
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", xbases->regtemp[i]);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      mc6800_reg_x->aop = &tsxaop;
-      mc6800_reg_x->stackOffset = xbases->lower[i];
-      return;
-    }
-  mc6800_emitOp ("tsx", MODE_INH, "");
-  mc6800_dirtyReg (mc6800_reg_x, false);
-  mc6800_reg_x->aop = &tsxaop;
-  mc6800_reg_x->stackOffset = -_G.stackPushes;
-  if (_G.stackPushes + xbases->upper[i] > 255)
-    adjustX (_G.stackPushes + xbases->upper[i] - 255);
+      {
+        if (!mc6800_reg_x->isFree)
+          {
+            UNIMPLEMENTED;
+            return;
+          }
+        mc6800_emitOp ("ldx", MODE_DIR, "*%s", xbases->regtemp[i]);
+        mc6800_dirtyReg (mc6800_reg_x, false);
+        mc6800_reg_x->aop = &tsxaop;
+        mc6800_reg_x->stackOffset = xbases->lower[i];
+        return;
+      }
+  setupXForAop (aop);
 }
 
 static void
 genMove1_o (asmop *result, int roffset, asmop *source, int soffset)
 {
-  const char *dsttmp = NULL;
-  int xofs, dstofs;
   reg_info *reg;
   bool needpull = false;
 
@@ -1742,26 +1746,8 @@ genMove1_o (asmop *result, int roffset, asmop *source, int soffset)
     }
 
   setupXForAop (source);
-  xofs = _G.stackOfs - mc6800_reg_x->stackOffset + result->aopu.aop_stk + result->size - roffset - 1;
-  dstofs = mc6800_reg_x->stackOffset;
-  if (xofs > 255)
-    dstofs += xofs - 255;
-  if (xofs < 0)
-    dstofs += xofs;
-  if (dstofs - mc6800_reg_x->stackOffset < -16 || dstofs - mc6800_reg_x->stackOffset > 16)
-    dsttmp = setupTmpFromSP (dstofs);
-
   loadRegFromAop (reg, source, soffset);
-  if (dsttmp)
-    {
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", dsttmp);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      mc6800_reg_x->aop = &tsxaop;
-      mc6800_reg_x->stackOffset = dstofs;
-      freeTemp ();
-    }
-  else
-    adjustX (dstofs - mc6800_reg_x->stackOffset);
+  setupXForAop (result);
   storeRegToAop (reg, result, roffset);
 
   pullOrFreeReg (reg, needpull);
@@ -1770,34 +1756,14 @@ genMove1_o (asmop *result, int roffset, asmop *source, int soffset)
 static void
 genMove2_o (asmop *result, int roffset, asmop *source, int soffset)
 {
-  const char *dsttmp = NULL;
-  int xofs, dstofs;
   bool needpulla, needpullb;
 
   needpullb = pushRegIfUsed (mc6800_reg_b);
   needpulla = pushRegIfUsed (mc6800_reg_a);
 
   setupXForAop (source);
-  xofs = _G.stackOfs - mc6800_reg_x->stackOffset + result->aopu.aop_stk + result->size - roffset - 2;
-  dstofs = mc6800_reg_x->stackOffset;
-  if (xofs + 1 > 255)
-    dstofs += xofs + 1 - 255;
-  if (xofs < 0)
-    dstofs += xofs;
-  if (dstofs - mc6800_reg_x->stackOffset < -16 || dstofs - mc6800_reg_x->stackOffset > 16)
-    dsttmp = setupTmpFromSP (dstofs);
-
   loadRegFromAop (mc6800_reg_d, source, soffset);
-  if (dsttmp)
-    {
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", dsttmp);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      mc6800_reg_x->aop = &tsxaop;
-      mc6800_reg_x->stackOffset = dstofs;
-      freeTemp ();
-    }
-  else
-    adjustX (dstofs - mc6800_reg_x->stackOffset);
+  setupXForAop (result);
   storeRegToAop (mc6800_reg_d, result, roffset);
   mc6800_freeReg (mc6800_reg_d);
 
@@ -1808,48 +1774,27 @@ genMove2_o (asmop *result, int roffset, asmop *source, int soffset)
 static void
 genMove4_o (asmop *result, int roffset, asmop *source, int soffset)
 {
-  const char *dsttmp = NULL;
   asmop *tmpaop;
-  int xofs, dstofs;
   bool needpulla, needpullb;
 
   needpullb = pushRegIfUsed (mc6800_reg_b);
   needpulla = pushRegIfUsed (mc6800_reg_a);
 
-  setupXForAop (source);
-  xofs = _G.stackOfs - mc6800_reg_x->stackOffset + result->aopu.aop_stk + result->size - roffset - 4;
-  dstofs = mc6800_reg_x->stackOffset;
-  if (xofs + 3 > 255)
-    dstofs += xofs + 3 - 255;
-  if (xofs < 0)
-    dstofs += xofs;
-  if (dstofs - mc6800_reg_x->stackOffset < -16 || dstofs - mc6800_reg_x->stackOffset > 16)
-    dsttmp = setupTmpFromSP (dstofs);
-
   tmpaop = newAsmop (AOP_DIR);
   tmpaop->aopu.aop_dir = (char *) allocTemp ();
   tmpaop->size = 2;
 
+  setupXForAop (source);
   loadRegFromAop (mc6800_reg_d, source, soffset + 2);
   storeRegToAop (mc6800_reg_d, tmpaop, 0);
   loadRegFromAop (mc6800_reg_d, source, soffset);
-  if (dsttmp)
-    {
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", dsttmp);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      mc6800_reg_x->aop = &tsxaop;
-      mc6800_reg_x->stackOffset = dstofs;
-    }
-  else
-    adjustX (dstofs - mc6800_reg_x->stackOffset);
+  setupXForAop (result);
   storeRegToAop (mc6800_reg_d, result, roffset);
   loadRegFromAop (mc6800_reg_d, tmpaop, 0);
   storeRegToAop (mc6800_reg_d, result, roffset + 2);
   mc6800_freeReg (mc6800_reg_d);
 
   freeTemp ();
-  if (dsttmp)
-    freeTemp ();
 
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -1858,33 +1803,11 @@ genMove4_o (asmop *result, int roffset, asmop *source, int soffset)
 static void
 genMoveMANY_o (asmop *result, int roffset, asmop *source, int soffset, int size)
 {
-  int slo = source->aopu.aop_stk + source->size - soffset - size;
-  int rlo = result->aopu.aop_stk + result->size - roffset - size;
-  const char *srctmp = NULL, *dsttmp = NULL;
-  int srcofs, dstofs;
   bool needpulla, needpullb;
-  int n, k, xofs;
+  int n, k;
 
   needpullb = pushRegIfUsed (mc6800_reg_b);
   needpulla = pushRegIfUsed (mc6800_reg_a);
-
-  xofs = _G.stackOfs + _G.stackPushes + slo;
-  srcofs = -_G.stackPushes;
-  if (xofs + size - 1 > 255)
-    srcofs += xofs + size - 1 - 255;
-  if (xofs < 0)
-    srcofs += xofs;
-  if (srcofs + _G.stackPushes < -16 || srcofs + _G.stackPushes > 16)
-    srctmp = setupTmpFromSP (srcofs);
-
-  xofs = _G.stackOfs + _G.stackPushes + rlo;
-  dstofs = -_G.stackPushes;
-  if (xofs + size - 1 > 255)
-    dstofs += xofs + size - 1 - 255;
-  if (xofs < 0)
-    dstofs += xofs;
-  if (dstofs + _G.stackPushes < -16 || dstofs + _G.stackPushes > 16)
-    dsttmp = setupTmpFromSP (dstofs);
 
   n = size;
   while (n > 0)
@@ -1892,55 +1815,13 @@ genMoveMANY_o (asmop *result, int roffset, asmop *source, int soffset, int size)
       k = n >= 2 ? 2 : 1;
       n -= k;
 
-      xofs = _G.stackOfs - mc6800_reg_x->stackOffset + slo + size - n - k;
-      if (mc6800_reg_x->aop != &tsxaop || xofs < 0 || xofs + k - 1 > 255)
-        {
-          if (srctmp)
-            {
-              mc6800_emitOp ("ldx", MODE_DIR, "*%s", srctmp);
-              mc6800_dirtyReg (mc6800_reg_x, false);
-              mc6800_reg_x->aop = &tsxaop;
-              mc6800_reg_x->stackOffset = srcofs;
-            }
-          else
-            {
-              mc6800_emitOp ("tsx", MODE_INH, "");
-              mc6800_dirtyReg (mc6800_reg_x, false);
-              mc6800_reg_x->aop = &tsxaop;
-              mc6800_reg_x->stackOffset = -_G.stackPushes;
-              adjustX (srcofs + _G.stackPushes);
-            }
-        }
+      setupXForAop (source);
       loadRegFromAop (k == 2 ? mc6800_reg_d : mc6800_reg_a, source, soffset + n);
-
-      xofs = _G.stackOfs - mc6800_reg_x->stackOffset + rlo + size - n - k;
-      if (mc6800_reg_x->aop != &tsxaop || xofs < 0 || xofs + k - 1 > 255)
-        {
-          if (dsttmp)
-            {
-              mc6800_emitOp ("ldx", MODE_DIR, "*%s", dsttmp);
-              mc6800_dirtyReg (mc6800_reg_x, false);
-              mc6800_reg_x->aop = &tsxaop;
-              mc6800_reg_x->stackOffset = dstofs;
-            }
-          else
-            {
-              mc6800_emitOp ("tsx", MODE_INH, "");
-              mc6800_dirtyReg (mc6800_reg_x, false);
-              mc6800_reg_x->aop = &tsxaop;
-              mc6800_reg_x->stackOffset = -_G.stackPushes;
-              adjustX (dstofs + _G.stackPushes);
-            }
-        }
+      setupXForAop (result);
       storeRegToAop (k == 2 ? mc6800_reg_d : mc6800_reg_a, result, roffset + n);
 
       mc6800_freeReg (k == 2 ? mc6800_reg_d : mc6800_reg_a);
     }
-
-  if (dsttmp)
-    freeTemp ();
-  if (srctmp)
-    freeTemp ();
 
   pullOrFreeReg (mc6800_reg_a, needpulla);
   pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -2528,16 +2409,13 @@ aopDerefAop (asmop * aop, int offset)
 }
 
 
-/*-----------------------------------------------------------------*/
-/* aopAdrStr - for referencing the address of the aop              */
-/*-----------------------------------------------------------------*/
 /* loffset is the logical offset (0 is the least significant byte)  */
 static const char *
-aopAdrStr (asmop * aop, int loffset, bool bit16)
+aopGet (asmop * aop, int loffset)
 {
   char *s = buffer;
   char *rs;
-  int offset = aop->size - 1 - loffset - (bit16 ? 1 : 0);
+  int offset = aop->size - 1 - loffset;
   int xofs;
 
   /* offset is greater than
@@ -2566,8 +2444,6 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
       return rs;
 
     case AOP_DIR:
-      if (regalloc_dry_run)
-        return "*dry";
       if (offset)
         sprintf (s, "*(%s + %d)", aop->aopu.aop_dir, offset);
       else
@@ -2577,8 +2453,6 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
       return rs;
 
     case AOP_EXT:
-      if (regalloc_dry_run)
-        return "dry";
       if (offset)
         sprintf (s, "(%s + %d)", aop->aopu.aop_dir, offset);
       else
@@ -2591,16 +2465,11 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
       return aop->aopu.aop_reg[loffset]->name;
 
     case AOP_LIT:
-      if (bit16)
-        return aopLiteralLong (aop->aopu.aop_lit, loffset, 2);
-      else
-        return aopLiteral (aop->aopu.aop_lit, loffset);
+      return aopLiteral (aop->aopu.aop_lit, loffset);
 
     case AOP_SOF:
-      if (!regalloc_dry_run && mc6800_reg_x->aop != &tsxaop)
+      if (mc6800_reg_x->aop != &tsxaop)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "AOP_SOF without tsx");
-      if (regalloc_dry_run)
-        return "1,x";
       xofs = _G.stackOfs - mc6800_reg_x->stackOffset + aop->aopu.aop_stk + offset;
       if (xofs < 0 || xofs > 255)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "stack offset out of range");
@@ -2609,14 +2478,11 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
       strcpy (rs, s);
       return rs;
     case AOP_IDX:
-      if (!regalloc_dry_run && mc6800_reg_x->aop != aop
-          && !IS_AOP_X (AOP (aop->pointer)))
+      if (mc6800_reg_x->aop != aop && !IS_AOP_X (AOP (aop->pointer)))
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "AOP_IDX without ldx");
       xofs = aop->aopu.aop_stk + offset;
       if (xofs < 0 || xofs > 255)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "index offset out of range");
-      if (regalloc_dry_run) /* Don't worry about the exact offset during the dry run */
-        return "1,x";
       sprintf (s, "%d,x", xofs);
       rs = Safe_calloc (1, strlen (s) + 1);
       strcpy (rs, s);
@@ -2625,7 +2491,7 @@ aopAdrStr (asmop * aop, int loffset, bool bit16)
       break;
     }
 
-  werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "aopAdrStr got unsupported aop->type");
+  werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "aopGet got unsupported aop->type");
   exit (1);
 }
 
@@ -6655,7 +6521,7 @@ expand_symbols (iCode * ic, const char *inlin)
               else
                 {
                   asmop *aop = aopForSym (ic, sym, false);
-                  const char *l = aopAdrStr (aop, aop->size - 1, true);
+                  const char *l = aopGet (aop, aop->size - 1);
 
                   if ('#' == *l)
                     l++;
