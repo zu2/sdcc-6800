@@ -2868,27 +2868,34 @@ genNot (iCode * ic)
 static void
 genUminusFloat (operand * op, operand * result)
 {
-  int size, offset = 0;
-  bool needpula;
+  int size = AOP_SIZE (op);
+  int offset;
+  reg_info *acc;
+  bool needpull;
+  struct xbases xbases;
 
   D (emitcode (";     genUminusFloat", ""));
 
+  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+  needpull = pushRegIfUsed (acc);
+  setupXBases (&xbases, AOP (op), NULL, AOP (result));
+
   /* for this we just copy and then flip the bit */
-
-  size = AOP_SIZE (op) - 1;
-
-  while (size--)
+  for (offset = 0; offset < size - 1; offset++)
     {
-      transferAopAop (AOP (op), offset, AOP (result), offset);
-      offset++;
+      switchXToAop (&xbases, AOP (op));
+      loadRegFromAop (acc, AOP (op), offset);
+      switchXToAop (&xbases, AOP (result));
+      storeRegToAop (acc, AOP (result), offset);
     }
+  switchXToAop (&xbases, AOP (op));
+  loadRegFromAop (acc, AOP (op), offset);
+  mc6800_emitOpWithAcc ("eor", acc, MODE_IMM, "#0x80");
+  switchXToAop (&xbases, AOP (result));
+  storeRegToAop (acc, AOP (result), offset);
 
-  needpula = pushRegIfSurv (mc6800_reg_a);
-  loadRegFromAop (mc6800_reg_a, AOP (op), offset);
-  mc6800_emitOp ("eora", MODE_IMM, "#0x80");
-  mc6800_useReg (mc6800_reg_a);
-  storeRegToAop (mc6800_reg_a, AOP (result), offset);
-  pullOrFreeReg (mc6800_reg_a, needpula);
+  freeXBases (&xbases);
+  pullOrFreeReg (acc, needpull);
 }
 
 /*-----------------------------------------------------------------*/
@@ -2898,8 +2905,9 @@ static void
 genUminus (iCode * ic)
 {
   int offset, size;
-  bool needpula, needpullb;
-  asmop *result;
+  reg_info *acc;
+  bool needpull, needpulla, needpullb;
+  struct xbases xbases;
 
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
@@ -2910,12 +2918,6 @@ genUminus (iCode * ic)
   /* assign asmops */
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RESULT (ic), ic, true);
-  if (!IS_AOP_WITH_X (AOP (IC_LEFT (ic))))
-    {
-      setupXForAop (AOP (IC_RESULT (ic)));
-      setupXForAop (AOP (IC_LEFT (ic)));
-    }
-
 
   /* if float then do float stuff */
   if (IS_FLOAT (operandType (IC_LEFT (ic))))
@@ -2926,69 +2928,85 @@ genUminus (iCode * ic)
 
   /* otherwise subtract from zero */
   size = AOP_SIZE (IC_LEFT (ic));
-  offset = 0;
-
-  if (size == 1 && AOP_SIZE (IC_RESULT (ic)) == 1
-  &&  (IS_AOP_B (AOP (IC_RESULT (ic))) || (IS_AOP_B (AOP (IC_LEFT (ic))) && mc6800_reg_b->isDead)))
-    {
-      loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (ic)), 0);
-      rmwWithReg ("neg", mc6800_reg_b);
-      if (maskedtopbyte)
-        {
-          mc6800_emitOp ("andb", MODE_IMM, "#0x%02x", topbytemask);
-        }
-      storeRegToAop (mc6800_reg_b, AOP (IC_RESULT (ic)), 0);
-      goto release;
-    }
 
   if (size == 1)
     {
-      needpula = pushRegIfSurv (mc6800_reg_a);
-      loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (ic)), 0);
-      rmwWithReg ("neg", mc6800_reg_a);
-      if (maskedtopbyte)
+      needpull = false;
+      if (AOP_TYPE (IC_RESULT (ic)) == AOP_REG)
+        acc = AOP (IC_RESULT (ic))->aopu.aop_reg[0];
+      else if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && AOP (IC_LEFT (ic))->aopu.aop_reg[0]->isDead)
+        acc = AOP (IC_LEFT (ic))->aopu.aop_reg[0];
+      else
         {
-          mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
+          acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+          needpull = pushRegIfUsed (acc);
         }
-      mc6800_freeReg (mc6800_reg_a);
-      storeRegToFullAop (mc6800_reg_a, AOP (IC_RESULT (ic)), SPEC_USIGN (operandType (IC_LEFT (ic))));
-      pullOrFreeReg (mc6800_reg_a, needpula);
+      setupXBases (&xbases, AOP (IC_LEFT (ic)), NULL, AOP (IC_RESULT (ic)));
+      switchXToAop (&xbases, AOP (IC_LEFT (ic)));
+      loadRegFromAop (acc, AOP (IC_LEFT (ic)), 0);
+      rmwWithReg ("neg", acc);
+      if (maskedtopbyte)
+        mc6800_emitOpWithAcc ("and", acc, MODE_IMM, "#0x%02x", topbytemask);
+      switchXToAop (&xbases, AOP (IC_RESULT (ic)));
+      storeRegToAop (acc, AOP (IC_RESULT (ic)), 0);
+      freeXBases (&xbases);
+      pullOrFreeReg (acc, needpull);
       goto release;
     }
 
   if (size == 2)
     {
       needpullb = pushRegIfSurv (mc6800_reg_b);
-      needpula = pushRegIfSurv (mc6800_reg_a);
-      loadRegFromAop (mc6800_reg_d, AOP (IC_LEFT (ic)), 0);
-      rmwWithReg ("neg", mc6800_reg_a);
-      rmwWithReg ("neg", mc6800_reg_b);
-      mc6800_emitOp ("sbca", MODE_IMM, "#0x00");
+      needpulla = pushRegIfSurv (mc6800_reg_a);
+      setupXBases (&xbases, AOP (IC_LEFT (ic)), NULL, AOP (IC_RESULT (ic)));
+      if (IS_AOP_D (AOP (IC_LEFT (ic))))
+        {
+          rmwWithReg ("neg", mc6800_reg_a);
+          rmwWithReg ("neg", mc6800_reg_b);
+          mc6800_emitOp ("sbca", MODE_IMM, "#0x00");
+        }
+      else
+        {
+          switchXToAop (&xbases, AOP (IC_LEFT (ic)));
+          loadRegFromConst (mc6800_reg_a, 0);
+          loadRegFromConst (mc6800_reg_b, 0);
+          mc6800_emitOp_o ("subb", AOP (IC_LEFT (ic)), 0);
+          mc6800_emitOp_o ("sbca", AOP (IC_LEFT (ic)), 1);
+          mc6800_dirtyReg (mc6800_reg_b, false);
+        }
+      if (maskedtopbyte)
+        mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
       mc6800_dirtyReg (mc6800_reg_a, false);
+      switchXToAop (&xbases, AOP (IC_RESULT (ic)));
       storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
-      pullOrFreeReg (mc6800_reg_a, needpula);
+      freeXBases (&xbases);
+      pullOrFreeReg (mc6800_reg_a, needpulla);
       pullOrFreeReg (mc6800_reg_b, needpullb);
       goto release;
     }
 
-  result = AOP (IC_RESULT (ic));
-
-  needpula = pushRegIfSurv (mc6800_reg_a);
-  while (size--)
+  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+  needpull = pushRegIfUsed (acc);
+  setupXBases (&xbases, AOP (IC_LEFT (ic)), NULL, AOP (IC_RESULT (ic)));
+  for (offset = 0; offset < size; offset++)
     {
       /* clra clears the carry, so the borrow would be lost */
       if (offset)
         {
-          mc6800_emitOp ("ldaa", MODE_IMM, "#0x00");
-          mc6800_dirtyReg (mc6800_reg_a, false);
+          mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
+          mc6800_dirtyReg (acc, false);
         }
       else
-        loadRegFromConst (mc6800_reg_a, 0);
-      accopWithAop (offset ? "sbc" : "sub", mc6800_reg_a, AOP (IC_LEFT (ic)), offset);
-      storeRegToAop (mc6800_reg_a, result, offset++);
+        loadRegFromConst (acc, 0);
+      switchXToAop (&xbases, AOP (IC_LEFT (ic)));
+      accopWithAop (offset ? "sbc" : "sub", acc, AOP (IC_LEFT (ic)), offset);
+      if (maskedtopbyte && offset == size - 1)
+        mc6800_emitOpWithAcc ("and", acc, MODE_IMM, "#0x%02x", topbytemask);
+      switchXToAop (&xbases, AOP (IC_RESULT (ic)));
+      storeRegToAop (acc, AOP (IC_RESULT (ic)), offset);
     }
-  storeRegSignToUpperAop (mc6800_reg_a, result, offset, SPEC_USIGN (operandType (IC_LEFT (ic))));
-  pullOrFreeReg (mc6800_reg_a, needpula);
+  freeXBases (&xbases);
+  pullOrFreeReg (acc, needpull);
 
 release:
   /* release the aops */
