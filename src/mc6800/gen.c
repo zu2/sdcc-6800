@@ -6946,6 +6946,10 @@ static void
 genGetByte (iCode * ic)
 {
   operand *left, *right, *result;
+  int offset;
+  reg_info *acc;
+  bool needpull;
+  struct xbases xbases;
 
   D (emitcode (";", "genGetByte"));
 
@@ -6955,10 +6959,31 @@ genGetByte (iCode * ic)
   aopOp (left, ic, false);
   aopOp (right, ic, false);
   aopOp (result, ic, false);
-  setupXForAop (AOP (result));
-  setupXForAop (AOP (left));
 
-  transferAopAop (AOP (left), (int) ulFromVal (AOP (right)->aopu.aop_lit) / 8, AOP (result), 0);
+  offset = (int) ulFromVal (AOP (right)->aopu.aop_lit) / 8;
+
+  if (IS_AOP_A (AOP (result)) || IS_AOP_B (AOP (result)))
+    {
+      setupXForAop (AOP (left));
+      loadRegFromAop (AOP (result)->aopu.aop_reg[0], AOP (left), offset);
+    }
+  else if (IS_AOP_D (AOP (left)))
+    {
+      setupXForAop (AOP (result));
+      storeRegToAop (AOP (left)->aopu.aop_reg[offset], AOP (result), 0);
+    }
+  else
+    {
+      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfSurv (acc);
+      setupXBases (&xbases, AOP (left), NULL, AOP (result));
+      switchXToAop (&xbases, AOP (left));
+      loadRegFromAop (acc, AOP (left), offset);
+      switchXToAop (&xbases, AOP (result));
+      storeRegToAop (acc, AOP (result), 0);
+      freeXBases (&xbases);
+      pullOrFreeReg (acc, needpull);
+    }
 
   freeAsmop (result, NULL, ic, true);
   freeAsmop (right, NULL, ic, true);
@@ -6973,6 +6998,10 @@ genGetWord (iCode * ic)
 {
   operand *left, *right, *result;
   int offset;
+  int i;
+  reg_info *acc;
+  bool needpull;
+  struct xbases xbases;
 
   D (emitcode (";", "genGetWord"));
 
@@ -6984,8 +7013,34 @@ genGetWord (iCode * ic)
   aopOp (result, ic, false);
 
   offset = (int) ulFromVal (AOP (right)->aopu.aop_lit) / 8;
-  transferAopAop (AOP (left), offset + 1, AOP (result), 1);
-  transferAopAop (AOP (left), offset, AOP (result), 0);
+
+  if (IS_AOP_X (AOP (result)) || IS_AOP_D (AOP (result)))
+    {
+      setupXForAop (AOP (left));
+      loadRegFromAop (IS_AOP_X (AOP (result)) ? mc6800_reg_x : mc6800_reg_d, AOP (left), offset);
+    }
+  else if ((AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) && mc6800_reg_x->isFree)
+    {
+      setupXForAop (AOP (left));
+      loadRegFromAop (mc6800_reg_x, AOP (left), offset);
+      storeRegToAop (mc6800_reg_x, AOP (result), 0);
+      mc6800_freeReg (mc6800_reg_x);
+    }
+  else
+    {
+      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfSurv (acc);
+      setupXBases (&xbases, AOP (left), NULL, AOP (result));
+      for (i = 1; i >= 0; i--)
+        {
+          switchXToAop (&xbases, AOP (left));
+          loadRegFromAop (acc, AOP (left), offset + i);
+          switchXToAop (&xbases, AOP (result));
+          storeRegToAop (acc, AOP (result), i);
+        }
+      freeXBases (&xbases);
+      pullOrFreeReg (acc, needpull);
+    }
 
   freeAsmop (result, NULL, ic, true);
   freeAsmop (right, NULL, ic, true);
@@ -9967,13 +10022,28 @@ genCast (iCode * ic)
           goto release;
         }
 
-      if (AOP_TYPE (result) == AOP_REG)
+      if (IS_AOP_X (AOP (result)) && !fixtopbyte)
+        {
+          setupXForAop (AOP (right));
+          loadRegFromAop (mc6800_reg_x, AOP (right), 0);
+          goto release;
+        }
+
+      if (IS_AOP_X (AOP (result)))
+        {
+          topreg = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+          needpull = pushRegIfSurv (topreg);
+          setupXForAop (AOP (right));
+          loadRegFromAop (mc6800_reg_x, AOP (right), 0);
+          loadRegFromAop (topreg, AOP (result), top);
+        }
+      else if (AOP_TYPE (result) == AOP_REG)
         {
           setupXForAop (AOP (right));
           loadRegFromAop (AOP_SIZE (result) == 1 ? AOP (result)->aopu.aop_reg[0] : mc6800_reg_d, AOP (right), 0);
           topreg = AOP (result)->aopu.aop_reg[top];
         }
-      else if (AOP_TYPE (right) == AOP_REG)
+      else if (AOP_TYPE (right) == AOP_REG && !IS_AOP_X (AOP (right)))
         {
           topreg = AOP (right)->aopu.aop_reg[top];
           if (fixtopbyte)
@@ -10002,10 +10072,17 @@ genCast (iCode * ic)
             }
         }
 
+      if (IS_AOP_X (AOP (result)))
+        {
+          storeRegToAop (topreg, AOP (result), top);
+          pullOrFreeReg (topreg, needpull);
+          goto release;
+        }
+
       if (AOP_TYPE (result) == AOP_REG)
         goto release;
 
-      if (AOP_TYPE (right) == AOP_REG)
+      if (AOP_TYPE (right) == AOP_REG && !IS_AOP_X (AOP (right)))
         {
           setupXForAop (AOP (result));
           storeRegToAop (AOP_SIZE (result) == 1 ? topreg : mc6800_reg_d, AOP (result), 0);
