@@ -9866,44 +9866,10 @@ genCast (iCode * ic)
 
   unsigned topbytemask = (IS_BITINT (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
+  bool fixtopbyte = IS_BITINT (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8) && bitsForType (resulttype) < bitsForType (righttype);
 
   aopOp (right, ic, false);
   aopOp (result, ic, false);
-
-  if (IS_BITINT (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8) && bitsForType (resulttype) < bitsForType (righttype))
-    {
-      if (AOP_SIZE (result) == 1)
-        genAssign1 (result, right);
-      else if (AOP_SIZE (result) == 2)
-        genAssign2 (result, right);
-      else
-        genAssignMANY (result, right);
-
-      if (AOP_TYPE (result) == AOP_REG && !IS_AOP_WITH_X (AOP (result)))
-        acc = AOP (result)->aopu.aop_reg[AOP_SIZE (result) - 1];
-      else
-        {
-          acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-          needpull = pushRegIfUsed (acc);
-          setupXForAop (AOP (result));
-          loadRegFromAop (acc, AOP (result), AOP_SIZE (result) - 1);
-        }
-      mc6800_emitOpWithAcc ("and", acc, MODE_IMM, "#0x%02x", topbytemask);
-      if (!SPEC_USIGN (resulttype))
-        {
-          symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (0);
-          mc6800_emitOpWithAcc ("bit", acc, MODE_IMM, "#0x%02x", 1u << (SPEC_BITINTWIDTH (resulttype) % 8 - 1));
-          emitBranch ("beq", tlbl);
-          mc6800_emitOpWithAcc ("ora", acc, MODE_IMM, "#0x%02x", ~topbytemask & 0xff);
-          emitLabel (tlbl);
-        }
-      if (AOP_TYPE (result) != AOP_REG || IS_AOP_WITH_X (AOP (result)))
-        {
-          storeRegToAop (acc, AOP (result), AOP_SIZE (result) - 1);
-          pullOrFreeReg (acc, needpull);
-        }
-      goto release;
-    }
 
   if (IS_BOOL (resulttype))
     {
@@ -9974,7 +9940,7 @@ genCast (iCode * ic)
       goto release;
     }
 
-  if (AOP_SIZE (result) <= AOP_SIZE (right))
+  if (AOP_SIZE (result) == AOP_SIZE (right) && !fixtopbyte)
     {
       wassert (!IS_BITINT (resulttype) || !(SPEC_BITINTWIDTH (resulttype) % 8));
       if (AOP_SIZE (result) == 1)
@@ -9983,6 +9949,82 @@ genCast (iCode * ic)
         genAssign2 (result, right);
       else
         genAssignMANY (result, right);
+      goto release;
+    }
+
+  if (AOP_SIZE (result) < AOP_SIZE (right) || fixtopbyte)
+    {
+      int top = AOP_SIZE (result) - 1;
+      reg_info *topreg;
+
+      if (!fixtopbyte && AOP_SIZE (result) == 2 && (AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) &&
+        AOP_TYPE (right) != AOP_REG && mc6800_reg_x->isFree)
+        {
+          setupXForAop (AOP (right));
+          loadRegFromAop (mc6800_reg_x, AOP (right), 0);
+          storeRegToAop (mc6800_reg_x, AOP (result), 0);
+          mc6800_freeReg (mc6800_reg_x);
+          goto release;
+        }
+
+      if (AOP_TYPE (result) == AOP_REG)
+        {
+          setupXForAop (AOP (right));
+          loadRegFromAop (AOP_SIZE (result) == 1 ? AOP (result)->aopu.aop_reg[0] : mc6800_reg_d, AOP (right), 0);
+          topreg = AOP (result)->aopu.aop_reg[top];
+        }
+      else if (AOP_TYPE (right) == AOP_REG)
+        {
+          topreg = AOP (right)->aopu.aop_reg[top];
+          if (fixtopbyte)
+            needpull = pushRegIfSurv (topreg);
+        }
+      else
+        {
+          acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+          needpull = pushRegIfSurv (acc);
+          setupXBases (&xbases, AOP (right), NULL, AOP (result));
+          switchXToAop (&xbases, AOP (right));
+          loadRegFromAop (acc, AOP (right), top);
+          topreg = acc;
+        }
+
+      if (fixtopbyte)
+        {
+          mc6800_emitOpWithAcc ("and", topreg, MODE_IMM, "#0x%02x", topbytemask);
+          if (!SPEC_USIGN (resulttype))
+            {
+              symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (0);
+              mc6800_emitOpWithAcc ("bit", topreg, MODE_IMM, "#0x%02x", 1u << (SPEC_BITINTWIDTH (resulttype) % 8 - 1));
+              emitBranch ("beq", tlbl);
+              mc6800_emitOpWithAcc ("ora", topreg, MODE_IMM, "#0x%02x", ~topbytemask & 0xff);
+              emitLabel (tlbl);
+            }
+        }
+
+      if (AOP_TYPE (result) == AOP_REG)
+        goto release;
+
+      if (AOP_TYPE (right) == AOP_REG)
+        {
+          setupXForAop (AOP (result));
+          storeRegToAop (AOP_SIZE (result) == 1 ? topreg : mc6800_reg_d, AOP (result), 0);
+          if (fixtopbyte)
+            pullOrFreeReg (topreg, needpull);
+          goto release;
+        }
+
+      switchXToAop (&xbases, AOP (result));
+      storeRegToAop (acc, AOP (result), top);
+      for (offset = top - 1; offset >= 0; offset--)
+        {
+          switchXToAop (&xbases, AOP (right));
+          loadRegFromAop (acc, AOP (right), offset);
+          switchXToAop (&xbases, AOP (result));
+          storeRegToAop (acc, AOP (result), offset);
+        }
+      freeXBases (&xbases);
+      pullOrFreeReg (acc, needpull);
       goto release;
     }
 
@@ -10010,16 +10052,34 @@ genCast (iCode * ic)
       goto release;
     }
 
+  if (!signExtend && AOP_SIZE (right) == 2 && (AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) &&
+    AOP_TYPE (right) != AOP_REG && AOP_TYPE (right) != AOP_STL && mc6800_reg_x->isFree)
+    {
+      setupXForAop (AOP (right));
+      loadRegFromAop (mc6800_reg_x, AOP (right), 0);
+      storeRegToAop (mc6800_reg_x, AOP (result), 0);
+      mc6800_freeReg (mc6800_reg_x);
+      for (offset = 2; offset < AOP_SIZE (result); offset++)
+        rmwWithAop ("clr", AOP (result), offset);
+      goto release;
+    }
+
   if (AOP_TYPE (right) == AOP_STL)
     {
       needpullb = pushRegIfSurv (mc6800_reg_b);
       needpulla = pushRegIfSurv (mc6800_reg_a);
-      acc = mc6800_reg_a;
+      acc = NULL;
+    }
+  else if (AOP_TYPE (right) == AOP_REG)
+    {
+      acc = signExtend ? AOP (right)->aopu.aop_reg[AOP_SIZE (right) - 1] : NULL;
+      if (acc)
+        needpull = pushRegIfSurv (acc);
     }
   else
     {
       acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfUsed (acc);
+      needpull = pushRegIfSurv (acc);
     }
   setupXBases (&xbases, AOP (right), NULL, AOP (result));
 
@@ -10033,8 +10093,6 @@ genCast (iCode * ic)
     {
       switchXToAop (&xbases, AOP (result));
       storeRegToAop (AOP_SIZE (right) == 1 ? AOP (right)->aopu.aop_reg[0] : mc6800_reg_d, AOP (result), 0);
-      if (signExtend)
-        loadRegFromAop (acc, AOP (right), AOP_SIZE (right) - 1);
     }
   else
     {
@@ -10047,22 +10105,23 @@ genCast (iCode * ic)
         }
     }
 
+  switchXToAop (&xbases, AOP (result));
   if (signExtend)
     {
       rmwWithReg ("rol", acc);
       mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
       mc6800_emitOpWithAcc ("sbc", acc, MODE_IMM, "#0x00");
       mc6800_dirtyReg (acc, false);
+      for (offset = AOP_SIZE (right); offset < AOP_SIZE (result); offset++)
+        {
+          if (offset == AOP_SIZE (result) - 1 && masktopbyte)
+            mc6800_emitOpWithAcc ("and", acc, MODE_IMM, "#0x%02x", topbytemask);
+          storeRegToAop (acc, AOP (result), offset);
+        }
     }
   else
-    loadRegFromConst (acc, 0);
-  switchXToAop (&xbases, AOP (result));
-  for (offset = AOP_SIZE (right); offset < AOP_SIZE (result); offset++)
-    {
-      if (offset == AOP_SIZE (result) - 1 && masktopbyte)
-        mc6800_emitOpWithAcc ("and", acc, MODE_IMM, "#0x%02x", topbytemask);
-      storeRegToAop (acc, AOP (result), offset);
-    }
+    for (offset = AOP_SIZE (right); offset < AOP_SIZE (result); offset++)
+      rmwWithAop ("clr", AOP (result), offset);
   freeXBases (&xbases);
 
   if (AOP_TYPE (right) == AOP_STL)
@@ -10070,7 +10129,7 @@ genCast (iCode * ic)
       pullOrFreeReg (mc6800_reg_a, needpulla);
       pullOrFreeReg (mc6800_reg_b, needpullb);
     }
-  else
+  else if (acc)
     pullOrFreeReg (acc, needpull);
 
 release:
