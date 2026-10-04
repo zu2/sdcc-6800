@@ -3075,24 +3075,27 @@ static void
 assignResultValue (operand * oper)
 {
   int size = AOP_SIZE (oper);
-  int offset = 0;
-  bool delayed_x = false;
-  asmop **retaop = (size > 2) ? mc6800_aop_ret : mc6800_aop_pass;
-  while (size--)
+  int offset;
+  reg_info *acc;
+  bool needpull;
+
+  if (size <= 2)
     {
-      if (!offset && AOP_TYPE (oper) == AOP_REG && AOP_SIZE (oper) > 1 && AOP (oper)->aopu.aop_reg[0]->rIdx == A_IDX)
-        {
-          pushReg (mc6800_reg_b, true);
-          delayed_x = true;
-        }
-      else
-        transferAopAop (retaop[offset], 0, AOP (oper), offset);
-      if (retaop[offset]->type == AOP_REG)
-        mc6800_freeReg (retaop[offset]->aopu.aop_reg[0]);
-      offset++;
+      setupXForAop (AOP (oper));
+      storeRegToAop (size == 1 ? mc6800_reg_b : mc6800_reg_d, AOP (oper), 0);
+      mc6800_freeReg (size == 1 ? mc6800_reg_b : mc6800_reg_d);
+      return;
     }
-  if (delayed_x)
-    pullReg (mc6800_reg_a);
+
+  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+  needpull = pushRegIfSurv (acc);
+  setupXForAop (AOP (oper));
+  for (offset = 0; offset < size; offset++)
+    {
+      loadRegFromAop (acc, mc6800_aop_ret[offset], 0);
+      storeRegToAop (acc, AOP (oper), offset);
+    }
+  pullOrFreeReg (acc, needpull);
 }
 
 /*-----------------------------------------------------------------*/
@@ -3388,7 +3391,6 @@ genCall (iCode * ic)
             mc6800_useReg (mc6800_reg_a);
         }
       aopOp (IC_RESULT (ic), ic, false);
-      setupXForAop (AOP (IC_RESULT (ic)));
 
       assignResultValue (IC_RESULT (ic));
 
@@ -3483,7 +3485,6 @@ genPcall (iCode * ic)
             mc6800_useReg (mc6800_reg_a);
         }
       aopOp (IC_RESULT (ic), ic, false);
-      setupXForAop (AOP (IC_RESULT (ic)));
 
       assignResultValue (IC_RESULT (ic));
 
@@ -3781,7 +3782,8 @@ genRet (iCode * ic)
 {
   int size, offset = 0;
 //  int pushed = 0;
-  bool delayed_x = false;
+  reg_info *acc;
+  bool needpull;
 
   D (emitcode (";     genRet", ""));
 
@@ -3874,35 +3876,22 @@ genRet (iCode * ic)
       goto jumpret;
     }
 
-  asmop **retaop = (size > 2) ? mc6800_aop_ret : mc6800_aop_pass;
-
-  if (!IS_AOP_WITH_X (AOP (IC_LEFT (ic))))
-    setupXForAop (AOP (IC_LEFT (ic)));
-
-  if (AOP_TYPE (IC_LEFT (ic)) == AOP_LIT)
+  if (size <= 2)
     {
-      offset = 0;
-      while (size--)
-        {
-          transferAopAop (AOP (IC_LEFT (ic)), offset, retaop[offset], 0);
-          offset++;
-        }
+      setupXForAop (AOP (IC_LEFT (ic)));
+      loadRegFromAop (size == 1 ? mc6800_reg_b : mc6800_reg_d, AOP (IC_LEFT (ic)), 0);
     }
   else
     {
-      /* Take care when swapping a and b */
-      if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && size > 1 && AOP (IC_LEFT (ic))->aopu.aop_reg[0]->rIdx == A_IDX)
-        {
-          delayed_x = true;
-          pushReg (mc6800_reg_a, true);
-        }
-
+      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+      needpull = pushRegIfSurv (acc);
+      setupXForAop (AOP (IC_LEFT (ic)));
       for (offset = 0; offset < size; offset++)
-        if (!(delayed_x && !offset))
-          transferAopAop (AOP (IC_LEFT (ic)), offset, retaop[offset], 0);
-
-      if (delayed_x)
-        pullReg (mc6800_reg_b);
+        {
+          loadRegFromAop (acc, AOP (IC_LEFT (ic)), offset);
+          storeRegToAop (acc, mc6800_aop_ret[offset], 0);
+        }
+      pullOrFreeReg (acc, needpull);
     }
 
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
@@ -10421,31 +10410,20 @@ static void
 genReceive (iCode * ic)
 {
   int size;
-  int offset;
+  reg_info *reg;
 
   D (emitcode (";", "genReceive"));
 
   aopOp (IC_RESULT (ic), ic, false);
   setupXForAop (AOP (IC_RESULT (ic)));
   size = AOP_SIZE (IC_RESULT (ic));
-  offset = 0;
 
   if (ic->argreg)
     {
       wassert (size <= 2);
-      if (size == 2 && ic->argreg == 1 && IS_AOP_X (AOP (IC_RESULT (ic)))) {
-        storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
-        mc6800_freeReg (mc6800_reg_b);
-        mc6800_freeReg (mc6800_reg_a);
-        size = 0;
-      }
-      while (size--)
-        {
-          transferAopAop (mc6800_aop_pass[offset + (ic->argreg - 1)], 0, AOP (IC_RESULT (ic)), offset);
-          if (mc6800_aop_pass[offset + (ic->argreg - 1)]->type == AOP_REG)
-            mc6800_freeReg (mc6800_aop_pass[offset + (ic->argreg - 1)]->aopu.aop_reg[0]);
-          offset++;
-        }
+      reg = size == 2 ? mc6800_reg_d : mc6800_aop_pass[ic->argreg - 1]->aopu.aop_reg[0];
+      storeRegToAop (reg, AOP (IC_RESULT (ic)), 0);
+      mc6800_freeReg (reg);
     }
 
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
