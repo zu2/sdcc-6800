@@ -575,11 +575,44 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
     }
 }
 
-// For early removal of assignments that cannot be extended to valid assignments. This is just a dummy for now, it probably isn't really needed for mc6800 due to the low number of registers.
 template <class G_t, class I_t>
 static bool assignment_hopeless(const assignment &a, unsigned short int i, const G_t &G, const I_t &I, const var_t lastvar)
 {
   const i_assignment_t &ia = a.i_assignment;
+
+  for(reg_t r = 0; r < port->num_regs; r++)
+    for(int entry = 0; entry < 2; entry++)
+      {
+        var_t v = ia.registers[r][entry];
+
+        if(v < 0 || I[v].size > 2)
+          continue;
+        if(I[v].size == 1)
+          {
+            if(r != REG_A && r != REG_B)
+              return(true);
+            continue;
+          }
+
+        if(r == REG_B || r == REG_XL)
+          {
+            reg_t partner = (r == REG_B ? REG_A : REG_XH);
+
+            if(I[v].byte != 0)
+              return(true);
+            if(std::binary_search(a.local.begin(), a.local.end(), (var_t)(v + 1)) && a.global[v + 1] != partner)
+              return(true);
+          }
+        else if(r == REG_A || r == REG_XH)
+          {
+            reg_t partner = (r == REG_A ? REG_B : REG_XL);
+
+            if(I[v].byte != 1)
+              return(true);
+            if(std::binary_search(a.local.begin(), a.local.end(), (var_t)(v - 1)) && a.global[v - 1] != partner)
+              return(true);
+          }
+      }
 
   if((ia.registers[REG_XL][1] >= 0 && ia.registers[REG_XH][1] >= 0) &&
       (ia.registers[REG_XL][0] >= 0) == (ia.registers[REG_XH][0] >= 0) &&
