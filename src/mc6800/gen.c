@@ -3861,9 +3861,20 @@ genPlusIncr2 (iCode * ic)
 
   if (!sameRegs (AOP (left), result))
     {
-      if (icount > ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6)
-          || result->type == AOP_SOF || (result->type == AOP_REG && !IS_AOP_X (result))
+      if (result->type == AOP_SOF || (result->type == AOP_REG && !IS_AOP_X (result))
           || !mc6800_reg_x->isDead || (AOP_TYPE (left) == AOP_REG && !IS_AOP_X (AOP (left))))
+        return false;
+      if (IS_AOP_X (result))
+        {
+          if (icount > 4)
+            return false;
+        }
+      else if (IS_AOP_X (AOP (left)))
+        {
+          if (icount > 5)
+            return false;
+        }
+      else if (icount > 2)
         return false;
       setupXForAop (AOP (left));
       loadRegFromAop (mc6800_reg_x, AOP (left), 0);
@@ -4047,7 +4058,10 @@ genPlus1 (iCode *ic)
   switchXToAop (&xbases, rightOp);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
-      accopWithAop ("add", reg, rightOp, 0);
+      if (aopIsLitVal (rightOp, 0, 1, 0x01))
+        rmwWithReg ("inc", reg);
+      else
+        accopWithAop ("add", reg, rightOp, 0);
       if (topbytemask != 0xff)
         {
           mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
@@ -4316,7 +4330,34 @@ genMinusDec2 (iCode * ic)
       goto release;
     }
 
-  if (icount < 1 || icount > 255 || !sameRegs (AOP (IC_LEFT (ic)), result) || result->type == AOP_REG)
+  if (icount < 1 || icount > 255)
+    return false;
+
+  if (!sameRegs (AOP (IC_LEFT (ic)), result))
+    {
+      if (result->type == AOP_SOF || (result->type == AOP_REG && !IS_AOP_X (result))
+          || !mc6800_reg_x->isDead || (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && !IS_AOP_X (AOP (IC_LEFT (ic)))))
+        return false;
+      if (IS_AOP_X (result))
+        {
+          if (icount > 4)
+            return false;
+        }
+      else if (IS_AOP_X (AOP (IC_LEFT (ic))))
+        {
+          if (icount > 5)
+            return false;
+        }
+      else if (icount > 2)
+        return false;
+      setupXForAop (AOP (IC_LEFT (ic)));
+      loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (ic)), 0);
+      addConstToX (-icount);
+      storeRegToAop (mc6800_reg_x, result, 0);
+      goto release;
+    }
+
+  if (result->type == AOP_REG)
     return false;
 
   if (icount == 1)
@@ -4355,6 +4396,71 @@ release:
   return true;
 }
 
+static bool
+genMinusDecMANY (iCode * ic)
+{
+  asmop *result;
+  int size;
+  int icount;
+  int offset;
+  float cycles;
+  symbol *tlbl[8];
+  bool needpula = false;
+
+  icount = (int) ulFromVal (OP_VALUE (IC_RIGHT (ic)));
+  if (icount < 1 || icount > 255)
+    return false;
+
+  aopOp (IC_LEFT (ic), ic, false);
+  aopOp (IC_RIGHT (ic), ic, false);
+  aopOp (IC_RESULT (ic), ic, true);
+  result = AOP (IC_RESULT (ic));
+  if (!sameRegs (AOP (IC_LEFT (ic)), result))
+    return false;
+
+  size = getDataSize (IC_RESULT (ic));
+  for (offset = 0; offset < size - 1; offset++)
+    tlbl[offset] = regalloc_dry_run ? 0 : newiTempLabel (NULL);
+  setupXForAop (result);
+  if (icount == 1)
+    {
+      rmwWithAop ("tst", result, 0);
+      emitBranch ("bne", tlbl[0]);
+    }
+  else
+    {
+      needpula = pushRegIfUsed (mc6800_reg_a);
+      loadRegFromAop (mc6800_reg_a, result, 0);
+      accopWithAop ("sub", mc6800_reg_a, AOP (IC_RIGHT (ic)), 0);
+      storeRegToAop (mc6800_reg_a, result, 0);
+      emitBranch ("bcc", tlbl[0]);
+    }
+  cycles = regalloc_dry_run_cost_cycles;
+  for (offset = 1; offset < size - 1; offset++)
+    {
+      rmwWithAop ("tst", result, offset);
+      emitBranch ("bne", tlbl[offset]);
+    }
+  rmwWithAop ("dec", result, size - 1);
+  for (offset = size - 2; offset > 0; offset--)
+    {
+      if (!regalloc_dry_run)
+        emitLabel (tlbl[offset]);
+      rmwWithAop ("dec", result, offset);
+    }
+  regalloc_dry_run_cost_cycles = cycles;
+  if (!regalloc_dry_run)
+    emitLabel (tlbl[0]);
+  if (icount == 1)
+    rmwWithAop ("dec", result, 0);
+  pullOrFreeReg (mc6800_reg_a, needpula);
+
+  freeAsmop (IC_LEFT (ic), NULL, ic, true);
+  freeAsmop (IC_RIGHT (ic), NULL, ic, true);
+  freeAsmop (IC_RESULT (ic), NULL, ic, true);
+  return true;
+}
+
 /*-----------------------------------------------------------------*/
 /* genMinusDec :- does subtraction with decrement if possible      */
 /*-----------------------------------------------------------------*/
@@ -4379,7 +4485,7 @@ genMinusDec (iCode * ic)
     case 2:
       return genMinusDec2 (ic);
     default:
-      return false;
+      return genMinusDecMANY (ic);
     }
 }
 
@@ -4493,8 +4599,13 @@ genMinus1 (iCode *ic)
   loadRegFromAop (reg, leftOp, 0);
   if (!aopIsLitVal (rightOp, 0, 1, 0x00))
     {
-      switchXToAop (&xbases, rightOp);
-      accopWithAop ("sub", reg, rightOp, 0);
+      if (aopIsLitVal (rightOp, 0, 1, 0x01))
+        rmwWithReg ("dec", reg);
+      else
+        {
+          switchXToAop (&xbases, rightOp);
+          accopWithAop ("sub", reg, rightOp, 0);
+        }
       if (maskedtopbyte)
         {
           mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
