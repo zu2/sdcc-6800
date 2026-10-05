@@ -10569,123 +10569,6 @@ release:
 }
 
 /*-----------------------------------------------------------------*/
-/* genDjnz - generate decrement & jump if not zero instruction      */
-/*-----------------------------------------------------------------*/
-static int
-genDjnz (iCode * ic, iCode * ifx)
-{
-  operand *left = IC_LEFT (ic);
-  operand *result = IC_RESULT (ic);
-
-  if (!ifx)
-    return 0;
-  if (!IS_OP_LITERAL (IC_RIGHT (ic)) || operandLitValue (IC_RIGHT (ic)) != 1)
-    return 0;
-
-  D (emitcode (";     genDjnz", ""));
-
-  aopOp (left, ic, false);
-  aopOp (result, ic, true);
-  if (!IS_AOP_WITH_X (AOP (left)))
-    {
-      setupXForAop (AOP (result));
-      setupXForAop (AOP (left));
-    }
-
-  if (AOP_SIZE (left) != AOP_SIZE (result))
-    return 0;
-
-  if ((IS_AOP_A (AOP (left)) || IS_AOP_B (AOP (left))) && !sameRegs (AOP (left), AOP (result)))
-    {
-      mc6800_emitOpWithAcc ("cmp", AOP (left)->aopu.aop_reg[0], MODE_IMM, "#1");
-      genIfxJump (ifx, "a");
-    }
-  else if (IS_AOP_X (AOP (left)) && !sameRegs (AOP (left), AOP (result)))
-    {
-      mc6800_emitOp ("cpx", MODE_IMM, "#1");
-      genIfxJump (ifx, "a");
-    }
-  else if (IS_AOP_D (AOP (left)) && !sameRegs (AOP (left), AOP (result)))
-    {
-      symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-      symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-      mc6800_emitOp ("cmpb", MODE_IMM, "#1");
-      if (IC_TRUE (ifx))
-        {
-          emitBranch ("bne", tlbl1);
-          mc6800_emitOp ("tsta", MODE_INH, "");
-          emitBranch ("beq", tlbl2);
-          if (!regalloc_dry_run)
-            emitLabel (tlbl1);
-          emitBranch ("jmp", IC_TRUE (ifx));
-          if (!regalloc_dry_run)
-            emitLabel (tlbl2);
-        }
-      else
-        {
-          emitBranch ("bne", tlbl2);
-          mc6800_emitOp ("tsta", MODE_INH, "");
-          emitBranch ("bne", tlbl2);
-          emitBranch ("jmp", IC_FALSE (ifx));
-          if (!regalloc_dry_run)
-            emitLabel (tlbl2);
-        }
-      ifx->generated = 1;
-    }
-  else if (IS_AOP_A (AOP (result)) || IS_AOP_B (AOP (result)))
-    {
-      loadRegFromAop (AOP (result)->aopu.aop_reg[0], AOP (left), 0);
-      mc6800_emitOpWithAcc ("dec", AOP (result)->aopu.aop_reg[0], MODE_INH, "");
-      genIfxJump (ifx, "a");
-    }
-  else if (IS_AOP_X (AOP (result)))
-    {
-      loadRegFromAop (mc6800_reg_x, AOP (left), 0);
-      mc6800_emitOp ("dex", MODE_INH, "");
-      genIfxJump (ifx, "a");
-    }
-  else if (IS_AOP_D (AOP (result)))
-    {
-      symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-      symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
-      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-      mc6800_emitOp ("subb", MODE_IMM, "#1");
-      emitBranch ("bne", tlbl1);
-      mc6800_emitOp ("tsta", MODE_INH, "");
-      if (IC_TRUE (ifx))
-        {
-          emitBranch ("beq", tlbl2);
-          if (!regalloc_dry_run)
-            emitLabel (tlbl1);
-          mc6800_emitOp ("sbca", MODE_IMM, "#0");
-          emitBranch ("jmp", IC_TRUE (ifx));
-          if (!regalloc_dry_run)
-            emitLabel (tlbl2);
-        }
-      else
-        {
-          emitBranch ("bne", tlbl2);
-          emitBranch ("jmp", IC_FALSE (ifx));
-          if (!regalloc_dry_run)
-            emitLabel (tlbl1);
-          mc6800_emitOp ("sbca", MODE_IMM, "#0");
-          if (!regalloc_dry_run)
-            emitLabel (tlbl2);
-        }
-      mc6800_dirtyReg (mc6800_reg_d, false);
-      ifx->generated = 1;
-    }
-  else
-    return 0;
-
-  freeAsmop (left, NULL, ic, true);
-  freeAsmop (result, NULL, ic, true);
-  return 1;
-}
-
-/*-----------------------------------------------------------------*/
 /* genPostIncDec - n + 1 or n - 1 and jump on the old value of n    */
 /*-----------------------------------------------------------------*/
 static void
@@ -11077,7 +10960,7 @@ genmc6800iCode (iCode *ic)
       if (ic->prev && ic->prev->op == '=' && !POINTER_SET (ic->prev) && IS_ITEMP (IC_RESULT (ic->prev))
           && OP_SYMBOL (IC_RESULT (ic->prev))->regType == REG_CND && ic->next && ic->next->op == IFX)
         genPostIncDec (ic, ic->next);
-      else if (!genDjnz (ic, ifxForOp (IC_RESULT (ic), ic)))
+      else
         genMinus (ic);
       break;
 

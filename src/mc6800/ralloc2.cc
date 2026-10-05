@@ -640,16 +640,6 @@ static void extra_ic_generated(iCode *ic)
       if (OP_SYMBOL (IC_LEFT (ic))->liveTo < ic->next->seq)
         OP_SYMBOL (IC_LEFT (ic))->liveTo = ic->next->seq;
     }
-  if(ic->op == '-' && IS_VALOP (IC_RIGHT (ic)) && operandLitValue (IC_RIGHT (ic)) == 1 && getSize(operandType(IC_RESULT (ic))) == 1 && !isOperandInFarSpace (IC_RESULT (ic)) && isOperandEqual (IC_RESULT (ic), IC_LEFT (ic)))
-    {
-      iCode *ifx;
-      if (ifx = ifxForOp (IC_RESULT (ic), ic))
-        {
-          OP_SYMBOL (IC_RESULT (ic))->for_newralloc = false;
-          OP_SYMBOL (IC_RESULT (ic))->regType = REG_CND;
-          ifx->generated = true;
-        }
-    }
   if(ic->op == '=' && !POINTER_SET (ic) && IS_ITEMP (IC_RESULT (ic)) && getSize(operandType(IC_RESULT (ic))) <= 2 &&
     ic->next && (ic->next->op == '-' || ic->next->op == '+') && IS_OP_LITERAL (IC_RIGHT (ic->next)) && operandLitValue (IC_RIGHT (ic->next)) == 1 &&
     getSize(operandType(IC_RESULT (ic->next))) == getSize(operandType(IC_RESULT (ic))) &&
