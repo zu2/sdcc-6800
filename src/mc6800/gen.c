@@ -63,7 +63,6 @@ static asmop *mc6800_aop_ret[8];
 
 static const char *tempname[NUM_TEMP_REGS] =
   {
-    "REGTEMP0", "REGTEMP1",
     "REGTEMP2", "REGTEMP3",
     "REGTEMP4", "REGTEMP5",
     "REGTEMP6", "REGTEMP7"
@@ -85,7 +84,6 @@ freeTemp (void)
 static asmop tsxaop;
 
 extern int mc6800_dry_stack_size;
-extern int mc6800_nRegs;
 extern struct dbuf_s *codeOutBuf;
 static bool operandsEqu (operand * op1, operand * op2);
 static void loadRegFromConst (reg_info * reg, int c);
@@ -186,7 +184,7 @@ mc6800_emitOp_o (const char *inst, asmop *aop, int loffset)
     mode = MODE_DIR;
   else if (aop->type == AOP_DIR || aop->type == AOP_EXT)
     mode = MODE_EXT;
-  else if (aop->type == AOP_SOF || aop->type == AOP_IDX)
+  else if (aop->type == AOP_SOF)
     mode = MODE_IDX;
   else
     fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "unsupported operand");
@@ -226,7 +224,7 @@ mc6800_emitOpw_o (const char *inst, asmop *aop, int loffset)
     mode = MODE_DIR;
   else if (aop->type == AOP_EXT)
     mode = MODE_EXT;
-  else if (aop->type == AOP_SOF || aop->type == AOP_IDX)
+  else if (aop->type == AOP_SOF)
     mode = MODE_IDX;
   else
     fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "unsupported operand");
@@ -1585,21 +1583,6 @@ setupXForAop (asmop * aop)
   const char *tmp;
   int sp, first, last, base;
 
-  if (aop->type == AOP_IDX)
-    {
-      if (IS_AOP_X (AOP (aop->pointer)) || mc6800_reg_x->aop == aop)
-        return;
-      if (!mc6800_reg_x->isFree)
-        {
-          UNIMPLEMENTED;
-          return;
-        }
-      setupXForAop (AOP (aop->pointer));
-      loadRegFromAop (mc6800_reg_x, AOP (aop->pointer), 0);
-      mc6800_freeReg (mc6800_reg_x);
-      mc6800_reg_x->aop = aop;
-      return;
-    }
   if (aop->type != AOP_SOF)
     return;
 
@@ -1657,7 +1640,6 @@ setupXForAop (asmop * aop)
 struct xbases
 {
   int count;
-  asmop *aop[3];
   int base[3];
   const char *regtemp[3];
 };
@@ -1667,7 +1649,6 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
 {
   asmop *operands[3] = { left, right, result };
   int sp = -_G.stackPushes;
-  bool onstack = false;
   int i, j;
 
   xbases->count = 0;
@@ -1678,7 +1659,6 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
 
       if (!aop || aop->type != AOP_SOF)
         continue;
-      onstack = true;
       if (regalloc_dry_run && !mc6800_dry_stack_size)
         continue;
       first = _G.stackOfs + aop->aopu.aop_stk;
@@ -1690,7 +1670,6 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
           break;
       if (j < xbases->count)
         continue;
-      xbases->aop[xbases->count] = aop;
       xbases->regtemp[xbases->count] = allocTemp ();
       if (mc6800_reg_x->aop == &tsxaop
           && first - mc6800_reg_x->stackOffset >= 0
@@ -1702,35 +1681,6 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
       else
         xbases->base[xbases->count] = setupTmpForAop (aop, xbases->regtemp[xbases->count]);
       xbases->count++;
-    }
-
-  for (i = 0; i < 3; i++)
-    {
-      asmop *aop = operands[i];
-      asmop *pointer;
-
-      if (!aop || aop->type != AOP_IDX)
-        continue;
-      pointer = AOP (aop->pointer);
-      if (IS_AOP_X (pointer))
-        continue;
-      if (pointer->type != AOP_REG && pointer->type != AOP_SOF)
-        continue;
-      if (!onstack)
-        continue;
-      if (!mc6800_reg_x->isFree)
-        {
-          UNIMPLEMENTED;
-          continue;
-        }
-      setupXForAop (pointer);
-      loadRegFromAop (mc6800_reg_x, pointer, 0);
-      mc6800_freeReg (mc6800_reg_x);
-      xbases->aop[xbases->count] = aop;
-      xbases->regtemp[xbases->count] = allocTemp ();
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", xbases->regtemp[xbases->count]);
-      xbases->count++;
-      mc6800_reg_x->aop = aop;
     }
 }
 
@@ -1749,26 +1699,6 @@ switchXToAop (struct xbases *xbases, asmop *aop)
   int first, last;
   int i;
 
-  if (aop->type == AOP_IDX)
-    {
-      if (mc6800_reg_x->aop == aop)
-        return;
-      for (i = 0; i < xbases->count; i++)
-        if (xbases->aop[i] == aop)
-          {
-            if (!mc6800_reg_x->isFree)
-              {
-                UNIMPLEMENTED;
-                return;
-              }
-            mc6800_emitOp ("ldx", MODE_DIR, "*%s", xbases->regtemp[i]);
-            mc6800_dirtyReg (mc6800_reg_x, false);
-            mc6800_reg_x->aop = aop;
-            return;
-          }
-      setupXForAop (aop);
-      return;
-    }
   if (aop->type != AOP_SOF)
     return;
   first = _G.stackOfs + aop->aopu.aop_stk;
@@ -1778,8 +1708,7 @@ switchXToAop (struct xbases *xbases, asmop *aop)
       && last - mc6800_reg_x->stackOffset <= 255)
     return;
   for (i = 0; i < xbases->count; i++)
-    if (xbases->aop[i]->type == AOP_SOF
-        && first - xbases->base[i] >= 0
+    if (first - xbases->base[i] >= 0
         && last - xbases->base[i] <= 255)
       {
         if (!mc6800_reg_x->isFree)
@@ -2022,17 +1951,10 @@ sameRegs (asmop *aop1, asmop *aop2)
               return false;
           return true;
         case AOP_SOF:
-          if (regalloc_dry_run && aop1->op && aop2->op && IS_SYMOP (aop1->op) && IS_SYMOP (aop2->op))
-            return ((IS_ITEMP (aop1->op) && OP_SYMBOL (aop1->op)->usl.spillLoc ? OP_SYMBOL (aop1->op)->usl.spillLoc : OP_SYMBOL (aop1->op)) ==
-                    (IS_ITEMP (aop2->op) && OP_SYMBOL (aop2->op)->usl.spillLoc ? OP_SYMBOL (aop2->op)->usl.spillLoc : OP_SYMBOL (aop2->op)));
-          return (aop1->aopu.aop_stk == aop2->aopu.aop_stk);
+          return (!regalloc_dry_run && aop1->aopu.aop_stk == aop2->aopu.aop_stk);
         case AOP_DIR:
         case AOP_EXT:
-          if (regalloc_dry_run)
-            return (aop1->op && aop2->op && IS_SYMOP (aop1->op) && IS_SYMOP (aop2->op) &&
-                    (IS_ITEMP (aop1->op) && OP_SYMBOL (aop1->op)->usl.spillLoc ? OP_SYMBOL (aop1->op)->usl.spillLoc : OP_SYMBOL (aop1->op)) ==
-                    (IS_ITEMP (aop2->op) && OP_SYMBOL (aop2->op)->usl.spillLoc ? OP_SYMBOL (aop2->op)->usl.spillLoc : OP_SYMBOL (aop2->op)));
-          return (!strcmp (aop1->aopu.aop_dir, aop2->aopu.aop_dir));
+          return (aop1->aopu.aop_dir && aop2->aopu.aop_dir && !strcmp (aop1->aopu.aop_dir, aop2->aopu.aop_dir));
         default:
           break;
         }
@@ -2106,17 +2028,6 @@ aopOp (operand *op, iCode * ic, bool result)
   if (!IS_SYMOP (op))
     piCode (ic, NULL);
   sym = OP_SYMBOL (op);
-
-  if (sym->regType == REG_CND && ic->prev && ic->prev->op == GET_VALUE_AT_ADDRESS && isOperandEqual (IC_RESULT (ic->prev), op))
-    {
-      aopOp (IC_LEFT (ic->prev), ic, false);
-      sym->aop = op->aop = aop = newAsmop (AOP_IDX);
-      aop->size = getSize (operandType (op));
-      aop->op = op;
-      aop->pointer = IC_LEFT (ic->prev);
-      aop->aopu.aop_stk = (int) operandLitValue (IC_RIGHT (ic->prev));
-      return;
-    }
 
   /* if the type is a conditional */
   if (sym->regType == REG_CND)
@@ -2205,6 +2116,16 @@ aopOp (operand *op, iCode * ic, bool result)
 
   /* must be in a register */
   wassert (sym->nRegs);
+  if (sym->regs[0]->rIdx == TEMP0L_IDX || sym->regs[0]->rIdx == TEMP1L_IDX)
+    {
+      sym->aop = op->aop = aop = newAsmop (AOP_DIR);
+      aop->aopu.aop_dir = sym->regs[1]->name;
+      aop->size = 2;
+      aop->op = op;
+      if (!result)
+        aop->valinfo = getOperandValinfo (ic, op);
+      return;
+    }
   sym->aop = op->aop = aop = newAsmop (AOP_REG);
   aop->size = sym->nRegs;
   for (i = 0; i < sym->nRegs; i++)
@@ -2236,9 +2157,6 @@ freeAsmop (operand * op, asmop * aaop, iCode * ic, bool pop)
 
   if (!aop)
     return;
-
-  if (aop->type == AOP_IDX && !aop->freed)
-    freeAsmop (aop->pointer, NULL, ic, pop);
 
   if (aop->freed)
     goto dealloc;
@@ -2405,16 +2323,6 @@ aopGet (asmop * aop, int loffset)
       xofs = _G.stackOfs - mc6800_reg_x->stackOffset + aop->aopu.aop_stk + offset;
       if (xofs < 0 || xofs > 255)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "stack offset out of range");
-      sprintf (s, "%d,x", xofs);
-      rs = Safe_calloc (1, strlen (s) + 1);
-      strcpy (rs, s);
-      return rs;
-    case AOP_IDX:
-      if (mc6800_reg_x->aop != aop && !IS_AOP_X (AOP (aop->pointer)))
-        werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "AOP_IDX without ldx");
-      xofs = aop->aopu.aop_stk + offset;
-      if (xofs < 0 || xofs > 255)
-        werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "index offset out of range");
       sprintf (s, "%d,x", xofs);
       rs = Safe_calloc (1, strlen (s) + 1);
       strcpy (rs, s);
@@ -5555,12 +5463,6 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       left = right;
       right = temp;
     }
-  if (AOP_TYPE (right) == AOP_IDX && AOP_TYPE (left) != AOP_IDX && AOP_TYPE (left) != AOP_REG)
-    {
-      operand *temp = left;
-      left = right;
-      right = temp;
-    }
   if (AOP_TYPE (right) == AOP_STL && AOP_TYPE (left) != AOP_STL && AOP_TYPE (left) != AOP_REG)
     {
       operand *temp = left;
@@ -5615,7 +5517,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   size = max (AOP_SIZE (left), AOP_SIZE (right));
 
   if (AOP_SIZE (left) == 2 &&
-    (AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT || AOP_TYPE (left) == AOP_IDX || IS_AOP_X (AOP (left))) &&
+    (AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT || IS_AOP_X (AOP (left))) &&
     (mc6800_reg_x->isDead || IS_AOP_X (AOP (left))) &&
     ((AOP_TYPE (right) == AOP_LIT && AOP_SIZE (right) <= 2) ||
     (AOP_TYPE (right) == AOP_IMMD && AOP_SIZE (right) <= 2) ||
@@ -9393,7 +9295,7 @@ genPointerSet (iCode * ic)
       if (AOP_TYPE (right) == AOP_REG ? IS_AOP_WITH_X (AOP (right)) : IS_VOLATILE (operandType (result)->next))
         {
           if (IS_AOP_WITH_A (AOP (result)) &&
-              (AOP_TYPE (right) == AOP_REG || AOP_TYPE (right) == AOP_SOF || AOP_TYPE (right) == AOP_IDX))
+              (AOP_TYPE (right) == AOP_REG || AOP_TYPE (right) == AOP_SOF))
             UNIMPLEMENTED;
           else if (IS_AOP_WITH_A (AOP (result)))
             loadRegFromAop (mc6800_reg_x, AOP (result), 0);
@@ -10569,88 +10471,6 @@ release:
 }
 
 /*-----------------------------------------------------------------*/
-/* genPostIncDec - n + 1 or n - 1 and jump on the old value of n    */
-/*-----------------------------------------------------------------*/
-static void
-genPostIncDec (iCode *ic, iCode *ifx)
-{
-  operand *source = isOperandEqual (IC_LEFT (ic), IC_RESULT (ic->prev)) ? IC_RIGHT (ic->prev) : IC_LEFT (ic);
-  operand *result = IC_RESULT (ic);
-  bool inc = ic->op == '+';
-  bool zflag = inc;
-  symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
-  asmop *aop;
-
-  D (emitcode (";     genPostIncDec", ""));
-
-  aopOp (source, ic, false);
-  aopOp (result, ic, true);
-  if (!IS_AOP_WITH_X (AOP (source)))
-    {
-      setupXForAop (AOP (result));
-      setupXForAop (AOP (source));
-    }
-  if (!sameRegs (AOP (source), AOP (result)))
-    genCopy (result, source);
-  aop = AOP (result);
-
-  if (IS_AOP_X (aop) || aop->size > 1 && (aop->type == AOP_DIR || aop->type == AOP_EXT) && mc6800_reg_x->isFree && mc6800_reg_x->isDead)
-    {
-      loadRegFromAop (mc6800_reg_x, aop, 0);
-      addConstToX (inc ? 1 : -1);
-      storeRegToAop (mc6800_reg_x, aop, 0);
-      mc6800_emitOp ("cpx", MODE_IMM, inc ? "#0x0001" : "#0xffff");
-      zflag = true;
-    }
-  else if (aop->size == 1)
-    {
-      reg_info *acc = IS_AOP_A (aop) || IS_AOP_B (aop) ? aop->aopu.aop_reg[0] : mc6800_reg_a->isFree || !mc6800_reg_b->isFree ? mc6800_reg_a : mc6800_reg_b;
-      bool needpull = !(aop->regmask & acc->mask) && pushRegIfUsed (acc);
-
-      loadRegFromAop (acc, aop, 0);
-      mc6800_emitOpWithAcc (inc ? "cmp" : "sub", acc, MODE_IMM, "#0x01");
-      if (inc)
-        mc6800_emitOpWithAcc ("inc", acc, MODE_INH, "");
-      storeRegToAop (acc, aop, 0);
-      pullOrFreeReg (acc, needpull);
-      zflag = false;
-    }
-  else
-    {
-      bool needpullb = !(aop->regmask & MC6800MASK_B) && pushRegIfUsed (mc6800_reg_b);
-      bool needpulla = !(aop->regmask & MC6800MASK_A) && pushRegIfUsed (mc6800_reg_a);
-      symbol *zlbl = regalloc_dry_run || !inc ? 0 : newiTempLabel (NULL);
-
-      loadRegFromAop (mc6800_reg_d, aop, 0);
-      mc6800_emitOp (inc ? "addb" : "subb", MODE_IMM, "#0x01");
-      mc6800_emitOp (inc ? "adca" : "sbca", MODE_IMM, "#0x00");
-      storeRegToAop (mc6800_reg_d, aop, 0);
-      if (inc)
-        {
-          mc6800_emitOp ("cmpb", MODE_IMM, "#0x01");
-          emitBranch ("bne", zlbl);
-          mc6800_emitOp ("tsta", MODE_INH, "");
-          if (!regalloc_dry_run)
-            emitLabel (zlbl);
-        }
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-      pullOrFreeReg (mc6800_reg_b, needpullb);
-    }
-
-  if (IC_TRUE (ifx))
-    emitBranch (zflag ? "beq" : "bcs", tlbl);
-  else
-    emitBranch (zflag ? "bne" : "bcc", tlbl);
-  emitBranch ("jmp", IC_TRUE (ifx) ? IC_TRUE (ifx) : IC_FALSE (ifx));
-  if (!regalloc_dry_run)
-    emitLabel (tlbl);
-  ifx->generated = 1;
-
-  freeAsmop (result, NULL, ic, true);
-  freeAsmop (source, NULL, ic, true);
-}
-
-/*-----------------------------------------------------------------*/
 /* genReceive - generate code for a receive iCode                  */
 /*-----------------------------------------------------------------*/
 static void
@@ -10839,8 +10659,6 @@ genmc6800iCode (iCode *ic)
           updateiTempRegisterUse (IC_RESULT (ic));
         updateiTempRegisterUse (IC_LEFT (ic));
         updateiTempRegisterUse (IC_RIGHT (ic));
-        if (ic->prev && ic->prev->op == GET_VALUE_AT_ADDRESS && OP_SYMBOL (IC_RESULT (ic->prev))->regType == REG_CND)
-          updateiTempRegisterUse (IC_LEFT (ic->prev));
       }
 
     for (i = A_IDX; i <= XH_IDX; i++)
@@ -10949,19 +10767,11 @@ genmc6800iCode (iCode *ic)
       break;
 
     case '+':
-      if (ic->prev && ic->prev->op == '=' && !POINTER_SET (ic->prev) && IS_ITEMP (IC_RESULT (ic->prev))
-          && OP_SYMBOL (IC_RESULT (ic->prev))->regType == REG_CND && ic->next && ic->next->op == IFX)
-        genPostIncDec (ic, ic->next);
-      else
-        genPlus (ic);
+      genPlus (ic);
       break;
 
     case '-':
-      if (ic->prev && ic->prev->op == '=' && !POINTER_SET (ic->prev) && IS_ITEMP (IC_RESULT (ic->prev))
-          && OP_SYMBOL (IC_RESULT (ic->prev))->regType == REG_CND && ic->next && ic->next->op == IFX)
-        genPostIncDec (ic, ic->next);
-      else
-        genMinus (ic);
+      genMinus (ic);
       break;
 
     case '*':
@@ -11034,15 +10844,10 @@ genmc6800iCode (iCode *ic)
       break;
 
     case GET_VALUE_AT_ADDRESS:
-      if (OP_SYMBOL (IC_RESULT (ic))->regType == REG_CND && ic->next && ic->next->op != IFX)
-        break;
       genPointerGet (ic, ifxForOp (IC_RESULT (ic), ic));
       break;
 
     case '=':
-      if (!POINTER_SET (ic) && IS_ITEMP (IC_RESULT (ic)) && OP_SYMBOL (IC_RESULT (ic))->regType == REG_CND
-          && ic->next && (ic->next->op == '-' || ic->next->op == '+'))
-        break;
       if (POINTER_SET (ic))
         genPointerSet (ic);
       else
@@ -11241,8 +11046,8 @@ genmc6800Code (iCode *lic)
           const char *iLine;
 
           regsSurv[0] = (bitVectBitValue (ic->rSurv, A_IDX)) ? 'a' : '-';
-          regsSurv[1] = (bitVectBitValue (ic->rSurv, B_IDX)) ? 'h' : '-';
-          regsSurv[2] = (bitVectBitValue (ic->rSurv, X_IDX)) ? 'x' : '-';
+          regsSurv[1] = (bitVectBitValue (ic->rSurv, B_IDX)) ? 'b' : '-';
+          regsSurv[2] = (bitVectBitValue (ic->rSurv, XL_IDX)) ? 'x' : '-';
           regsSurv[3] = 0;
           iLine = printILine (ic);
           emitcode ("", "; [%s] ic:%d: %s", regsSurv, ic->key, iLine);

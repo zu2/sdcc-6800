@@ -32,8 +32,7 @@ typedef enum
   AOP_EXT,       /* operand using extended addressing mode */
   AOP_SOF,       /* operand at an offset on the stack */
   AOP_STL,       /* operand is an address on the stack */
-  AOP_DUMMY,     /* Read undefined, discard writes */
-  AOP_IDX        /* operand using indexed addressing mode */
+  AOP_DUMMY      /* Read undefined, discard writes */
   }
 AOP_TYPE;
 
@@ -53,7 +52,6 @@ typedef struct asmop
     short size;			/* total size */
     short regmask;              /* register mask if AOP_REG */
     operand *op;		/* originating operand */
-    operand *pointer;
     unsigned code:1;		/* is in Code space */
     unsigned freed:1;		/* already freed    */
     union
@@ -62,7 +60,7 @@ typedef struct asmop
 	reg_info *aop_reg[4];	/* array of registers */
 	char *aop_dir;		/* if direct  */
         char *aop_immd;         /* if immediate */
-	int aop_stk;		/* stack offset when AOP_SOF or AOP_STL, offset from x when AOP_IDX */
+	int aop_stk;
       }
     aopu;
     struct valinfo valinfo;
@@ -75,7 +73,7 @@ void mc6800_emitDebuggerSymbol (const char *);
 
 extern bool mc6800_assignment_optimal;
 
-#define NUM_TEMP_REGS 8
+#define NUM_TEMP_REGS 6
 
 #endif
 

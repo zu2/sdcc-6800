@@ -38,6 +38,10 @@ extern "C"
 #define REG_B 1
 #define REG_XL 2
 #define REG_XH 3
+#define REG_TEMP0L 4
+#define REG_TEMP0H 5
+#define REG_TEMP1L 6
+#define REG_TEMP1H 7
 
 template <class I_t>
 static void add_operand_conflicts_in_node(const cfg_node &n, I_t &I)
@@ -287,31 +291,7 @@ static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, co
     ic->op == '+' && IS_OP_LITERAL(IC_LEFT(ic)) && abs((int)operandLitValue(IC_LEFT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6)))
     return(false);
 
-  bool unused_XL = (ia.registers[REG_XL][1] < 0);
-  bool unused_XH = (ia.registers[REG_XH][1] < 0);
-
-  if((ic->op == CALL || ic->op == PCALL) && !unused_XL && G[i].dying.find(ia.registers[REG_XL][1]) == G[i].dying.end())
-    return(false);
-
-  if(unused_XL && unused_XH)
-    return(true);
-
-  if(unused_XL ^ unused_XH)
-    return(false);
-  if(!unused_XL && I[ia.registers[REG_XL][1]].size != 2 || !unused_XH && I[ia.registers[REG_XH][1]].size != 2 ||
-    ia.registers[REG_XL][0] >= 0 && I[ia.registers[REG_XL][0]].size != 2 || ia.registers[REG_XH][0] >= 0 && I[ia.registers[REG_XH][0]].size != 2)
-    return(false);
-  if(ia.registers[REG_XL][1] >= 0 && (ia.registers[REG_XH][1] < 0 || I[ia.registers[REG_XL][1]].v != I[ia.registers[REG_XH][1]].v))
-    return(false);
-  if(ia.registers[REG_XH][1] >= 0 && (ia.registers[REG_XL][1] < 0 || I[ia.registers[REG_XH][1]].v != I[ia.registers[REG_XL][1]].v))
-    return(false);
-  if(ia.registers[REG_XL][0] >= 0 && (ia.registers[REG_XH][0] < 0 || I[ia.registers[REG_XL][0]].v != I[ia.registers[REG_XH][0]].v))
-    return(false);
-  if(ia.registers[REG_XH][0] >= 0 && (ia.registers[REG_XL][0] < 0 || I[ia.registers[REG_XH][0]].v != I[ia.registers[REG_XL][0]].v))
-    return(false);
-  if(I[ia.registers[REG_XL][1]].byte != 0 || I[ia.registers[REG_XH][1]].byte != 1)
-    return(false);
-  if(ia.registers[REG_XL][0] >= 0 && I[ia.registers[REG_XL][0]].byte != 0 || ia.registers[REG_XH][0] >= 0 && I[ia.registers[REG_XH][0]].byte != 1)
+  if((ic->op == CALL || ic->op == PCALL) && ia.registers[REG_XL][1] >= 0 && G[i].dying.find(ia.registers[REG_XL][1]) == G[i].dying.end())
     return(false);
 
   return(true);
@@ -374,21 +354,6 @@ static void assign_operands_for_cost(const assignment &a, unsigned short int i, 
   assign_operand_for_cost(IC_RIGHT(ic), a, i, G, I);
   assign_operand_for_cost(IC_RESULT(ic), a, i, G, I);
 
-  if(ic->op != IFX && ic->prev && ic->prev->op == GET_VALUE_AT_ADDRESS && OP_SYMBOL_CONST(IC_RESULT(ic->prev))->regType == REG_CND)
-    {
-      symbol *sym = OP_SYMBOL(IC_LEFT(ic->prev));
-      cfg_alive_t::const_iterator v, v_end;
-
-      for (v = G[i].alive.begin(), v_end = G[i].alive.end(); v != v_end; ++v)
-        if(I[*v].v == sym->key)
-          {
-            sym->regs[I[*v].byte] = (a.global[*v] >= 0) ? regsmc6800 + a.global[*v] : 0;
-            sym->isspilt = (a.global[*v] < 0);
-            sym->nRegs = I[*v].size;
-            sym->accuse = 0;
-          }
-    }
-
   if(ic->op == SEND && (ic->builtinSEND || ic->next && ic->next->op == SEND))
     {
       assign_operands_for_cost(a, *(adjacent_vertices(i, G).first), G, I);
@@ -402,33 +367,11 @@ static bool operand_sane(const operand *o, const assignment &a, unsigned short i
   if(!o || !IS_SYMOP(o))
     return(true);
 
-  operand_map_t::const_iterator oi, oi2, oi_end;
+  operand_map_t::const_iterator oi, oi_end;
   boost::tie(oi, oi_end) = G[i].operands.equal_range(OP_SYMBOL_CONST(o)->key);
 
   if(oi == oi_end)
     return(true);
-
-  // Go to the second byte. If the operand is only a single byte, it cannot be
-  // an unsupported register combination or split between register and memory.
-  oi2 = oi;
-  oi2++;
-  if (oi2 == oi_end)
-    return(true);
-
-  // Register combinations code generation cannot handle yet (XL with A or B).
-  if(std::binary_search(a.local.begin(), a.local.end(), oi->second) && std::binary_search(a.local.begin(), a.local.end(), oi2->second))
-    {
-      const reg_t l = a.global[oi->second];
-      const reg_t h = a.global[oi2->second];
-      if(l == REG_XL && h == REG_A)
-        return(false);
-      if(l == REG_XL && h == REG_B)
-        return(false);
-      if(h == REG_XL && l == REG_A)
-        return(false);
-      if(h == REG_XL && l == REG_B)
-        return(false);
-    }
 
   // In registers.
   if(std::binary_search(a.local.begin(), a.local.end(), oi->second))
@@ -489,30 +432,10 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
   if(!Dinst_ok(a, i, G, I))
     return(std::numeric_limits<float>::infinity());
 
-  if(ic->op != IFX && ic->prev && ic->prev->op == GET_VALUE_AT_ADDRESS && OP_SYMBOL_CONST(IC_RESULT(ic->prev))->regType == REG_CND)
-    {
-      int key = OP_SYMBOL_CONST(IC_LEFT(ic->prev))->key;
-      bool inx = false, inmem = false, otherinx = false;
-      cfg_alive_t::const_iterator v, v_end;
-
-      for (v = G[i].alive.begin(), v_end = G[i].alive.end(); v != v_end; ++v)
-        {
-          bool x = (a.global[*v] == REG_XL || a.global[*v] == REG_XH);
-          if(I[*v].v != key)
-            otherinx |= x;
-          else if(a.global[*v] < 0)
-            inmem = true;
-          else if(a.global[*v] == REG_XL && I[*v].byte == 0 || a.global[*v] == REG_XH && I[*v].byte == 1)
-            inx = true;
-          else
-            return(std::numeric_limits<float>::infinity());
-        }
-      if(inx && (inmem || operand_on_stack(IC_LEFT(ic), a, i, G) || operand_on_stack(IC_RIGHT(ic), a, i, G) || operand_on_stack(IC_RESULT(ic), a, i, G)) ||
-        inmem && otherinx)
-        return(std::numeric_limits<float>::infinity());
-    }
-
   if(!Xinst_ok(a, i, G, I))
+    return(std::numeric_limits<float>::infinity());
+
+  if((ic->op == CALL || ic->op == PCALL) && (a.i_assignment.registers[REG_TEMP0L][1] >= 0 || a.i_assignment.registers[REG_TEMP1L][1] >= 0))
     return(std::numeric_limits<float>::infinity());
 
   switch(ic->op)
@@ -594,24 +517,28 @@ static bool assignment_hopeless(const assignment &a, unsigned short int i, const
             continue;
           }
 
-        if(r == REG_B || r == REG_XL)
-          {
-            reg_t partner = (r == REG_B ? REG_A : REG_XH);
+        if(I[v].byte == 0 && r != REG_B && r != REG_XL && r != REG_TEMP0L && r != REG_TEMP1L)
+          return(true);
+        if(I[v].byte == 1 && r != REG_A && r != REG_XH && r != REG_TEMP0H && r != REG_TEMP1H)
+          return(true);
 
-            if(I[v].byte != 0)
-              return(true);
-            if(std::binary_search(a.local.begin(), a.local.end(), (var_t)(v + 1)) && a.global[v + 1] != partner)
-              return(true);
-          }
-        else if(r == REG_A || r == REG_XH)
+        if(I[v].byte == 1)
           {
-            reg_t partner = (r == REG_A ? REG_B : REG_XL);
-
-            if(I[v].byte != 1)
+            if(std::binary_search(a.local.begin(), a.local.end(), (var_t)(v - 1)) && a.global[v - 1] < 0)
               return(true);
-            if(std::binary_search(a.local.begin(), a.local.end(), (var_t)(v - 1)) && a.global[v - 1] != partner)
-              return(true);
+            continue;
           }
+
+        if(!std::binary_search(a.local.begin(), a.local.end(), (var_t)(v + 1)))
+          continue;
+        if(r == REG_B && a.global[v + 1] != REG_A)
+          return(true);
+        if(r == REG_XL && a.global[v + 1] != REG_XH)
+          return(true);
+        if(r == REG_TEMP0L && a.global[v + 1] != REG_TEMP0H)
+          return(true);
+        if(r == REG_TEMP1L && a.global[v + 1] != REG_TEMP1H)
+          return(true);
       }
 
   if((ia.registers[REG_XL][1] >= 0 && ia.registers[REG_XH][1] >= 0) &&
@@ -658,32 +585,6 @@ static void extra_ic_generated(iCode *ic)
           OP_SYMBOL (IC_RESULT (ic))->regType = REG_CND;
           ifx->generated = true;
         }
-    }
-  if(ic->op == GET_VALUE_AT_ADDRESS && IS_ITEMP (IC_RESULT (ic)) && getSize(operandType(IC_RESULT (ic))) <= 2 && IS_ITEMP (IC_LEFT (ic)) && !OP_SYMBOL (IC_LEFT (ic))->remat &&
-    !IS_VOLATILE (operandType (IC_LEFT (ic))->next) && !IS_BITVAR (getSpec (operandType (IC_RESULT (ic)))) &&
-    IS_OP_LITERAL (IC_RIGHT (ic)) &&
-    bitVectnBitsOn (OP_USES (IC_RESULT (ic))) == 1 && ic->next &&
-    (ic->next->op == '+' || ic->next->op == '-' || IS_BITWISE_OP (ic->next) || IS_CONDITIONAL (ic->next)) &&
-    isOperandEqual (IC_LEFT (ic->next), IC_RESULT (ic)) != isOperandEqual (IC_RIGHT (ic->next), IC_RESULT (ic)))
-    {
-      OP_SYMBOL (IC_RESULT (ic))->for_newralloc = false;
-      OP_SYMBOL (IC_RESULT (ic))->regType = REG_CND;
-      ic->generated = true;
-      ic->next->rlive = bitVectSetBit (ic->next->rlive, OP_SYMBOL (IC_LEFT (ic))->key);
-      if (OP_SYMBOL (IC_LEFT (ic))->liveTo < ic->next->seq)
-        OP_SYMBOL (IC_LEFT (ic))->liveTo = ic->next->seq;
-    }
-  if(ic->op == '=' && !POINTER_SET (ic) && IS_ITEMP (IC_RESULT (ic)) && getSize(operandType(IC_RESULT (ic))) <= 2 &&
-    ic->next && (ic->next->op == '-' || ic->next->op == '+') && IS_OP_LITERAL (IC_RIGHT (ic->next)) && operandLitValue (IC_RIGHT (ic->next)) == 1 &&
-    getSize(operandType(IC_RESULT (ic->next))) == getSize(operandType(IC_RESULT (ic))) &&
-    !isOperandVolatile (IC_RIGHT (ic), false) && !isOperandVolatile (IC_RESULT (ic->next), false) &&
-    (isOperandEqual (IC_LEFT (ic->next), IC_RIGHT (ic)) || isOperandEqual (IC_LEFT (ic->next), IC_RESULT (ic))) &&
-    ic->next->next && ic->next->next->op == IFX && isOperandEqual (IC_COND (ic->next->next), IC_RESULT (ic)) &&
-    bitVectnBitsOn (OP_USES (IC_RESULT (ic))) == (isOperandEqual (IC_LEFT (ic->next), IC_RESULT (ic)) ? 2 : 1))
-    {
-      OP_SYMBOL (IC_RESULT (ic))->for_newralloc = false;
-      OP_SYMBOL (IC_RESULT (ic))->regType = REG_CND;
-      ic->next->next->generated = true;
     }
 }
 
