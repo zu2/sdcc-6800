@@ -30,23 +30,6 @@
 
 extern void genmc6800Code (iCode *);
 
-#define D(x)
-
-/* Global data */
-static struct
-  {
-    bitVect *spiltSet;
-    set *stackSpil;
-    bitVect *regAssigned;
-    bitVect *totRegAssigned;    /* final set of LRs that got into registers */
-    short blockSpil;
-    int slocNum;
-    bitVect *funcrUsed;         /* registers used in a function */
-    int stackExtend;
-    int dataExtend;
-  }
-_G;
-
 /* Shared with gen.c */
 bool mc6800_far_frame;
 static int mc6800_call_stack_size;
@@ -55,21 +38,21 @@ static int mc6800_call_stack_size;
 reg_info regsmc6800[] =
 {
 
-  {REG_GPR, A_IDX,   "a",  MC6800MASK_A,  1, {A_IDX}, NULL, 0, 1},
-  {REG_GPR, B_IDX,   "b",  MC6800MASK_B,  1, {B_IDX}, NULL, 0, 1},
-  {REG_PTR, XL_IDX,  "xl", MC6800MASK_XL, 1, {XL_IDX}, NULL, 0, 1},
-  {REG_PTR, XH_IDX,  "xh", MC6800MASK_XH, 1, {XH_IDX}, NULL, 0, 1},
-  {REG_GPR, TEMP0L_IDX, "REGTEMP0+1", 0, 1, {TEMP0L_IDX}, NULL, 0, 1},
-  {REG_GPR, TEMP0H_IDX, "REGTEMP0", 0, 1, {TEMP0H_IDX}, NULL, 0, 1},
-  {REG_GPR, TEMP1L_IDX, "REGTEMP1+1", 0, 1, {TEMP1L_IDX}, NULL, 0, 1},
-  {REG_GPR, TEMP1H_IDX, "REGTEMP1", 0, 1, {TEMP1H_IDX}, NULL, 0, 1},
-  {REG_PTR, X_IDX,   "x",  MC6800MASK_X,  2, {XL_IDX, XH_IDX}, NULL, 0, 1},
-  {REG_GPR, D_IDX,   "d",  MC6800MASK_D,  2, {B_IDX, A_IDX}, NULL, 0, 1},
-  {REG_GPR, TEMP0_IDX, "temp0", 0, 2, {TEMP0L_IDX, TEMP0H_IDX}, NULL, 0, 1},
-  {REG_GPR, TEMP1_IDX, "temp1", 0, 2, {TEMP1L_IDX, TEMP1H_IDX}, NULL, 0, 1},
+  {A_IDX,   "a",  MC6800MASK_A,  1, {A_IDX}, NULL, 0, 1},
+  {B_IDX,   "b",  MC6800MASK_B,  1, {B_IDX}, NULL, 0, 1},
+  {XL_IDX,  "xl", MC6800MASK_XL, 1, {XL_IDX}, NULL, 0, 1},
+  {XH_IDX,  "xh", MC6800MASK_XH, 1, {XH_IDX}, NULL, 0, 1},
+  {TEMP0L_IDX, "REGTEMP0+1", 0, 1, {TEMP0L_IDX}, NULL, 0, 1},
+  {TEMP0H_IDX, "REGTEMP0", 0, 1, {TEMP0H_IDX}, NULL, 0, 1},
+  {TEMP1L_IDX, "REGTEMP1+1", 0, 1, {TEMP1L_IDX}, NULL, 0, 1},
+  {TEMP1H_IDX, "REGTEMP1", 0, 1, {TEMP1H_IDX}, NULL, 0, 1},
+  {X_IDX,   "x",  MC6800MASK_X,  2, {XL_IDX, XH_IDX}, NULL, 0, 1},
+  {D_IDX,   "d",  MC6800MASK_D,  2, {B_IDX, A_IDX}, NULL, 0, 1},
+  {TEMP0_IDX, "temp0", 0, 2, {TEMP0L_IDX, TEMP0H_IDX}, NULL, 0, 1},
+  {TEMP1_IDX, "temp1", 0, 2, {TEMP1L_IDX, TEMP1H_IDX}, NULL, 0, 1},
 
-  {REG_CND, CND_IDX, "C",  0, 1, {CND_IDX}, NULL, 0, 1},
-  {0,       SP_IDX,  "sp", 0, 1, {SP_IDX}, NULL, 0, 1},
+  {CND_IDX, "C",  0, 1, {CND_IDX}, NULL, 0, 1},
+  {SP_IDX,  "sp", 0, 1, {SP_IDX}, NULL, 0, 1},
 };
 static const int mc6800_nRegs = TEMP1_IDX + 1;
 
@@ -172,9 +155,7 @@ mc6800_useReg (reg_info * reg)
         mc6800_reg_x->isFree = 0;
         break;
       case X_IDX:
-        mc6800_reg_xl->aop = NULL;
         mc6800_reg_xl->isFree = 0;
-        mc6800_reg_xh->aop = NULL;
         mc6800_reg_xh->isFree = 0;
         break;
       case D_IDX:
@@ -192,22 +173,12 @@ mc6800_useReg (reg_info * reg)
 void
 mc6800_dirtyReg (reg_info * reg, bool freereg)
 {
-  reg->aop = NULL;
-
   switch (reg->rIdx)
     {
       case XL_IDX:
-        mc6800_reg_x->aop = NULL;
-        mc6800_reg_xl->aop = NULL;
-        break;
       case XH_IDX:
-        mc6800_reg_x->aop = NULL;
-        mc6800_reg_xh->aop = NULL;
-        break;
       case X_IDX:
-	mc6800_reg_x->aop = NULL;
-        mc6800_reg_xl->aop = NULL;
-        mc6800_reg_xh->aop = NULL;
+        mc6800_reg_x->aop = NULL;
         break;
       default:
         break;
@@ -222,12 +193,12 @@ mc6800_dirtyReg (reg_info * reg, bool freereg)
 static symbol *
 createStackSpil (symbol * sym)
 {
+  static int slocNum;
   symbol *sloc = NULL;
   struct dbuf_s dbuf;
-  int useXstack, model;
 
   dbuf_init (&dbuf, 128);
-  dbuf_printf (&dbuf, "sloc%d", _G.slocNum++);
+  dbuf_printf (&dbuf, "sloc%d", slocNum++);
   sloc = newiTemp (dbuf_c_str (&dbuf));
   dbuf_destroy (&dbuf);
 
@@ -240,37 +211,14 @@ createStackSpil (symbol * sym)
   SPEC_VOLATILE(sloc->etype) = 0;
   SPEC_ABSA(sloc->etype) = 0;
 
-  /* we don't allow it to be allocated
-     onto the external stack since : so we
-     temporarily turn it off ; we also
-     turn off memory model to prevent
-     the spil from going to the external storage
-   */
-
-  useXstack = options.useXstack;
-  model = options.model;
-/*     noOverlay = options.noOverlay; */
-/*     options.noOverlay = 1; */
-  options.model = options.useXstack = 0;
-
   allocLocal (sloc);
 
-  options.useXstack = useXstack;
-  options.model = model;
-/*     options.noOverlay = noOverlay; */
   sloc->isref = 1;              /* to prevent compiler warning */
 
   /* if it is on the stack then update the stack */
   if (IN_STACK (sloc->etype))
-    {
-      currFunc->stack += getSize (sloc->type);
-      _G.stackExtend += getSize (sloc->type);
-    }
-  else
-    _G.dataExtend += getSize (sloc->type);
+    currFunc->stack += getSize (sloc->type);
 
-  /* add it to the _G.stackSpil set */
-  addSetHead (&_G.stackSpil, sloc);
   sym->usl.spillLoc = sloc;
   sym->stackSpil = 1;
 
@@ -286,76 +234,20 @@ createStackSpil (symbol * sym)
 void
 mc6800SpillThis (symbol * sym)
 {
-  int i;
+  wassert (!sym->regs[0]);
+
   /* if this is rematerializable or has a spillLocation
      we are okay, else we need to create a spillLocation
      for it */
   if (!(sym->remat || sym->usl.spillLoc))
     createStackSpil (sym);
 
-  /* mark it as spilt & put it in the spilt set */
+  /* mark it as spilt */
   sym->isspilt = sym->spillA = 1;
-  _G.spiltSet = bitVectSetBit (_G.spiltSet, sym->key);
-
-  bitVectUnSetBit (_G.regAssigned, sym->key);
-  bitVectUnSetBit (_G.totRegAssigned, sym->key);
-
-  for (i = 0; i < sym->nRegs; i++)
-    {
-      if (sym->regs[i])
-        {
-          mc6800_freeReg (sym->regs[i]);
-          sym->regs[i] = NULL;
-        }
-    }
 
   if (sym->usl.spillLoc && !sym->remat)
     sym->usl.spillLoc->allocreq++;
   return;
-}
-
-/*-----------------------------------------------------------------*/
-/* updateRegUsage -  update the registers in use at the start of   */
-/*                   this icode                                    */
-/*-----------------------------------------------------------------*/
-static void
-updateRegUsage (iCode * ic)
-{
-  int reg;
-
-  for (reg=0; reg<mc6800_nRegs; reg++)
-    {
-      if (regsmc6800[reg].isFree)
-        {
-          ic->riu &= ~(regsmc6800[reg].mask);
-        }
-      else
-        {
-          ic->riu |= (regsmc6800[reg].mask);
-        }
-    }
-}
-
-/*-----------------------------------------------------------------*/
-/* reassignLR - reassign this to registers                         */
-/*-----------------------------------------------------------------*/
-static void
-reassignLR (operand * op)
-{
-  symbol *sym = OP_SYMBOL (op);
-  int i;
-
-  /* not spilt any more */
-  sym->isspilt = sym->spillA = sym->blockSpil = sym->remainSpil = 0;
-  bitVectUnSetBit (_G.spiltSet, sym->key);
-
-  _G.regAssigned = bitVectSetBit (_G.regAssigned, sym->key);
-  _G.totRegAssigned = bitVectSetBit (_G.totRegAssigned, sym->key);
-
-  _G.blockSpil--;
-
-  for (i = 0; i < sym->nRegs; i++)
-    sym->regs[i]->isFree = 0;
 }
 
 /*------------------------------------------------------------------*/
@@ -378,10 +270,6 @@ verifyRegsAssigned (operand *op, iCode * ic)
   if (!sym->nRegs) return;
   if (sym->regs[0]) return;
 
-  /* Don't warn for new allocator, since this is not used by default (until Thoruop is implemented for spillocation compaction). */
-  /*if (z80_opts.oldralloc)
-    werrorfl (ic->filename, ic->lineno, W_LOCAL_NOINIT, sym->prereqv ? sym->prereqv->name : sym->name);*/
-
   mc6800SpillThis (sym);
 }
 
@@ -389,7 +277,7 @@ verifyRegsAssigned (operand *op, iCode * ic)
 /* regTypeNum - computes the type & number of registers required   */
 /*-----------------------------------------------------------------*/
 static void
-regTypeNum (eBBlock *ebbs)
+regTypeNum (void)
 {
   symbol *sym;
   int k;
@@ -429,11 +317,7 @@ regTypeNum (eBBlock *ebbs)
               fprintf (stderr, "\n");
             }
 
-          /* determine the type of register required */
-          if (sym->nRegs == 1 && IS_PTR (sym->type) && sym->uptr)
-            sym->regType = REG_PTR;
-          else
-            sym->regType = REG_GPR;
+          sym->regType = REG_GPR;
         }
       else
         /* for the first run we don't provide */
@@ -452,25 +336,9 @@ freeAllRegs ()
   int i;
 
   for (i = 0; i < mc6800_nRegs; i++)
-    {
-      regsmc6800[i].isFree = 1;
-      regsmc6800[i].aop = NULL;
-    }
+    regsmc6800[i].isFree = 1;
+  mc6800_reg_x->aop = NULL;
 }
-
-/*-----------------------------------------------------------------*/
-/* deallocStackSpil - this will set the stack pointer back         */
-/*-----------------------------------------------------------------*/
-static
-DEFSETFUNC (deallocStackSpil)
-{
-  symbol *sym = item;
-
-  deallocLocal (sym);
-  return 0;
-}
-
-
 
 /*-----------------------------------------------------------------*/
 /* packRegsForAssign - register reduction for assignment           */
@@ -583,20 +451,9 @@ packRegsForAssign (iCode * ic, eBBlock * ebp)
   if (IS_VOLATILE (operandType (IC_RESULT (ic))))
     return 0;
 
-  /* if assignment then check that right is not a bit */
-  if (ASSIGNMENT (ic) && !POINTER_SET (ic))
-    {
-      sym_link *etype = operandType (IC_RESULT (dic));
-      if (IS_BITFIELD (etype))
-        {
-          /* if result is a bit too then it's ok */
-          etype = operandType (IC_RESULT (ic));
-          if (!IS_BITFIELD (etype))
-            {
-              return 0;
-            }
-        }
-    }
+  /* check that right is not a bit */
+  if (IS_BITFIELD (operandType (IC_RESULT (dic))) && !IS_BITFIELD (operandType (IC_RESULT (ic))))
+    return 0;
 
   /* found the definition */
 
@@ -666,12 +523,6 @@ findAssignToSym (operand * op, iCode * ic)
 
   if (!dic)
     return NULL;   /* didn't find any assignment to op */
-  /* we are interested only if defined in far space */
-  /* or in stack space in case of + & - */
-
-  /* if assigned to a non-symbol then don't repack regs */
-  if (!IS_SYMOP (IC_RIGHT (dic)))
-    return NULL;
 
   /* if the symbol's address has been taken, there might be a */
   /* non-obvious assignment to it, and so we should not */
@@ -685,22 +536,13 @@ findAssignToSym (operand * op, iCode * ic)
      What does it mean for an iTemp to be volatile, anyway? Passing
      true is more cautious but may prevent possible optimizations */
 
-  /* if the symbol is in far space then we should not */
-  /* if (isOperandInFarSpace (IC_RIGHT (dic)))
-    return NULL; */
-
 
   /* now make sure that the right side of dic
      is not defined between ic & dic */
-  if (dic)
-    {
-      iCode *sic = dic->next;
-
-      for (; sic != ic; sic = sic->next)
-        if (IC_RESULT (sic) &&
-            IC_RESULT (sic)->key == IC_RIGHT (dic)->key)
-          return NULL;
-    }
+  for (iCode *sic = dic->next; sic != ic; sic = sic->next)
+    if (IC_RESULT (sic) &&
+        IC_RESULT (sic)->key == IC_RIGHT (dic)->key)
+      return NULL;
 
   return dic;
 }
@@ -747,11 +589,10 @@ reassignAliasedSym (eBBlock *ebp, iCode *assignment, iCode *use, operand *op)
 /*-----------------------------------------------------------------*/
 /* packRegsForSupport :- reduce some registers for support calls   */
 /*-----------------------------------------------------------------*/
-static int
+static void
 packRegsForSupport (iCode * ic, eBBlock * ebp)
 {
   iCode *dic;
-  int changes = 0;
 
   /* for the left & right operand :- look to see if the
      left was assigned a true symbol in far space in that
@@ -766,7 +607,6 @@ packRegsForSupport (iCode * ic, eBBlock * ebp)
         {
           /* found it we need to remove it from the block */
           reassignAliasedSym (ebp, dic, ic, IC_LEFT(ic));
-          changes++;
         }
     }
 
@@ -780,11 +620,8 @@ packRegsForSupport (iCode * ic, eBBlock * ebp)
         {
           /* found it we need to remove it from the block */
           reassignAliasedSym (ebp, dic, ic, IC_RIGHT(ic));
-          changes++;
         }
     }
-
-  return changes;
 }
 
 /*-----------------------------------------------------------------*/
@@ -827,7 +664,7 @@ packForPush (iCode * ic, eBBlock ** ebpp, int count)
   int disallowHiddenAssignment = 0;
   eBBlock * ebp = ebpp[ic->eBBlockNum];
 
-  if ((ic->op != IPUSH && ic->op != SEND) || !IS_ITEMP (IC_LEFT (ic)))
+  if (!IS_ITEMP (IC_LEFT (ic)))
     return;
 
   /* must have only definition & one usage */
@@ -947,7 +784,7 @@ moveSendToCall (iCode *sic, eBBlock *ebp)
 /* The z80-related ports do this in SDCCopt.c, offsetFoldUse()         */
 /*---------------------------------------------------------------------*/
 static void
-packPointerOp (iCode * ic, eBBlock ** ebpp)
+packPointerOp (iCode * ic)
 {
   operand * pointer;
   operand * offsetOp;
@@ -1035,25 +872,13 @@ packPointerOp (iCode * ic, eBBlock ** ebpp)
         {
           uic = hTabItemWithKey (iCodehTab, key);
           if (POINTER_GET (uic))
-            {
-              IC_RIGHT (uic) = offsetOp;
-              if (IS_SYMOP (offsetOp))
-                OP_USES (offsetOp) = bitVectSetBit (OP_USES (offsetOp), key);
-            }
-          else if (POINTER_SET (uic))
-            {
-              IC_LEFT (uic) = offsetOp;
-              if (IS_SYMOP (offsetOp))
-                OP_USES (offsetOp) = bitVectSetBit (OP_USES (offsetOp), key);
-            }
+            IC_RIGHT (uic) = offsetOp;
           else
-            return;
+            IC_LEFT (uic) = offsetOp;
         }
     }
 
   /* Put the remaining operand on the right and convert to assignment     */
-  if (IS_SYMOP (offsetOp))
-    bitVectUnSetBit (OP_USES (offsetOp), dic->key);
   IC_RIGHT (dic) = nonOffsetOp;
   IC_LEFT (dic) = NULL;
   SET_ISADDR (IC_RESULT (dic), 0);
@@ -1094,8 +919,6 @@ packRegisters (eBBlock ** ebpp, int count)
 
       for (ic = ebp->sch; ic; ic = ic->next)
         {
-          //packRegsForLiteral (ic);
-
           /* move SEND to immediately precede its CALL/PCALL */
           if (ic->op == SEND && ic->next &&
               ic->next->op != CALL && ic->next->op != PCALL)
@@ -1165,13 +988,6 @@ packRegisters (eBBlock ** ebpp, int count)
               OP_SYMBOL (IC_RESULT (ic))->rematiCode = ic;
               OP_SYMBOL (IC_RESULT (ic))->usl.spillLoc = NULL;
             }
-          /* mark the pointer usages */
-          if (POINTER_SET (ic) && IS_SYMOP (IC_RESULT (ic)))
-            OP_SYMBOL (IC_RESULT (ic))->uptr = 1;
-
-          if (POINTER_GET (ic) && IS_SYMOP (IC_LEFT (ic)))
-            OP_SYMBOL (IC_LEFT (ic))->uptr = 1;
-
           /* reduce for support function calls */
           if (ic->supportRtn || (ic->op != IFX && ic->op != JUMPTABLE))
             packRegsForSupport (ic, ebp);
@@ -1203,7 +1019,7 @@ packRegisters (eBBlock ** ebpp, int count)
             }
 
           if (POINTER_SET (ic) || POINTER_GET (ic))
-            packPointerOp (ic, ebpp);
+            packPointerOp (ic);
         }
     }
 }
@@ -1259,14 +1075,8 @@ serialRegMark (eBBlock ** ebbs, int count)
       /* for all instructions do */
       for (ic = ebbs[i]->sch; ic; ic = ic->next)
         {
-          updateRegUsage(ic);
           if ((ic->op == CALL || ic->op == PCALL) && ic->parmBytes + 2 > mc6800_call_stack_size)
             mc6800_call_stack_size = ic->parmBytes + 2;
-
-          /* if this is an ipop that means some live
-             range will have to be assigned again */
-          if (ic->op == IPOP)
-              reassignLR (IC_LEFT (ic));
 
           /* if result is present && is a true symbol */
           if (IC_RESULT (ic) && ic->op != IFX &&
@@ -1280,7 +1090,6 @@ serialRegMark (eBBlock ** ebbs, int count)
               ic->op == JUMPTABLE ||
               ic->op == IFX ||
               ic->op == IPUSH ||
-              ic->op == IPOP ||
               (IC_RESULT (ic) && POINTER_SET (ic)))
             {
               continue;
@@ -1296,19 +1105,11 @@ serialRegMark (eBBlock ** ebbs, int count)
                   sym->usl.spillLoc->allocreq--;
                   sym->isspilt = false;
                 }
-              /* Make sure any spill location is definitely allocated */
-              if (sym->isspilt && !sym->remat && sym->usl.spillLoc &&
-                  !sym->usl.spillLoc->allocreq)
-                {
-                  sym->usl.spillLoc->allocreq++;
-                }
 
               /* if it does not need or is spilt
-                 or is already assigned to registers
                  or will not live beyond this instructions */
               if (!sym->nRegs ||
                   sym->isspilt ||
-                  bitVectBitValue (_G.regAssigned, sym->key) ||
                   sym->liveTo <= ic->seq)
                 {
                   continue;
@@ -1316,15 +1117,6 @@ serialRegMark (eBBlock ** ebbs, int count)
 
               if (sym->usl.spillLoc && !sym->isreqv && !sym->stackSpil)
                 sym->usl.spillLoc = NULL;
-
-              /* if some liverange has been spilt at the block level
-                 and this one live beyond this block then spil this
-                 to be safe */
-              if (_G.blockSpil && sym->liveTo > ebbs[i]->lSeq)
-                {
-                  mc6800SpillThis (sym);
-                  continue;
-                }
 
               if (sym->remat)
                 {
@@ -1351,16 +1143,12 @@ serialRegMark (eBBlock ** ebbs, int count)
 /* New register allocator                                          */
 /*-----------------------------------------------------------------*/
 void
-mc6800_ralloc (ebbIndex * ebbi)
+mc6800_assignRegisters (ebbIndex * ebbi)
 {
   eBBlock ** ebbs = ebbi->bbOrder;
   int count = ebbi->count;
   iCode *ic;
 
-  setToNull ((void *) &_G.funcrUsed);
-  setToNull ((void *) &_G.regAssigned);
-  setToNull ((void *) &_G.totRegAssigned);
-  _G.stackExtend = _G.dataExtend = 0;
   mc6800_far_frame = false;
   mc6800_reg_a = mc6800_regWithIdx(A_IDX);
   mc6800_reg_b = mc6800_regWithIdx(B_IDX);
@@ -1384,34 +1172,19 @@ mc6800_ralloc (ebbIndex * ebbi)
 
   /* first determine for each live range the number of
      registers & the type of registers required for each */
-  regTypeNum (*ebbs);
+  regTypeNum ();
 
   /* and serially allocate registers */
   serialRegMark (ebbs, count);
 
   /* The new register allocator invokes its magic */
-  ic = mc6800_ralloc2_cc (ebbi);
+  mc6800_ralloc2_cc (ebbi);
 
   if (currFunc && currFunc->stack + mc6800_call_stack_size > 255)
     {
       mc6800_far_frame = true;
       serialRegMark (ebbs, count);
-      ic = mc6800_ralloc2_cc (ebbi);
-    }
-
-  /* if stack was extended then tell the user */
-  if (_G.stackExtend)
-    {
-/*      werror(W_TOOMANY_SPILS,"stack", */
-/*             _G.stackExtend,currFunc->name,""); */
-      _G.stackExtend = 0;
-    }
-
-  if (_G.dataExtend)
-    {
-/*      werror(W_TOOMANY_SPILS,"data space", */
-/*             _G.dataExtend,currFunc->name,""); */
-      _G.dataExtend = 0;
+      mc6800_ralloc2_cc (ebbi);
     }
 
   if (options.dump_i_code)
@@ -1428,23 +1201,9 @@ mc6800_ralloc (ebbIndex * ebbi)
 
   genmc6800Code (ic);
 
-  /* free up any _G.stackSpil locations allocated */
-  applyToSet (_G.stackSpil, deallocStackSpil);
-  _G.slocNum = 0;
-  setToNull ((void *) &_G.stackSpil);
-  setToNull ((void *) &_G.spiltSet);
   /* mark all registers as free */
   freeAllRegs ();
 
   return;
-}
-
-/*-----------------------------------------------------------------*/
-/* assignRegisters - assigns registers to each live range as need  */
-/*-----------------------------------------------------------------*/
-void
-mc6800_assignRegisters (ebbIndex * ebbi)
-{
-  mc6800_ralloc (ebbi);
 }
 

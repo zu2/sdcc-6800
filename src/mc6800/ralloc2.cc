@@ -21,9 +21,6 @@
 //#define DEBUG_RALLOC_DEC // Uncomment to get debug messages while doing register allocation on the tree decomposition.
 //#define DEBUG_RALLOC_DEC_ASS // Uncomment to get debug messages about assignments while doing register allocation on the tree decomposition (much more verbose than the one above).
 
-#define TD_SALLOC
-#define CH_SALLOC
-
 #include "SDCCralloc.hpp"
 #include "SDCCsalloc.hpp"
 
@@ -186,7 +183,6 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
     case INLINEASM:
       return(0.0f);
     case '!':
-    case '~':
     case UNARYMINUS:
     case '+':
     case '-':
@@ -194,7 +190,6 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
     case '|':
     case BITWISEAND:
     case IPUSH:
-    //case IPOP:
     case CALL:
     case PCALL:
     case RETURN:
@@ -440,6 +435,9 @@ iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
     {
       mergeSpiltParms(stack_conflict_graph);
       chaitin_salloc(stack_conflict_graph);
+
+      if(options.dump_graphs)
+        dump_scon(stack_conflict_graph);
     }
 
   return(ic);

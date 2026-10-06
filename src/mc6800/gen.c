@@ -2158,8 +2158,6 @@ aopOp (operand *op, iCode * ic, bool result)
        aop->aopu.aop_reg[i] = sym->regs[i];
        aop->regmask |= sym->regs[i]->mask;
     }
-  if ((sym->nRegs > 1) && (sym->regs[0]->mask > sym->regs[1]->mask))
-    aop->regmask |= MC6800MASK_REV;
   aop->op = op;
   if (!result)
     aop->valinfo = getOperandValinfo (ic, op);

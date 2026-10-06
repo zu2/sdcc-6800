@@ -46,29 +46,22 @@ enum
   };
 
 
-#define REG_PTR 0x01
 #define REG_GPR 0x02
 #define REG_CND 0x04
 
-/* Must preserve the relations MC6800MASK_A < MC6800MASK_B and         */
-/* MC6800MASK_XL < MC6800MASK_XH, so that aopOp sets MC6800MASK_REV   */
-/* for D (low byte in B) and not for X (low byte in XL).              */
 #define MC6800MASK_A 0x01
 #define MC6800MASK_B 0x02
 #define MC6800MASK_XL 0x04
-#define MC6800MASK_REV 0x08
 #define MC6800MASK_XH 0x10
 #define MC6800MASK_X (MC6800MASK_XL | MC6800MASK_XH)
-#define MC6800MASK_D (MC6800MASK_REV | MC6800MASK_A | MC6800MASK_B)
+#define MC6800MASK_D (MC6800MASK_A | MC6800MASK_B)
 
 /* definition for the registers */
 typedef struct reg_info
   {
-    short type;			/* can have value
-				   REG_GPR, REG_PTR or REG_CND */
     short rIdx;			/* index into register table */
     char *name;
-    short mask;			/* bitmask for pair allocation */
+    short mask;
     short size;
     short bytes[2];
     struct asmop *aop;
@@ -90,7 +83,6 @@ reg_info *mc6800_regWithIdx (int);
 void mc6800_useReg (reg_info * reg);
 void mc6800_freeReg (reg_info * reg);
 void mc6800_dirtyReg (reg_info * reg, bool freereg);
-bitVect *mc6800_rUmaskForOp (operand * op);
 
 iCode *mc6800_ralloc2_cc(ebbIndex *ebbi);
 void mc6800SpillThis (symbol *sym);
