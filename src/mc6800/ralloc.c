@@ -355,30 +355,12 @@ packRegsForAssign (iCode * ic, eBBlock * ebp)
       return 0;
     }
 
-  /* if the true symbol is defined in far space or on stack
-     then we should not since this will increase register pressure */
-
   /* find the definition of iTempNN scanning backwards if we find
      a use of the true symbol before we find the definition then
      we cannot */
   for (dic = ic->prev; dic; dic = dic->prev)
     {
-      int crossedCall = 0;
-
-      /* We can pack across a function call only if it's a local */
-      /* variable or our parameter. Never pack global variables */
-      /* or parameters to a function we call. */
-      if ((dic->op == CALL || dic->op == PCALL))
-        {
-          if (!OP_SYMBOL (IC_RESULT (ic))->ismyparm
-              && !OP_SYMBOL (IC_RESULT (ic))->islocal)
-            {
-              crossedCall = 1;
-            }
-        }
-
-      /* Don't move an assignment out of a critical block */
-      if (dic->op == CRITICAL)
+      if (dic->op == CRITICAL || dic->op == INLINEASM)
         {
           dic = NULL;
           break;
@@ -437,7 +419,7 @@ packRegsForAssign (iCode * ic, eBBlock * ebp)
               break;
             }
 
-          if (crossedCall)
+          if (dic->op == CALL || dic->op == PCALL)
             {
               dic = NULL;
               break;
@@ -485,230 +467,69 @@ packRegsForAssign (iCode * ic, eBBlock * ebp)
   return 1;
 }
 
-/*------------------------------------------------------------------*/
-/* findAssignToSym : scanning backwards looks for first assig found */
-/*------------------------------------------------------------------*/
-static iCode *
-findAssignToSym (operand * op, iCode * ic)
+/*-----------------------------------------------------------------*/
+/* packRegsForOneuse - use the variable instead of its single-use  */
+/*                     copy in an iTemp                            */
+/*-----------------------------------------------------------------*/
+static int
+packRegsForOneuse (iCode *ic, operand **opp, eBBlock *ebp)
 {
   iCode *dic;
+  operand *op = *opp;
 
-  /* This routine is used to find sequences like
-     iTempAA = FOO;
-     ...;  (intervening ops don't use iTempAA or modify FOO)
-     blah = blah + iTempAA;
+  if (!IS_ITEMP (op))
+    return 0;
 
-     and eliminate the use of iTempAA, freeing up its register for
-     other uses.
-  */
-  for (dic = ic->prev; dic; dic = dic->prev)
-    {
-      if (dic->op == '=' &&
-          !POINTER_SET (dic) &&
-          IC_RESULT (dic)->key == op->key
-          &&  IS_TRUE_SYMOP(IC_RIGHT(dic))
-        )
-        break;  /* found where this temp was defined */
+  if (OP_SYMBOL (op)->remat)
+    return 0;
 
-      /* if we find an usage then we cannot delete it */
-      if (IC_LEFT (dic) && IC_LEFT (dic)->key == op->key)
-        return NULL;
+  if (bitVectnBitsOn (OP_USES (op)) != 1 || bitVectnBitsOn (OP_DEFS (op)) != 1)
+    return 0;
 
-      if (IC_RIGHT (dic) && IC_RIGHT (dic)->key == op->key)
-        return NULL;
+  if (IS_SYMOP (IC_LEFT (ic)) && IS_SYMOP (IC_RIGHT (ic)) && IC_LEFT (ic)->key == IC_RIGHT (ic)->key)
+    return 0;
 
-      if (POINTER_SET (dic) && IC_RESULT (dic)->key == op->key)
-        return NULL;
-    }
-
-  if (!dic)
-    return NULL;   /* didn't find any assignment to op */
-
-  /* if the symbol's address has been taken, there might be a */
-  /* non-obvious assignment to it, and so we should not */
-  if (OP_SYMBOL (IC_RIGHT (dic))->addrtaken)
-    return NULL;
-
-  /* if the symbol is volatile then we should not */
-  if (isOperandVolatile (IC_RIGHT (dic), true))
-    return NULL;
-  /* XXX TODO --- should we be passing false to isOperandVolatile()?
-     What does it mean for an iTemp to be volatile, anyway? Passing
-     true is more cautious but may prevent possible optimizations */
-
-
-  /* now make sure that the right side of dic
-     is not defined between ic & dic */
-  for (iCode *sic = dic->next; sic != ic; sic = sic->next)
-    if (IC_RESULT (sic) &&
-        IC_RESULT (sic)->key == IC_RIGHT (dic)->key)
-      return NULL;
-
-  return dic;
-}
-
-/*-----------------------------------------------------------------*/
-/* reassignAliasedSym - used by packRegsForSupport to replace      */
-/*                      redundant iTemp with equivalent symbol     */
-/*-----------------------------------------------------------------*/
-static void
-reassignAliasedSym (eBBlock *ebp, iCode *assignment, iCode *use, operand *op)
-{
-  iCode *ic;
-  unsigned oldSymKey, newSymKey;
-
-  oldSymKey = op->key;
-  newSymKey = IC_RIGHT(assignment)->key;
-
-  /* only track live ranges of compiler-generated temporaries */
-  if (!IS_ITEMP(IC_RIGHT(assignment)))
-    newSymKey = 0;
-
-  /* update the live-value bitmaps */
-  for (ic = assignment; ic != use; ic = ic->next) {
-    bitVectUnSetBit (ic->rlive, oldSymKey);
-    if (newSymKey != 0)
-      ic->rlive = bitVectSetBit (ic->rlive, newSymKey);
-  }
-
-  /* update the sym of the used operand */
-  OP_SYMBOL(op) = OP_SYMBOL(IC_RIGHT(assignment));
-  op->key = OP_SYMBOL(op)->key;
-
-  /* update the sym's liverange */
-  if ( OP_LIVETO(op) < ic->seq )
-    setToRange(op, ic->seq, false);
-
-  /* remove the assignment iCode now that its result is unused */
-  remiCodeFromeBBlock (ebp, assignment);
-  bitVectUnSetBit(OP_SYMBOL(IC_RESULT(assignment))->defs, assignment->key);
-  hTabDeleteItem (&iCodehTab, assignment->key, assignment, DELETE_ITEM, NULL);
-}
-
-
-/*-----------------------------------------------------------------*/
-/* packRegsForSupport :- reduce some registers for support calls   */
-/*-----------------------------------------------------------------*/
-static void
-packRegsForSupport (iCode * ic, eBBlock * ebp)
-{
-  iCode *dic;
-
-  /* for the left & right operand :- look to see if the
-     left was assigned a true symbol in far space in that
-     case replace them */
-
-  if (IS_ITEMP (IC_LEFT (ic)) &&
-      OP_SYMBOL (IC_LEFT (ic))->liveTo <= ic->seq)
-    {
-      dic = findAssignToSym (IC_LEFT (ic), ic);
-
-      if (dic)
-        {
-          /* found it we need to remove it from the block */
-          reassignAliasedSym (ebp, dic, ic, IC_LEFT(ic));
-        }
-    }
-
-  /* do the same for the right operand */
-  if (IS_ITEMP (IC_RIGHT (ic)) &&
-      OP_SYMBOL (IC_RIGHT (ic))->liveTo <= ic->seq)
-    {
-      iCode *dic = findAssignToSym (IC_RIGHT (ic), ic);
-
-      if (dic)
-        {
-          /* found it we need to remove it from the block */
-          reassignAliasedSym (ebp, dic, ic, IC_RIGHT(ic));
-        }
-    }
-}
-
-/*-----------------------------------------------------------------*/
-/* packForPush - heuristics to reduce iCode for pushing            */
-/*-----------------------------------------------------------------*/
-static void
-packForPush (iCode * ic, eBBlock ** ebpp, int count)
-{
-  iCode *dic, *lic;
-  bitVect *dbv;
-  int disallowHiddenAssignment = 0;
-  eBBlock * ebp = ebpp[ic->eBBlockNum];
-
-  if (!IS_ITEMP (IC_LEFT (ic)))
-    return;
-
-  /* must have only definition & one usage */
-  if (bitVectnBitsOn (OP_DEFS (IC_LEFT (ic))) != 1 ||
-      bitVectnBitsOn (OP_USES (IC_LEFT (ic))) != 1)
-    return;
-
-  /* find the definition */
-  if (!(dic = hTabItemWithKey (iCodehTab,
-                               bitVectFirstBit (OP_DEFS (IC_LEFT (ic))))))
-    return;
-
-  if (dic->op != '=' || POINTER_SET (dic))
-    return;
+  if (!(dic = hTabItemWithKey (iCodehTab, bitVectFirstBit (OP_DEFS (op)))))
+    return 0;
 
   if (dic->seq < ebp->fSeq || dic->seq > ebp->lSeq)
+    return 0;
+
+  if (dic->op != '=' || POINTER_SET (dic) || !IS_TRUE_SYMOP (IC_RIGHT (dic)) || isOperandVolatile (IC_RIGHT (dic), true))
+    return 0;
+
+  if (compareType (operandType (op), operandType (IC_RIGHT (dic)), false) != 1)
+    return 0;
+
+  for (iCode *nic = dic->next; nic && nic != ic; nic = nic->next)
     {
-      int i;
-      for (i=0; i<count; i++)
-        {
-          if (dic->seq >= ebpp[i]->fSeq && dic->seq <= ebpp[i]->lSeq)
-            {
-              ebp=ebpp[i];
-              break;
-            }
-        }
-      if (i==count) // Abort if we can't find the definition's block
-        return;
+      if (nic->op == CALL || nic->op == PCALL || POINTER_SET (nic) ||
+          nic->op == INLINEASM || nic->op == CRITICAL || nic->op == ENDCRITICAL)
+        return 0;
+
+      if (nic->op == ADDRESS_OF && OP_SYMBOL (IC_RESULT (nic))->remat)
+        continue;
+
+      if (isOperandGlobal (IC_RESULT (nic)))
+        return 0;
+
+      if (IS_SYMOP (IC_RESULT (nic)) && IC_RESULT (nic)->key == IC_RIGHT (dic)->key)
+        return 0;
     }
 
-  if (IS_SYMOP(IC_RIGHT(dic)))
-    {
-      if (IC_RIGHT (dic)->isvolatile)
-        return;
+  *opp = operandFromOperand (IC_RIGHT (dic));
+  (*opp)->isaddr = true;
 
-      if (OP_SYMBOL (IC_RIGHT (dic))->addrtaken || isOperandGlobal (IC_RIGHT (dic)))
-        disallowHiddenAssignment = 1;
+  bitVectUnSetBit (OP_SYMBOL (op)->defs, dic->key);
+  bitVectUnSetBit (OP_SYMBOL (op)->uses, ic->key);
 
-      /* make sure the right side does not have any definitions
-         inbetween */
-      dbv = OP_DEFS(IC_RIGHT(dic));
-      for (lic = ic; lic && lic != dic ; lic = lic->prev)
-        {
-          if (bitVectBitValue(dbv,lic->key))
-            return ;
-          if (disallowHiddenAssignment && (lic->op == CALL || lic->op == PCALL || POINTER_SET (lic)))
-            return;
-        }
-      /* make sure they have the same type */
-      if (IS_SPEC(operandType(IC_LEFT(ic))))
-        {
-          sym_link *itype=operandType(IC_LEFT(ic));
-          sym_link *ditype=operandType(IC_RIGHT(dic));
+  for (iCode *nic = dic; nic != ic; nic = nic->next)
+    bitVectUnSetBit (nic->rlive, op->key);
 
-          if (SPEC_USIGN(itype)!=SPEC_USIGN(ditype) ||
-              SPEC_LONG(itype)!=SPEC_LONG(ditype))
-            return;
-        }
-      /* extend the live range of replaced operand if needed */
-      if (OP_SYMBOL(IC_RIGHT(dic))->liveTo < ic->seq)
-        {
-          OP_SYMBOL(IC_RIGHT(dic))->liveTo = ic->seq;
-        }
-      bitVectUnSetBit(OP_SYMBOL(IC_RESULT(dic))->defs,dic->key);
-    }
-  if (IS_ITEMP (IC_RIGHT (dic)))
-    OP_USES (IC_RIGHT (dic)) = bitVectSetBit (OP_USES (IC_RIGHT (dic)), ic->key);
-
-  /* we now we know that it has one & only one def & use
-     and the that the definition is an assignment */
-  ReplaceOpWithCheaperOp(&IC_LEFT (ic), IC_RIGHT (dic));
   remiCodeFromeBBlock (ebp, dic);
   hTabDeleteItem (&iCodehTab, dic->key, dic, DELETE_ITEM, NULL);
+
+  return 1;
 }
 
 /*------------------------------------------------------------------*/
@@ -959,20 +780,19 @@ packRegisters (eBBlock ** ebpp, int count)
               OP_SYMBOL (IC_RESULT (ic))->rematiCode = ic;
               OP_SYMBOL (IC_RESULT (ic))->usl.spillLoc = NULL;
             }
-          /* reduce for support function calls */
-          if (ic->supportRtn || (ic->op != IFX && ic->op != JUMPTABLE))
-            packRegsForSupport (ic, ebp);
-
-          /* pack for PUSH
-             iTempNN := (some variable in farspace) V1
-             push iTempNN ;
-             -------------
-             push V1
-           */
-          if (ic->op == IPUSH || ic->op == SEND)
-            {
-              packForPush (ic, ebpp, count);
-            }
+          if (ic->op == GET_VALUE_AT_ADDRESS ||
+            ic->op == '+' || ic->op == '-' || ic->op == UNARYMINUS ||
+            ic->op == '|' || ic->op == BITWISEAND || ic->op == '^' ||
+            ic->op == EQ_OP || ic->op == NE_OP ||
+            ic->op == IFX && operandSize (IC_COND (ic)) == 1 ||
+            ic->op == IPUSH && operandSize (IC_LEFT (ic)) <= 2 ||
+            ic->op == LEFT_OP || ic->op == RIGHT_OP)
+            packRegsForOneuse (ic, &(IC_LEFT (ic)), ebp);
+          if (ic->op == '+' || ic->op == '-' ||
+            ic->op == '|' || ic->op == BITWISEAND || ic->op == '^' ||
+            ic->op == EQ_OP || ic->op == NE_OP ||
+            ic->op == LEFT_OP || ic->op == RIGHT_OP)
+            packRegsForOneuse (ic, &(IC_RIGHT (ic)), ebp);
 
           if (POINTER_SET (ic) || POINTER_GET (ic))
             packPointerOp (ic);
