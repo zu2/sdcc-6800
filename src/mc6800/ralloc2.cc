@@ -106,106 +106,6 @@ static bool operand_in_reg(const operand *o, reg_t r, const i_assignment_t &ia, 
 }
 
 template <class G_t, class I_t>
-static bool ABXinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
-{
-  const iCode *ic = G[i].ic;
-
-  // Instructions that can handle anything.
-  if(ic->op == '!' ||
-    ic->op == '~' ||
-    ic->op == UNARYMINUS ||
-    ic->op == CALL ||
-    ic->op == PCALL ||
-    ic->op == FUNCTION ||
-    ic->op == ENDFUNCTION ||
-    ic->op == RETURN ||
-    ic->op == LABEL ||
-    ic->op == GOTO ||
-    ic->op == IFX ||
-    ic->op == '+' ||
-    ic->op == '-' ||
-    ic->op == '*' ||
-    ic->op == '/' ||
-    ic->op == '%' ||
-    ic->op == NE_OP || ic->op == EQ_OP ||
-    ic->op == AND_OP ||
-    ic->op == OR_OP ||
-    ic->op == '^' ||
-    ic->op == '|' ||
-    ic->op == BITWISEAND ||
-    ic->op == GETABIT ||
-    ic->op == GETBYTE ||
-    ic->op == GETWORD ||
-    ic->op == LEFT_OP ||
-    ic->op == RIGHT_OP ||
-    ic->op == '=' ||  /* both regular assignment and POINTER_SET safe */
-    ic->op == GET_VALUE_AT_ADDRESS ||
-    ic->op == ADDRESS_OF ||
-    ic->op == CAST ||
-    ic->op == DUMMY_READ_VOLATILE ||
-    ic->op == ROT && IS_OP_LITERAL (IC_RIGHT (ic)))
-    return(true);
-
-  if(ic->op == IFX && ic->generated)
-    return(true);
-
-  const i_assignment_t &ia = a.i_assignment;
-
-  bool unused_A = (ia.registers[REG_A][1] < 0);
-  bool unused_B = (ia.registers[REG_B][1] < 0);
-  bool unused_X = (ia.registers[REG_XL][1] < 0);
-
-  if(unused_X && unused_A && unused_B)
-    return(true);
-
-#if 0
-  std::cout << "ABXinst_ok: at (" << i << ", " << ic->key << ")\nX = (" << ia.registers[REG_XL][0] << ", " << ia.registers[REG_XL][1] << "), A = (" << ia.registers[REG_A][0] << ", " << ia.registers[REG_A][1] << ")inst " << i << ", " << ic->key << "\n";
-#endif
-
-  const operand *left = IC_LEFT(ic);
-  const operand *right = IC_RIGHT(ic);
-  const operand *result = IC_RESULT(ic);
-
-  bool result_in_A = operand_in_reg(result, REG_A, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
-  bool result_in_B = operand_in_reg(result, REG_B, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
-  bool result_in_X = operand_in_reg(result, REG_XL, ia, i, G) && !(ic->op == '=' && POINTER_SET(ic));
-  bool left_in_A = operand_in_reg(left, REG_A, ia, i, G);
-  bool left_in_B = operand_in_reg(left, REG_B, ia, i, G);
-
-  const cfg_dying_t &dying = G[i].dying;
-
-  bool dying_A = result_in_A || dying.find(ia.registers[REG_A][1]) != dying.end() || dying.find(ia.registers[REG_A][0]) != dying.end();
-  bool dying_B = result_in_B || dying.find(ia.registers[REG_B][1]) != dying.end() || dying.find(ia.registers[REG_B][0]) != dying.end();
-  bool dying_X = result_in_X || dying.find(ia.registers[REG_XL][1]) != dying.end() || dying.find(ia.registers[REG_XL][0]) != dying.end();
-
-  bool result_only_XA = (result_in_X || unused_X || dying_X) && (result_in_A || unused_A || dying_A);
-
-  if((ic->op == '<' || ic->op == '>' || ic->op == LE_OP || ic->op == GE_OP) && (getSize(operandType(left)) == 2 || getSize(operandType(right)) == 2) &&
-    (left_in_A || left_in_B || operand_in_reg(right, REG_A, ia, i, G) || operand_in_reg(right, REG_B, ia, i, G)) && !(dying_A && dying_B))
-    return(false);
-
-  if(ic->op == '<' || ic->op == '>' || ic->op == LE_OP || ic->op == GE_OP)
-    return(true);
-
-  if(ic->op == JUMPTABLE && (unused_A || dying_A))
-    return(true);
-
-  if(ic->op == IPUSH && (unused_A || dying_A || left_in_A || left_in_B))
-    return(true);
-
-  if(ic->op == RECEIVE && (!ic->next || !(ic->next->op == RECEIVE) || !result_in_A || getSize(operandType(result)) >= 2))
-    return(true);
-
-  if(ic->op == SEND)
-    return(true);
-
-  if((ic->op == CRITICAL || ic->op == ENDCRITICAL) && (unused_A || dying_A))
-    return(true);
-
-  return(false);
-}
-
-template <class G_t, class I_t>
 static bool Dinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
 {
   const i_assignment_t &ia = a.i_assignment;
@@ -289,9 +189,6 @@ static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, co
     (ic->op == '+' || ic->op == '-') && !IS_OP_LITERAL(IC_RIGHT(ic)) && operand_in_reg(IC_LEFT(ic), REG_XL, ia, i, G) &&
     !operand_in_reg(IC_RIGHT(ic), REG_XL, ia, i, G) && !operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G) ||
     ic->op == '+' && IS_OP_LITERAL(IC_LEFT(ic)) && abs((int)operandLitValue(IC_LEFT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6)))
-    return(false);
-
-  if((ic->op == CALL || ic->op == PCALL) && ia.registers[REG_XL][1] >= 0 && G[i].dying.find(ia.registers[REG_XL][1]) == G[i].dying.end())
     return(false);
 
   return(true);
@@ -426,16 +323,22 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
   if(ic->generated)
     return(0.0f);
 
-  if(!ABXinst_ok(a, i, G, I))
-    return(std::numeric_limits<float>::infinity());
-
   if(!Dinst_ok(a, i, G, I))
     return(std::numeric_limits<float>::infinity());
 
   if(!Xinst_ok(a, i, G, I))
     return(std::numeric_limits<float>::infinity());
 
+  if((ic->op == CALL || ic->op == PCALL) && a.i_assignment.registers[REG_XL][1] >= 0 && G[i].dying.find(a.i_assignment.registers[REG_XL][1]) == G[i].dying.end())
+    return(std::numeric_limits<float>::infinity());
+
   if((ic->op == CALL || ic->op == PCALL) && (a.i_assignment.registers[REG_TEMP0L][1] >= 0 || a.i_assignment.registers[REG_TEMP1L][1] >= 0))
+    return(std::numeric_limits<float>::infinity());
+
+  if(ic->op == RECEIVE && ic->next && ic->next->op == RECEIVE && getSize(operandType(IC_RESULT(ic))) == 1 && operand_in_reg(IC_RESULT(ic), REG_A, a.i_assignment, i, G))
+    return(std::numeric_limits<float>::infinity());
+
+  if(ic->op == INLINEASM && (a.i_assignment.registers[REG_A][1] >= 0 || a.i_assignment.registers[REG_B][1] >= 0 || a.i_assignment.registers[REG_XL][1] >= 0))
     return(std::numeric_limits<float>::infinity());
 
   switch(ic->op)
