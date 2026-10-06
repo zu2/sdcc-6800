@@ -55,21 +55,23 @@ static int mc6800_call_stack_size;
 reg_info regsmc6800[] =
 {
 
-  {REG_GPR, A_IDX,   "a",  MC6800MASK_A,  NULL, 0, 1},
-  {REG_GPR, B_IDX,   "b",  MC6800MASK_B,  NULL, 0, 1},
-  {REG_PTR, XL_IDX,  "xl", MC6800MASK_XL, NULL, 0, 1},
-  {REG_PTR, XH_IDX,  "xh", MC6800MASK_XH, NULL, 0, 1},
-  {REG_GPR, TEMP0L_IDX, "REGTEMP0+1", 0, NULL, 0, 1},
-  {REG_GPR, TEMP0H_IDX, "REGTEMP0", 0, NULL, 0, 1},
-  {REG_GPR, TEMP1L_IDX, "REGTEMP1+1", 0, NULL, 0, 1},
-  {REG_GPR, TEMP1H_IDX, "REGTEMP1", 0, NULL, 0, 1},
-  {REG_PTR, X_IDX,   "x",  MC6800MASK_X,  NULL, 0, 1},
-  {REG_GPR, D_IDX,   "d",  MC6800MASK_D,  NULL, 0, 1},
+  {REG_GPR, A_IDX,   "a",  MC6800MASK_A,  1, {A_IDX}, NULL, 0, 1},
+  {REG_GPR, B_IDX,   "b",  MC6800MASK_B,  1, {B_IDX}, NULL, 0, 1},
+  {REG_PTR, XL_IDX,  "xl", MC6800MASK_XL, 1, {XL_IDX}, NULL, 0, 1},
+  {REG_PTR, XH_IDX,  "xh", MC6800MASK_XH, 1, {XH_IDX}, NULL, 0, 1},
+  {REG_GPR, TEMP0L_IDX, "REGTEMP0+1", 0, 1, {TEMP0L_IDX}, NULL, 0, 1},
+  {REG_GPR, TEMP0H_IDX, "REGTEMP0", 0, 1, {TEMP0H_IDX}, NULL, 0, 1},
+  {REG_GPR, TEMP1L_IDX, "REGTEMP1+1", 0, 1, {TEMP1L_IDX}, NULL, 0, 1},
+  {REG_GPR, TEMP1H_IDX, "REGTEMP1", 0, 1, {TEMP1H_IDX}, NULL, 0, 1},
+  {REG_PTR, X_IDX,   "x",  MC6800MASK_X,  2, {XL_IDX, XH_IDX}, NULL, 0, 1},
+  {REG_GPR, D_IDX,   "d",  MC6800MASK_D,  2, {B_IDX, A_IDX}, NULL, 0, 1},
+  {REG_GPR, TEMP0_IDX, "temp0", 0, 2, {TEMP0L_IDX, TEMP0H_IDX}, NULL, 0, 1},
+  {REG_GPR, TEMP1_IDX, "temp1", 0, 2, {TEMP1L_IDX, TEMP1H_IDX}, NULL, 0, 1},
 
-  {REG_CND, CND_IDX, "C",  0, NULL, 0, 1},
-  {0,       SP_IDX,  "sp", 0, NULL, 0, 1},
+  {REG_CND, CND_IDX, "C",  0, 1, {CND_IDX}, NULL, 0, 1},
+  {0,       SP_IDX,  "sp", 0, 1, {SP_IDX}, NULL, 0, 1},
 };
-static const int mc6800_nRegs = D_IDX + 1;
+static const int mc6800_nRegs = TEMP1_IDX + 1;
 
 reg_info *mc6800_reg_a;
 reg_info *mc6800_reg_b;

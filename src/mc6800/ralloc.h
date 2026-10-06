@@ -39,6 +39,8 @@ enum
     TEMP1H_IDX,
     X_IDX,
     D_IDX,
+    TEMP0_IDX,
+    TEMP1_IDX,
     CND_IDX,
     SP_IDX
   };
@@ -67,6 +69,8 @@ typedef struct reg_info
     short rIdx;			/* index into register table */
     char *name;
     short mask;			/* bitmask for pair allocation */
+    short size;
+    short bytes[2];
     struct asmop *aop;
     unsigned isFree:1;		/* is currently unassigned */
     unsigned isDead:1;      /* does not need to survive current instruction */

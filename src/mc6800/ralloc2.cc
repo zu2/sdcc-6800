@@ -34,103 +34,60 @@ extern "C"
   bool mc6800_assignment_optimal;
 }
 
-#define REG_A 0
-#define REG_B 1
-#define REG_XL 2
-#define REG_XH 3
-#define REG_TEMP0L 4
-#define REG_TEMP0H 5
-#define REG_TEMP1L 6
-#define REG_TEMP1H 7
+static const short places[] = {A_IDX, B_IDX, D_IDX, X_IDX, TEMP0_IDX, TEMP1_IDX};
+
+static int place_bytes(reg_t r)
+{
+  const reg_info *reg = mc6800_regWithIdx(places[r]);
+  int bytes = 0;
+
+  for(int k = 0; k < reg->size; k++)
+    bytes |= 1 << reg->bytes[k];
+
+  return(bytes);
+}
 
 template <class I_t>
 static void add_operand_conflicts_in_node(const cfg_node &n, I_t &I)
 {
-  const iCode *ic = n.ic;
-
-  const operand *result = IC_RESULT(ic);
-  const operand *left = IC_LEFT(ic);
-  const operand *right = IC_RIGHT(ic);
-
-  if(!result || !IS_SYMOP(result))
-    return;
-
-  // Todo: Identify more operations that code generation can always handle and exclude them (as done for the z80-like ports).
-  if (ic->op == '=')
-    return;
-
-  operand_map_t::const_iterator oir, oir_end, oirs;
-  boost::tie(oir, oir_end) = n.operands.equal_range(OP_SYMBOL_CONST(result)->key);
-  if(oir == oir_end)
-    return;
-
-  operand_map_t::const_iterator oio, oio_end;
-
-  if(left && IS_SYMOP(left))
-    for(boost::tie(oio, oio_end) = n.operands.equal_range(OP_SYMBOL_CONST(left)->key); oio != oio_end; ++oio)
-      for(oirs = oir; oirs != oir_end; ++oirs)
-        {
-          var_t rvar = oirs->second;
-          var_t ovar = oio->second;
-          if(I[rvar].byte < I[ovar].byte)
-            boost::add_edge(rvar, ovar, I);
-        }
-
-  if(right && IS_SYMOP(right))
-    for(boost::tie(oio, oio_end) = n.operands.equal_range(OP_SYMBOL_CONST(right)->key); oio != oio_end; ++oio)
-      for(oirs = oir; oirs != oir_end; ++oirs)
-        {
-          var_t rvar = oirs->second;
-          var_t ovar = oio->second;
-          if(I[rvar].byte < I[ovar].byte)
-            boost::add_edge(rvar, ovar, I);
-        }
 }
 
-// Return true, iff the operand is placed (partially) in r.
 template <class G_t>
-static bool operand_in_reg(const operand *o, reg_t r, const i_assignment_t &ia, unsigned short int i, const G_t &G)
+static int operand_reg(const operand *o, const assignment &a, unsigned short int i, const G_t &G)
 {
   if(!o || !IS_SYMOP(o))
-    return(false);
+    return(-1);
 
-  if(r >= port->num_regs)
-    return(false);
+  operand_map_t::const_iterator oi = G[i].operands.find(OP_SYMBOL_CONST(o)->key);
+  if(oi == G[i].operands.end() || a.global[oi->second] < 0)
+    return(-1);
 
-  operand_map_t::const_iterator oi, oi_end;
-  for(boost::tie(oi, oi_end) = G[i].operands.equal_range(OP_SYMBOL_CONST(o)->key); oi != oi_end; ++oi)
-    if(oi->second == ia.registers[r][1] || oi->second == ia.registers[r][0])
+  return(places[a.global[oi->second]]);
+}
+
+static bool survives_in(const iCode *ic, int idx)
+{
+  const reg_info *reg = mc6800_regWithIdx(idx);
+
+  for(int k = 0; k < reg->size; k++)
+    if(bitVectBitValue(ic->rSurv, reg->bytes[k]))
       return(true);
 
   return(false);
 }
 
-template <class G_t, class I_t>
-static bool Dinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
+static void assign_symbol(symbol *sym, reg_t r, int size)
 {
-  const i_assignment_t &ia = a.i_assignment;
+  if(r < 0)
+    {
+      for(int k = 0; k < size; k++)
+        sym->regs[k] = 0;
+      return;
+    }
 
-  if(ia.registers[REG_A][1] >= 0 && ia.registers[REG_B][1] >= 0 &&
-    I[ia.registers[REG_A][1]].v == I[ia.registers[REG_B][1]].v &&
-    I[ia.registers[REG_B][1]].byte + 1 != I[ia.registers[REG_A][1]].byte)
-    return(false);
-
-  if(ia.registers[REG_A][0] >= 0 && ia.registers[REG_B][0] >= 0 &&
-    I[ia.registers[REG_A][0]].v == I[ia.registers[REG_B][0]].v &&
-    I[ia.registers[REG_B][0]].byte + 1 != I[ia.registers[REG_A][0]].byte)
-    return(false);
-
-  if(ia.registers[REG_A][1] >= 0 && ia.registers[REG_B][0] >= 0 &&
-    I[ia.registers[REG_A][1]].v == I[ia.registers[REG_B][0]].v &&
-    I[ia.registers[REG_B][0]].byte + 1 != I[ia.registers[REG_A][1]].byte)
-    return(false);
-
-  if(ia.registers[REG_A][0] >= 0 && ia.registers[REG_B][1] >= 0 &&
-    I[ia.registers[REG_A][0]].v == I[ia.registers[REG_B][1]].v &&
-    I[ia.registers[REG_B][1]].byte + 1 != I[ia.registers[REG_A][0]].byte)
-    return(false);
-
-  return(true);
+  const reg_info *reg = mc6800_regWithIdx(places[r]);
+  for(int k = 0; k < reg->size; k++)
+    sym->regs[k] = mc6800_regWithIdx(reg->bytes[k]);
 }
 
 template <class G_t, class I_t>
@@ -138,7 +95,6 @@ static void set_surviving_regs(const assignment &a, unsigned short int i, const 
 {
   iCode *ic = G[i].ic;
 
-  bitVectClear(ic->rMask);
   bitVectClear(ic->rSurv);
 
   cfg_alive_t::const_iterator v, v_end;
@@ -146,10 +102,10 @@ static void set_surviving_regs(const assignment &a, unsigned short int i, const 
     {
       if(a.global[*v] < 0)
         continue;
-      ic->rMask = bitVectSetBit(ic->rMask, a.global[*v]);
       if(G[i].dying.find(*v) == G[i].dying.end())
         if(!((IC_RESULT(ic) && !POINTER_SET(ic)) && IS_SYMOP(IC_RESULT(ic)) && OP_SYMBOL_CONST(IC_RESULT(ic))->key == I[*v].v))
-          ic->rSurv = bitVectSetBit(ic->rSurv, a.global[*v]);
+          for(int k = 0; k < I[*v].size; k++)
+            ic->rSurv = bitVectSetBit(ic->rSurv, mc6800_regWithIdx(places[a.global[*v]])->bytes[k]);
     }
 }
 
@@ -159,26 +115,11 @@ static void assign_operand_for_cost(operand *o, const assignment &a, unsigned sh
   if(!o || !IS_SYMOP(o))
     return;
   symbol *sym = OP_SYMBOL(o);
-  operand_map_t::const_iterator oi, oi_end;
-  for(boost::tie(oi, oi_end) = G[i].operands.equal_range(OP_SYMBOL_CONST(o)->key); oi != oi_end; ++oi)
-    {
-      var_t v = oi->second;
-      if(a.global[v] >= 0)
-        {
-          sym->regs[I[v].byte] = regsmc6800 + a.global[v];
-          sym->isspilt = false;
-          sym->nRegs = I[v].size;
-          sym->accuse = 0;
-        }
-      else
-        {
-          for(int i = 0; i < I[v].size; i++)
-            sym->regs[i] = 0;
-          sym->accuse = 0;
-          sym->nRegs = I[v].size;
-          sym->isspilt = true;
-        }
-    }
+  operand_map_t::const_iterator oi = G[i].operands.find(OP_SYMBOL_CONST(o)->key);
+  if(oi == G[i].operands.end())
+    return;
+  assign_symbol(sym, a.global[oi->second], I[oi->second].size);
+  sym->isspilt = (a.global[oi->second] < 0);
 }
 
 template <class G_t, class I_t>
@@ -196,46 +137,6 @@ static void assign_operands_for_cost(const assignment &a, unsigned short int i, 
     }
 }
 
-// Check that the operand is either fully in registers or fully in memory.
-template <class G_t, class I_t>
-static bool operand_sane(const operand *o, const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
-{
-  if(!o || !IS_SYMOP(o))
-    return(true);
-
-  operand_map_t::const_iterator oi, oi_end;
-  boost::tie(oi, oi_end) = G[i].operands.equal_range(OP_SYMBOL_CONST(o)->key);
-
-  if(oi == oi_end)
-    return(true);
-
-  // In registers.
-  if(std::binary_search(a.local.begin(), a.local.end(), oi->second))
-    {
-      while(++oi != oi_end)
-        if(!std::binary_search(a.local.begin(), a.local.end(), oi->second))
-          return(false);
-      if (OP_SYMBOL_CONST (o)->nRegs > 2) // cannot handle register operand wider than 2 B yet.
-        return (false);
-    }
-  else
-    {
-       while(++oi != oi_end)
-        if(std::binary_search(a.local.begin(), a.local.end(), oi->second))
-          return(false);
-    }
-
-  return(true);
-}
-
-template <class G_t, class I_t>
-static bool inst_sane(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
-{
-  const iCode *ic = G[i].ic;
-
-  return(operand_sane(IC_RESULT(ic), a, i, G, I) && operand_sane(IC_LEFT(ic), a, i, G, I) && operand_sane(IC_RIGHT(ic), a, i, G, I));
-}
-
 // Cost function.
 
 template <class G_t, class I_t>
@@ -245,9 +146,6 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
   float c;
 
   wassert (TARGET_IS_MC6800);
-
-  if(!inst_sane(a, i, G, I))
-    return(std::numeric_limits<float>::infinity());
 
 #if 0
   std::cout << "Calculating at cost at ic " << ic->key << " for: ";
@@ -262,19 +160,19 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
   if(ic->generated)
     return(0.0f);
 
-  if(!Dinst_ok(a, i, G, I))
+  set_surviving_regs(a, i, G, I);
+
+  if(ic->op != '=' && operand_reg(IC_RESULT(ic), a, i, G) == A_IDX &&
+    (operand_reg(IC_LEFT(ic), a, i, G) == D_IDX || operand_reg(IC_RIGHT(ic), a, i, G) == D_IDX))
     return(std::numeric_limits<float>::infinity());
 
-  if((ic->op == CALL || ic->op == PCALL) && a.i_assignment.registers[REG_XL][1] >= 0 && G[i].dying.find(a.i_assignment.registers[REG_XL][1]) == G[i].dying.end())
+  if((ic->op == CALL || ic->op == PCALL) && (survives_in(ic, X_IDX) || survives_in(ic, TEMP0_IDX) || survives_in(ic, TEMP1_IDX)))
     return(std::numeric_limits<float>::infinity());
 
-  if((ic->op == CALL || ic->op == PCALL) && (a.i_assignment.registers[REG_TEMP0L][1] >= 0 || a.i_assignment.registers[REG_TEMP1L][1] >= 0))
+  if(ic->op == RECEIVE && ic->next && ic->next->op == RECEIVE && operand_reg(IC_RESULT(ic), a, i, G) == A_IDX)
     return(std::numeric_limits<float>::infinity());
 
-  if(ic->op == RECEIVE && ic->next && ic->next->op == RECEIVE && getSize(operandType(IC_RESULT(ic))) == 1 && operand_in_reg(IC_RESULT(ic), REG_A, a.i_assignment, i, G))
-    return(std::numeric_limits<float>::infinity());
-
-  if(ic->op == INLINEASM && (a.i_assignment.registers[REG_A][1] >= 0 || a.i_assignment.registers[REG_B][1] >= 0 || a.i_assignment.registers[REG_XL][1] >= 0))
+  if(ic->op == INLINEASM && (survives_in(ic, D_IDX) || survives_in(ic, X_IDX)))
     return(std::numeric_limits<float>::infinity());
 
   switch(ic->op)
@@ -328,7 +226,6 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
     case CRITICAL:
     case ENDCRITICAL:
       assign_operands_for_cost(a, i, G, I);
-      set_surviving_regs(a, i, G, I);
       c = drymc6800iCode(ic);
       ic->generated = false;
       return(c);
@@ -340,49 +237,18 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
 template <class G_t, class I_t>
 static bool assignment_hopeless(const assignment &a, unsigned short int i, const G_t &G, const I_t &I, const var_t lastvar)
 {
-  const i_assignment_t &ia = a.i_assignment;
+  reg_t r = a.global[lastvar];
 
-  for(reg_t r = 0; r < port->num_regs; r++)
-    for(int entry = 0; entry < 2; entry++)
-      {
-        var_t v = ia.registers[r][entry];
-
-        if(v < 0 || I[v].size > 2)
-          continue;
-        if(I[v].size == 1)
-          {
-            if(r != REG_A && r != REG_B)
-              return(true);
-            continue;
-          }
-
-        if(I[v].byte == 0 && r != REG_B && r != REG_XL && r != REG_TEMP0L && r != REG_TEMP1L)
-          return(true);
-        if(I[v].byte == 1 && r != REG_A && r != REG_XH && r != REG_TEMP0H && r != REG_TEMP1H)
-          return(true);
-
-        if(I[v].byte == 1)
-          {
-            if(std::binary_search(a.local.begin(), a.local.end(), (var_t)(v - 1)) && a.global[v - 1] < 0)
-              return(true);
-            continue;
-          }
-
-        if(!std::binary_search(a.local.begin(), a.local.end(), (var_t)(v + 1)))
-          continue;
-        if(r == REG_B && a.global[v + 1] != REG_A)
-          return(true);
-        if(r == REG_XL && a.global[v + 1] != REG_XH)
-          return(true);
-        if(r == REG_TEMP0L && a.global[v + 1] != REG_TEMP0H)
-          return(true);
-        if(r == REG_TEMP1L && a.global[v + 1] != REG_TEMP1H)
-          return(true);
-      }
-
-  if((ia.registers[REG_A][1] >= 0 || ia.registers[REG_B][1] >= 0) &&
-      !Dinst_ok(a, i, G, I))
+  if(I[lastvar].size != mc6800_regWithIdx(places[r])->size)
     return(true);
+
+  varset_t::const_iterator w, w_end;
+  for(w = a.local.begin(), w_end = a.local.end(); w != w_end; ++w)
+    {
+      reg_t s = a.global[*w];
+      if(s != r && (place_bytes(s) & place_bytes(r)) && boost::edge(*w, lastvar, I).second)
+        return(true);
+    }
 
   return(false);
 }
@@ -466,29 +332,56 @@ static bool tree_dec_ralloc(T_t &T, G_t &G, const I_t &I)
   for(unsigned int v = 0; v < boost::num_vertices(I); v++)
     {
       symbol *sym = (symbol *)(hTabItemWithKey(liveRanges, I[v].v));
-      if(winner.global[v] >= 0)
-        {
-          sym->regs[I[v].byte] = regsmc6800 + winner.global[v];
-          sym->isspilt = false;
-          sym->nRegs = I[v].size;
-          sym->accuse = 0;
-        }
-      else
-        {
-          for(int i = 0; i < I[v].size; i++)
-            sym->regs[i] = 0;
-          sym->accuse = 0;
-          sym->nRegs = I[v].size;
-          wassert (sym->nRegs);
-          //spillThis(sym); Leave it to regFix, which can do some spillocation compaction. Todo: Use Thorup instead.
-          sym->isspilt = false;
-        }
+      assign_symbol(sym, winner.global[v], I[v].size);
+      sym->isspilt = false;
     }
 
   for(unsigned int i = 0; i < boost::num_vertices(G); i++)
     set_surviving_regs(winner, i, G, I);
 
   return(!assignment_optimal);
+}
+
+static void make_value_graph(cfg_t &G, con_t &I)
+{
+  std::vector<var_t> value_of(boost::num_vertices(I));
+  var_t n = -1;
+  for(var_t v = 0; v < (var_t)boost::num_vertices(I); v++)
+    {
+      if(I[v].byte == 0)
+        n++;
+      value_of[v] = n;
+    }
+
+  con_t J(n + 1);
+  for(var_t v = 0; v < (var_t)boost::num_vertices(I); v++)
+    if(I[v].byte == 0)
+      J[value_of[v]] = I[v];
+  boost::graph_traits<con_t>::edge_iterator e, e_end;
+  for(boost::tie(e, e_end) = boost::edges(I); e != e_end; ++e)
+    if(value_of[boost::source(*e, I)] != value_of[boost::target(*e, I)])
+      boost::add_edge(value_of[boost::source(*e, I)], value_of[boost::target(*e, I)], J);
+  I = J;
+
+  for(unsigned int i = 0; i < boost::num_vertices(G); i++)
+    {
+      cfg_alive_t alive;
+      for(cfg_alive_t::const_iterator v = G[i].alive.begin(); v != G[i].alive.end(); ++v)
+        alive.push_back(value_of[*v]);
+      alive.erase(std::unique(alive.begin(), alive.end()), alive.end());
+      G[i].alive = alive;
+
+      cfg_dying_t dying;
+      for(cfg_dying_t::const_iterator v = G[i].dying.begin(); v != G[i].dying.end(); ++v)
+        dying.insert(value_of[*v]);
+      G[i].dying = dying;
+
+      operand_map_t operands;
+      for(operand_map_t::const_iterator oi = G[i].operands.begin(); oi != G[i].operands.end(); ++oi)
+        if(operands.find(oi->first) == operands.end())
+          operands.insert(std::pair<int, var_t>(oi->first, value_of[oi->second]));
+      G[i].operands = operands;
+    }
 }
 
 iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
@@ -502,6 +395,8 @@ iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
   con_t conflict_graph;
 
   iCode *ic = create_cfg(control_flow_graph, conflict_graph, ebbi);
+
+  make_value_graph(control_flow_graph, conflict_graph);
 
   if (optimize.genconstprop)
     recomputeValinfos (ic, ebbi, "_2");
