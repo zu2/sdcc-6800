@@ -133,67 +133,6 @@ static bool Dinst_ok(const assignment &a, unsigned short int i, const G_t &G, co
   return(true);
 }
 
-template <class G_t>
-static bool operand_on_stack(const operand *o, const assignment &a, unsigned short int i, const G_t &G)
-{
-  if(!o || !IS_SYMOP(o))
-    return(false);
-
-  if(OP_SYMBOL_CONST(o)->remat)
-    return(false);
-
-  if(IS_TRUE_SYMOP(o))
-    return(OP_SYMBOL_CONST(o)->onStack);
-
-  if(!options.stackAuto && !IFFUNC_ISREENT(currFunc->type))
-    return(false);
-
-  operand_map_t::const_iterator oi, oi_end;
-  for(boost::tie(oi, oi_end) = G[i].operands.equal_range(OP_SYMBOL_CONST(o)->key); oi != oi_end; ++oi)
-    if(a.global[oi->second] < 0)
-      return(true);
-
-  return(false);
-}
-
-template <class G_t, class I_t>
-static bool Xinst_ok(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
-{
-  const i_assignment_t &ia = a.i_assignment;
-  const iCode *ic = G[i].ic;
-
-  if((ic->op == '=' && !POINTER_SET(ic) || ic->op == CAST) &&
-    operand_in_reg(IC_RIGHT(ic), REG_XL, ia, i, G) && operand_on_stack(IC_RESULT(ic), a, i, G))
-    return(false);
-
-  if(ic->op == '=' && POINTER_SET(ic) && operand_in_reg(IC_RIGHT(ic), REG_XL, ia, i, G) &&
-    IS_SYMOP(IC_RESULT(ic)) && OP_SYMBOL_CONST(IC_RESULT(ic))->remat)
-    {
-      const iCode *remat_ic = OP_SYMBOL_CONST(IC_RESULT(ic))->rematiCode;
-
-      while(remat_ic && (remat_ic->op == '+' || remat_ic->op == '-') && IS_SYMOP(IC_LEFT(remat_ic)) && OP_SYMBOL_CONST(IC_LEFT(remat_ic))->remat ||
-        remat_ic && remat_ic->op == CAST && IS_SYMOP(IC_RIGHT(remat_ic)) && OP_SYMBOL_CONST(IC_RIGHT(remat_ic))->remat)
-        remat_ic = OP_SYMBOL_CONST(remat_ic->op == CAST ? IC_RIGHT(remat_ic) : IC_LEFT(remat_ic))->rematiCode;
-      if(remat_ic && remat_ic->op == ADDRESS_OF && IS_TRUE_SYMOP(IC_LEFT(remat_ic)) && OP_SYMBOL_CONST(IC_LEFT(remat_ic))->onStack)
-        return(false);
-    }
-
-  if((operand_in_reg(IC_LEFT(ic), REG_XL, ia, i, G) || operand_in_reg(IC_RIGHT(ic), REG_XL, ia, i, G) || operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G)) &&
-    !(ic->op == '=' || ic->op == GET_VALUE_AT_ADDRESS || ic->op == ADDRESS_OF || ic->op == EQ_OP || ic->op == NE_OP || ic->op == IFX ||
-    ic->op == CALL || ic->op == PCALL || ic->op == RETURN || ic->op == SEND || ic->op == RECEIVE || ic->op == IPUSH ||
-    (ic->op == LEFT_OP || ic->op == RIGHT_OP) && !operand_in_reg(IC_LEFT(ic), REG_XL, ia, i, G) && !operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G) ||
-    ic->op == CAST && (getSize(operandType(IC_RESULT(ic))) == getSize(operandType(IC_RIGHT(ic))) ||
-      getSize(operandType(IC_RESULT(ic))) == 2 && getSize(operandType(IC_RIGHT(ic))) > 2) ||
-    ic->op == GETWORD ||
-    (ic->op == '+' || ic->op == '-') && IS_OP_LITERAL(IC_RIGHT(ic)) && abs((int)operandLitValue(IC_RIGHT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6) ||
-    (ic->op == '+' || ic->op == '-') && !IS_OP_LITERAL(IC_RIGHT(ic)) && operand_in_reg(IC_LEFT(ic), REG_XL, ia, i, G) &&
-    !operand_in_reg(IC_RIGHT(ic), REG_XL, ia, i, G) && !operand_in_reg(IC_RESULT(ic), REG_XL, ia, i, G) ||
-    ic->op == '+' && IS_OP_LITERAL(IC_LEFT(ic)) && abs((int)operandLitValue(IC_LEFT(ic))) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6)))
-    return(false);
-
-  return(true);
-}
-
 template <class G_t, class I_t>
 static void set_surviving_regs(const assignment &a, unsigned short int i, const G_t &G, const I_t &I)
 {
@@ -326,9 +265,6 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
   if(!Dinst_ok(a, i, G, I))
     return(std::numeric_limits<float>::infinity());
 
-  if(!Xinst_ok(a, i, G, I))
-    return(std::numeric_limits<float>::infinity());
-
   if((ic->op == CALL || ic->op == PCALL) && a.i_assignment.registers[REG_XL][1] >= 0 && G[i].dying.find(a.i_assignment.registers[REG_XL][1]) == G[i].dying.end())
     return(std::numeric_limits<float>::infinity());
 
@@ -443,11 +379,6 @@ static bool assignment_hopeless(const assignment &a, unsigned short int i, const
         if(r == REG_TEMP1L && a.global[v + 1] != REG_TEMP1H)
           return(true);
       }
-
-  if((ia.registers[REG_XL][1] >= 0 && ia.registers[REG_XH][1] >= 0) &&
-      (ia.registers[REG_XL][0] >= 0) == (ia.registers[REG_XH][0] >= 0) &&
-      !Xinst_ok(a, i, G, I))
-    return(true);
 
   if((ia.registers[REG_A][1] >= 0 || ia.registers[REG_B][1] >= 0) &&
       !Dinst_ok(a, i, G, I))

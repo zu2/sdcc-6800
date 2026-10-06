@@ -7428,8 +7428,14 @@ genLeftShift (iCode *ic)
   aopOp (result, ic, false);
   aopOp (left, ic, false);
 
-  wassertl (!IS_AOP_WITH_X (AOP (result)),
-            "left shift by a variable count with the result in x is not supported yet");
+  if (IS_AOP_WITH_X (AOP (result)))
+    {
+      UNIMPLEMENTED;
+      freeAsmop (left, NULL, ic, true);
+      freeAsmop (result, NULL, ic, true);
+      freeAsmop (right, NULL, ic, true);
+      return;
+    }
 
   if (AOP_TYPE (right) == AOP_REG)
     {
@@ -7763,8 +7769,14 @@ genRightShift (iCode *ic)
   aopOp (result, ic, false);
   aopOp (left, ic, false);
 
-  wassertl (!IS_AOP_WITH_X (AOP (result)),
-            "right shift by a variable count with the result in x is not supported yet");
+  if (IS_AOP_WITH_X (AOP (result)))
+    {
+      UNIMPLEMENTED;
+      freeAsmop (left, NULL, ic, true);
+      freeAsmop (result, NULL, ic, true);
+      freeAsmop (right, NULL, ic, true);
+      return;
+    }
 
   if (AOP_TYPE (right) == AOP_REG)
     {
@@ -9840,6 +9852,11 @@ genAssign2 (operand *result, operand *right)
   struct xbases xbases;
   int offset;
 
+  if (IS_AOP_X (AOP (right)) && AOP_TYPE (result) == AOP_SOF)
+    {
+      UNIMPLEMENTED;
+      return;
+    }
   if (IS_AOP_X (AOP (result)) && AOP_SIZE (right) == 1)
     {
       const char *tmp = allocTemp ();
@@ -9864,7 +9881,6 @@ genAssign2 (operand *result, operand *right)
     }
   if (AOP_TYPE (right) == AOP_REG && AOP_SIZE (right) == 2)
     {
-      wassertl (!IS_AOP_X (AOP (right)) || AOP_TYPE (result) != AOP_SOF, "X assigned to the stack");
       setupXForAop (AOP (result));
       storeRegToAop (IS_AOP_X (AOP (right)) ? mc6800_reg_x : mc6800_reg_d, AOP (result), 0);
       return;
