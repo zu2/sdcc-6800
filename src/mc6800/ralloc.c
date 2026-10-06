@@ -625,35 +625,6 @@ packRegsForSupport (iCode * ic, eBBlock * ebp)
 }
 
 /*-----------------------------------------------------------------*/
-/* isBitwiseOptimizable - conditions for packing a bitwise operation */
-/*-----------------------------------------------------------------*/
-static bool
-isBitwiseOptimizable (iCode * ic)
-{
-  sym_link *ltype = getSpec (operandType (IC_LEFT (ic)));
-  sym_link *rtype = getSpec (operandType (IC_RIGHT (ic)));
-
-  /* bitwise operations are considered optimizable
-     under the following conditions (Jean-Louis VERN)
-
-     x & lit
-     bit & bit
-     bit & x
-     bit ^ bit
-     bit ^ x
-     x   ^ lit
-     x   | lit
-     bit | bit
-     bit | x
-  */
-  if (IS_LITERAL(rtype) ||
-      (IS_BITVAR (ltype) && IN_BITSPACE (SPEC_OCLS (ltype))))
-    return true;
-  else
-    return false;
-}
-
-/*-----------------------------------------------------------------*/
 /* packForPush - heuristics to reduce iCode for pushing            */
 /*-----------------------------------------------------------------*/
 static void
@@ -991,21 +962,6 @@ packRegisters (eBBlock ** ebpp, int count)
           /* reduce for support function calls */
           if (ic->supportRtn || (ic->op != IFX && ic->op != JUMPTABLE))
             packRegsForSupport (ic, ebp);
-
-          /* if the condition of an if instruction
-             is defined in the previous instruction and
-             this is the only usage then
-             mark the itemp as a conditional */
-          if ((IS_CONDITIONAL (ic) ||
-               (IS_BITWISE_OP(ic) && isBitwiseOptimizable (ic))) &&
-              ic->next && ic->next->op == IFX &&
-              bitVectnBitsOn (OP_USES(IC_RESULT(ic)))==1 &&
-              isOperandEqual (IC_RESULT (ic), IC_COND (ic->next)) &&
-              OP_SYMBOL (IC_RESULT (ic))->liveTo <= ic->next->seq)
-            {
-              OP_SYMBOL (IC_RESULT (ic))->regType = REG_CND;
-              continue;
-            }
 
           /* pack for PUSH
              iTempNN := (some variable in farspace) V1

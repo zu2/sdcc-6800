@@ -190,6 +190,7 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
     case '|':
     case BITWISEAND:
     case IPUSH:
+    case IPUSH_VALUE_AT_ADDRESS:
     case CALL:
     case PCALL:
     case RETURN:
@@ -226,6 +227,7 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
       ic->generated = false;
       return(c);
     default:
+      wassertl (0, "Unknown iCode");
       return(0.0f);
     }
 }

@@ -10622,10 +10622,6 @@ genmc6800iCode (iCode *ic)
           genPointerPush (ic);
           break;
 
-    case IPOP:
-      wassertl (0, "Unimplemented iCode");
-      break;
-
     case CALL:
       genCall (ic);
       break;
