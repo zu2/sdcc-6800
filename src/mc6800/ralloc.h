@@ -93,6 +93,8 @@ void mc6800_dirtyReg (reg_info * reg, bool freereg);
 bitVect *mc6800_rUmaskForOp (operand * op);
 
 iCode *mc6800_ralloc2_cc(ebbIndex *ebbi);
+void mc6800SpillThis (symbol *sym);
+void mc6800RegFix (eBBlock **ebbs, int count);
 
 #define M_A 0x01
 #define M_B 0x02

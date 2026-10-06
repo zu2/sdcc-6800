@@ -83,7 +83,7 @@ freeTemp (void)
 }
 static asmop tsxaop;
 
-extern int mc6800_dry_stack_size;
+extern bool mc6800_far_frame;
 extern struct dbuf_s *codeOutBuf;
 static bool operandsEqu (operand * op1, operand * op2);
 static void loadRegFromConst (reg_info * reg, int c);
@@ -1611,7 +1611,7 @@ setupXForAop (asmop * aop)
 
   sp = -_G.stackPushes;
 
-  if (regalloc_dry_run && !mc6800_dry_stack_size)
+  if (regalloc_dry_run && !mc6800_far_frame)
     {
       if (mc6800_reg_x->aop == &tsxaop)
         return;
@@ -1682,7 +1682,7 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
 
       if (!aop || aop->type != AOP_SOF)
         continue;
-      if (regalloc_dry_run && !mc6800_dry_stack_size)
+      if (regalloc_dry_run && !mc6800_far_frame)
         continue;
       first = _G.stackOfs + aop->aopu.aop_stk;
       last = first + aop->size - 1;
@@ -2086,7 +2086,7 @@ aopOp (operand *op, iCode * ic, bool result)
           if (options.stackAuto || (currFunc && IFFUNC_ISREENT (currFunc->type)))
             {
               sym->aop = op->aop = aop = newAsmop (AOP_SOF);
-              if (!mc6800_dry_stack_size)
+              if (!mc6800_far_frame)
                 aop->aopu.aop_stk = 8; /* bogus stack offset, high enough to prevent optimization */
               else if (sym->usl.spillLoc)
                 aop->aopu.aop_stk = sym->usl.spillLoc->stack;
@@ -11035,7 +11035,7 @@ drymc6800iCode (iCode *ic)
   regalloc_dry_run = true;
   regalloc_dry_run_cost = 0;
   regalloc_dry_run_cost_cycles = 0;
-  _G.stackOfs = mc6800_dry_stack_size;
+  _G.stackOfs = mc6800_far_frame ? currFunc->stack : 0;
 
   init_aop_pass();
 

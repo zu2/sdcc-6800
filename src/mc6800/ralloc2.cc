@@ -25,6 +25,7 @@
 #define CH_SALLOC
 
 #include "SDCCralloc.hpp"
+#include "SDCCsalloc.hpp"
 
 extern "C"
 {
@@ -333,7 +334,10 @@ static bool tree_dec_ralloc(T_t &T, G_t &G, const I_t &I)
     {
       symbol *sym = (symbol *)(hTabItemWithKey(liveRanges, I[v].v));
       assign_symbol(sym, winner.global[v], I[v].size);
-      sym->isspilt = false;
+      if(winner.global[v] < 0)
+        mc6800SpillThis(sym);
+      else
+        sym->isspilt = false;
     }
 
   for(unsigned int i = 0; i < boost::num_vertices(G); i++)
@@ -425,6 +429,18 @@ iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
   guessCounts (ic, ebbi);
 
   mc6800_assignment_optimal = !tree_dec_ralloc(tree_decomposition, control_flow_graph, conflict_graph);
+
+  mc6800RegFix(ebbi->bbOrder, ebbi->count);
+
+  scon_t stack_conflict_graph;
+
+  set_spilt(control_flow_graph, conflict_graph, stack_conflict_graph);
+
+  if(options.stackAuto || IFFUNC_ISREENT(currFunc->type))
+    {
+      mergeSpiltParms(stack_conflict_graph);
+      chaitin_salloc(stack_conflict_graph);
+    }
 
   return(ic);
 }

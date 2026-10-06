@@ -48,7 +48,7 @@ static struct
 _G;
 
 /* Shared with gen.c */
-int mc6800_dry_stack_size;
+bool mc6800_far_frame;
 static int mc6800_call_stack_size;
 
 /* 6800 registers */
@@ -81,7 +81,6 @@ reg_info *mc6800_reg_x;
 reg_info *mc6800_reg_d;
 reg_info *mc6800_reg_sp;
 
-static void spillThis (symbol *);
 static void freeAllRegs ();
 
 /*-----------------------------------------------------------------*/
@@ -218,51 +217,6 @@ mc6800_dirtyReg (reg_info * reg, bool freereg)
 }
 
 /*-----------------------------------------------------------------*/
-/* noOverLap - will iterate through the list looking for over lap  */
-/*-----------------------------------------------------------------*/
-static int
-noOverLap (set * itmpStack, symbol * fsym)
-{
-  symbol *sym;
-
-  for (sym = setFirstItem (itmpStack); sym;
-       sym = setNextItem (itmpStack))
-    {
-        if (bitVectBitValue(sym->clashes,fsym->key)) return 0;
-    }
-  return 1;
-}
-
-/*-----------------------------------------------------------------*/
-/* isFree - will return 1 if the a free spil location is found     */
-/*-----------------------------------------------------------------*/
-static
-DEFSETFUNC (isFree)
-{
-  symbol *sym = item;
-  V_ARG (symbol **, sloc);
-  V_ARG (symbol *, fsym);
-
-  /* if already found */
-  if (*sloc)
-    return 0;
-
-  /* if it is free && and the itmp assigned to
-     this does not have any overlapping live ranges
-     with the one currently being assigned and
-     the size can be accommodated  */
-  if (sym->isFree &&
-      noOverLap (sym->usl.itmpStack, fsym) &&
-      getSize (sym->type) >= getSize (fsym->type))
-    {
-      *sloc = sym;
-      return 1;
-    }
-
-  return 0;
-}
-
-/*-----------------------------------------------------------------*/
 /* createStackSpil - create a location on the stack to spil        */
 /*-----------------------------------------------------------------*/
 static symbol *
@@ -271,22 +225,6 @@ createStackSpil (symbol * sym)
   symbol *sloc = NULL;
   struct dbuf_s dbuf;
   int useXstack, model;
-
-  /* first go try and find a free one that is already
-     existing on the stack */
-  if (applyToSet (_G.stackSpil, isFree, &sloc, sym))
-    {
-      /* found a free one : just update & return */
-      sym->usl.spillLoc = sloc;
-      sym->stackSpil = 1;
-      sloc->isFree = 0;
-      addSetHead (&sloc->usl.itmpStack, sym);
-      return sym;
-    }
-
-  /* could not then have to create one , this is the hard part
-     we need to allocate this on the stack : this is really a
-     hack!! but cannot think of anything better at this time */
 
   dbuf_init (&dbuf, 128);
   dbuf_printf (&dbuf, "sloc%d", _G.slocNum++);
@@ -345,8 +283,8 @@ createStackSpil (symbol * sym)
 /*-----------------------------------------------------------------*/
 /* spillThis - spils a specific operand                            */
 /*-----------------------------------------------------------------*/
-static void
-spillThis (symbol * sym)
+void
+mc6800SpillThis (symbol * sym)
 {
   int i;
   /* if this is rematerializable or has a spillLocation
@@ -399,38 +337,6 @@ updateRegUsage (iCode * ic)
 }
 
 /*-----------------------------------------------------------------*/
-/* deassignLRs - check the live to and if they have registers & are */
-/*               not spilt then free up the registers              */
-/*-----------------------------------------------------------------*/
-static void
-deassignLRs (iCode * ic, eBBlock * ebp)
-{
-  symbol *sym;
-  int k;
-
-  for (sym = hTabFirstItem (liveRanges, &k); sym;
-       sym = hTabNextItem (liveRanges, &k))
-    {
-      /* if it does not end here */
-      if (sym->liveTo > ic->seq)
-        continue;
-
-      /* if it was spilt on stack then we can
-         mark the stack spil location as free */
-      if (sym->isspilt)
-        {
-          if (sym->stackSpil)
-            {
-              sym->usl.spillLoc->isFree = 1;
-              sym->stackSpil = 0;
-            }
-          continue;
-        }
-    }
-}
-
-
-/*-----------------------------------------------------------------*/
 /* reassignLR - reassign this to registers                         */
 /*-----------------------------------------------------------------*/
 static void
@@ -476,7 +382,7 @@ verifyRegsAssigned (operand *op, iCode * ic)
   /*if (z80_opts.oldralloc)
     werrorfl (ic->filename, ic->lineno, W_LOCAL_NOINIT, sym->prereqv ? sym->prereqv->name : sym->name);*/
 
-  spillThis (sym);
+  mc6800SpillThis (sym);
 }
 
 /*-----------------------------------------------------------------*/
@@ -1210,15 +1116,6 @@ packRegisters (eBBlock ** ebpp, int count)
               OP_SYMBOL (IC_RESULT (ic))->usl.spillLoc = NULL;
             }
 
-          /* if a parameter is only copied to an iTemp, the iTemp can be spilt to the parameter */
-          if ((ic->op == '=' && !POINTER_SET (ic) || ic->op == CAST) &&
-              IS_ITEMP (IC_RESULT (ic)) && !SPIL_LOC (IC_RESULT (ic)) && !OP_SYMBOL (IC_RESULT (ic))->remat &&
-              IS_TRUE_SYMOP (IC_RIGHT (ic)) && OP_SYMBOL (IC_RIGHT (ic))->ismyparm && OP_SYMBOL (IC_RIGHT (ic))->onStack &&
-              !OP_SYMBOL (IC_RIGHT (ic))->addrtaken && !isOperandVolatile (IC_RIGHT (ic), false) &&
-              bitVectnBitsOn (OP_USES (IC_RIGHT (ic))) == 1 && bitVectnBitsOn (OP_DEFS (IC_RIGHT (ic))) == 0 &&
-              getSize (operandType (IC_RESULT (ic))) == getSize (operandType (IC_RIGHT (ic))))
-            SPIL_LOC (IC_RESULT (ic)) = OP_SYMBOL (IC_RIGHT (ic));
-
           /* if straight assignment then carry remat flag if
              this is the only definition */
           if (ic->op == '=' &&
@@ -1311,8 +1208,8 @@ packRegisters (eBBlock ** ebpp, int count)
     }
 }
 
-static void
-RegFix (eBBlock ** ebbs, int count)
+void
+mc6800RegFix (eBBlock ** ebbs, int count)
 {
   int i;
 
@@ -1326,8 +1223,6 @@ RegFix (eBBlock ** ebbs, int count)
 
       for (ic = ebbs[i]->sch; ic; ic = ic->next)
         {
-          deassignLRs (ic, ebbs[i]);
-
           if (SKIP_IC2 (ic))
             continue;
 
@@ -1380,10 +1275,6 @@ serialRegMark (eBBlock ** ebbs, int count)
               OP_SYMBOL (IC_RESULT (ic))->allocreq++;
             }
 
-          /* take away registers from live
-             ranges that end at this instruction */
-          deassignLRs (ic, ebbs[i]);
-
           /* some don't need registers */
           if (SKIP_IC2 (ic) ||
               ic->op == JUMPTABLE ||
@@ -1423,18 +1314,21 @@ serialRegMark (eBBlock ** ebbs, int count)
                   continue;
                 }
 
+              if (sym->usl.spillLoc && !sym->isreqv && !sym->stackSpil)
+                sym->usl.spillLoc = NULL;
+
               /* if some liverange has been spilt at the block level
                  and this one live beyond this block then spil this
                  to be safe */
               if (_G.blockSpil && sym->liveTo > ebbs[i]->lSeq)
                 {
-                  spillThis (sym);
+                  mc6800SpillThis (sym);
                   continue;
                 }
 
               if (sym->remat)
                 {
-                  spillThis (sym);
+                  mc6800SpillThis (sym);
                   continue;
                 }
 
@@ -1445,7 +1339,7 @@ serialRegMark (eBBlock ** ebbs, int count)
                 }
               else if (!sym->for_newralloc)
                 {
-                  spillThis (sym);
+                  mc6800SpillThis (sym);
                   printf ("Spilt %s due to byte limit.\n", sym->name);
                 }
             }
@@ -1467,7 +1361,7 @@ mc6800_ralloc (ebbIndex * ebbi)
   setToNull ((void *) &_G.regAssigned);
   setToNull ((void *) &_G.totRegAssigned);
   _G.stackExtend = _G.dataExtend = 0;
-  mc6800_dry_stack_size = 0;
+  mc6800_far_frame = false;
   mc6800_reg_a = mc6800_regWithIdx(A_IDX);
   mc6800_reg_b = mc6800_regWithIdx(B_IDX);
   mc6800_reg_xl = mc6800_regWithIdx(XL_IDX);
@@ -1498,20 +1392,11 @@ mc6800_ralloc (ebbIndex * ebbi)
   /* The new register allocator invokes its magic */
   ic = mc6800_ralloc2_cc (ebbi);
 
-  RegFix (ebbs, count);
-
   if (currFunc && currFunc->stack + mc6800_call_stack_size > 255)
     {
-      int stack = currFunc->stack;
-      int stak = SPEC_STAK (currFunc->etype);
-
-      redoStackOffsets ();
-      mc6800_dry_stack_size = currFunc->stack;
-      currFunc->stack = stack;
-      SPEC_STAK (currFunc->etype) = stak;
+      mc6800_far_frame = true;
       serialRegMark (ebbs, count);
       ic = mc6800_ralloc2_cc (ebbi);
-      RegFix (ebbs, count);
     }
 
   /* if stack was extended then tell the user */
@@ -1527,12 +1412,6 @@ mc6800_ralloc (ebbIndex * ebbi)
 /*      werror(W_TOOMANY_SPILS,"data space", */
 /*             _G.dataExtend,currFunc->name,""); */
       _G.dataExtend = 0;
-    }
-
-  /* redo that offsets for stacked automatic variables */
-  if (currFunc)
-    {
-      redoStackOffsets ();
     }
 
   if (options.dump_i_code)
