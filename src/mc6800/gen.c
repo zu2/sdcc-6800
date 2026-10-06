@@ -1286,6 +1286,29 @@ accopWithAop (const char *op, reg_info *acc, asmop *aop, int loffset)
 }
 
 
+static void
+accopwWithAop (const char *opb, const char *opa, asmop *aop)
+{
+  char accopb[sizeof (((mc6800opcodedata *) 0)->name)];
+  char accopa[sizeof (((mc6800opcodedata *) 0)->name)];
+
+  SNPRINTF (accopb, sizeof (accopb), "%sb", opb);
+  SNPRINTF (accopa, sizeof (accopa), "%sa", opa);
+
+  if (IS_AOP_X (aop))
+    {
+      const char *tmp = allocTemp ();
+      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      mc6800_emitOp (accopb, MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOp (accopa, MODE_DIR, "*%s", tmp);
+      freeTemp ();
+      return;
+    }
+  wassertl (aop->type != AOP_REG, "accopwWithAop: register operand must be X");
+  mc6800_emitOp_o (accopb, aop, 0);
+  mc6800_emitOp_o (accopa, aop, 1);
+}
+
 /*--------------------------------------------------------------------------*/
 /* rmwWithReg - Emit read/modify/write instruction rmwop with register reg. */
 /*              Register reg must be 8-bit.                                 */
@@ -4065,15 +4088,13 @@ genPlus2 (iCode *ic)
     }
 
   switchXToAop (&xbases, leftOp);
-  loadRegFromAop (mc6800_reg_b, leftOp, 0);
-  loadRegFromAop (mc6800_reg_a, leftOp, 1);
+  loadRegFromAop (mc6800_reg_d, leftOp, 0);
   switchXToAop (&xbases, rightOp);
   if (aopIsLitVal (rightOp, 0, 1, 0x00))
     accopWithAop ("add", mc6800_reg_a, rightOp, 1);
   else
     {
-      accopWithAop ("add", mc6800_reg_b, rightOp, 0);
-      accopWithAop ("adc", mc6800_reg_a, rightOp, 1);
+      accopwWithAop ("add", "adc", rightOp);
     }
   if (topbytemask != 0xff)
     mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
@@ -4567,8 +4588,7 @@ genMinus2 (iCode *ic)
       int delta;
 
       switchXToAop (&xbases, leftOp);
-      loadRegFromAop (mc6800_reg_b, leftOp, 0);
-      loadRegFromAop (mc6800_reg_a, leftOp, 1);
+      loadRegFromAop (mc6800_reg_d, leftOp, 0);
       tmp = allocTemp ();
       delta = 1 + _G.stackOfs + rightOp->aopu.aop_stk + _G.stackPushes;
       mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
@@ -4598,29 +4618,25 @@ genMinus2 (iCode *ic)
     {
       loadRegFromAop (mc6800_reg_d, leftOp, 0);
       switchXToAop (&xbases, rightOp);
-      accopWithAop ("sub", mc6800_reg_b, rightOp, 0);
-      accopWithAop ("sbc", mc6800_reg_a, rightOp, 1);
+      accopwWithAop ("sub", "sbc", rightOp);
     }
   else if (IS_AOP_D (rightOp))
     {
       switchXToAop (&xbases, leftOp);
       mc6800_emitOp ("coma", MODE_INH, "");
       mc6800_emitOp ("comb", MODE_INH, "");
-      accopWithAop ("adc", mc6800_reg_b, leftOp, 0);
-      accopWithAop ("adc", mc6800_reg_a, leftOp, 1);
+      accopwWithAop ("adc", "adc", leftOp);
     }
   else
     {
       switchXToAop (&xbases, leftOp);
-      loadRegFromAop (mc6800_reg_b, leftOp, 0);
-      loadRegFromAop (mc6800_reg_a, leftOp, 1);
+      loadRegFromAop (mc6800_reg_d, leftOp, 0);
       switchXToAop (&xbases, rightOp);
       if (aopIsLitVal (rightOp, 0, 1, 0x00))
         accopWithAop ("sub", mc6800_reg_a, rightOp, 1);
       else
         {
-          accopWithAop ("sub", mc6800_reg_b, rightOp, 0);
-          accopWithAop ("sbc", mc6800_reg_a, rightOp, 1);
+          accopwWithAop ("sub", "sbc", rightOp);
         }
     }
   if (topbytemask != 0xff)
@@ -5088,8 +5104,7 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
           switchXToAop (&xbases, AOP (left));
           loadRegFromAop (mc6800_reg_d, AOP (left), 0);
           switchXToAop (&xbases, AOP (right));
-          accopWithAop ("sub", mc6800_reg_b, AOP (right), 0);
-          accopWithAop ("sbc", mc6800_reg_a, AOP (right), 1);
+          accopwWithAop ("sub", "sbc", AOP (right));
           freeXBases (&xbases);
         }
       pullOrFreeReg (mc6800_reg_a, needpulla);
@@ -5202,8 +5217,7 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
       else
         {
           switchXToAop (&xbases, AOP (right));
-          accopWithAop ("sub", mc6800_reg_b, AOP (right), 0);
-          accopWithAop ("sbc", mc6800_reg_a, AOP (right), 1);
+          accopwWithAop ("sub", "sbc", AOP (right));
         }
       freeXBases (&xbases);
     }
