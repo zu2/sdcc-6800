@@ -52,7 +52,6 @@ static struct
   int stackOfs;
   int stackPushes;
   int param_offset;
-  set *sendSet;
   int tempOfs;
 }
 _G;
@@ -552,6 +551,55 @@ pullOrFreeReg (reg_info * reg, bool needpull)
     pullReg (reg);
   else
     mc6800_freeReg (reg);
+}
+
+static bool
+regDead (int idx, const iCode *ic)
+{
+  if (idx == D_IDX)
+    return regDead (A_IDX, ic) && regDead (B_IDX, ic);
+  if (idx == X_IDX)
+    return regDead (XL_IDX, ic) && regDead (XH_IDX, ic);
+  return !bitVectBitValue (ic->rSurv, idx);
+}
+
+static reg_info *
+chooseAcc (const iCode *ic, unsigned candidates)
+{
+  wassert (candidates && !(candidates & ~MC6800MASK_D));
+
+  if ((candidates & MC6800MASK_A) && (!(candidates & MC6800MASK_B) || regDead (A_IDX, ic)))
+    return mc6800_reg_a;
+  return mc6800_reg_b;
+}
+
+static int
+pushLiveAccs (const iCode *ic, int mask)
+{
+  int pushedaccs = 0;
+
+  wassert (!(mask & ~MC6800MASK_D));
+
+  if ((mask & MC6800MASK_B) && !regDead (B_IDX, ic))
+    {
+      pushReg (mc6800_reg_b, false);
+      pushedaccs |= MC6800MASK_B;
+    }
+  if ((mask & MC6800MASK_A) && !regDead (A_IDX, ic))
+    {
+      pushReg (mc6800_reg_a, false);
+      pushedaccs |= MC6800MASK_A;
+    }
+  return pushedaccs;
+}
+
+static void
+pullAccs (int pushedaccs)
+{
+  if (pushedaccs & MC6800MASK_A)
+    pullReg (mc6800_reg_a);
+  if (pushedaccs & MC6800MASK_B)
+    pullReg (mc6800_reg_b);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -2471,7 +2519,7 @@ release:
 /*-----------------------------------------------------------------*/
 /* saveRegisters - will look for a call and save the registers     */
 /*-----------------------------------------------------------------*/
-static void
+static bool
 saveRegisters (iCode *lic)
 {
   int i;
@@ -2485,16 +2533,16 @@ saveRegisters (iCode *lic)
   if (!ic)
     {
       fprintf (stderr, "found parameter push with no function call\n");
-      return;
+      return false;
     }
 
   /* if the registers have been saved already or don't need to be then
      do nothing */
   if (ic->regsSaved)
-    return;
+    return true;
   if (IS_SYMOP (IC_LEFT (ic)) &&
       (IFFUNC_CALLEESAVES (OP_SYMBOL (IC_LEFT (ic))->type) || IFFUNC_ISNAKED (OP_SYM_TYPE (IC_LEFT (ic)))))
-    return;
+    return false;
 
   if (!regalloc_dry_run)
     ic->regsSaved = 1;
@@ -2503,6 +2551,7 @@ saveRegisters (iCode *lic)
       if (bitVectBitValue (ic->rSurv, i))
         pushReg (mc6800_regWithIdx (i), false);
     }
+  return true;
 }
 
 /*-----------------------------------------------------------------*/
@@ -2680,75 +2729,52 @@ genPointerPush (iCode *ic)
 /* genSend - gen code for SEND                                     */
 /*-----------------------------------------------------------------*/
 static void
-genSend (set *sendSet)
+genSend (iCode *ic)
 {
-  iCode *send1;
-  iCode *send2;
-  int size;
+  reg_info *reg;
+  iCode *walk;
 
   D (emitcode (";", "genSend"));
 
-  send1 = setFirstItem (sendSet);
-  send2 = setNextItem (sendSet);
-  wassert (send1);
+  if (!regalloc_dry_run)
+    saveRegisters (ic);
 
-  if (!send2)
-    {
-      aopOp (IC_LEFT (send1), send1, false);
-      setupXForAop (AOP (IC_LEFT (send1)));
-      size = AOP_SIZE (IC_LEFT (send1));
-      wassert (size <= 2);
-      if (size == 1)
-        {
-          loadRegFromAop (send1->argreg == 2 ? mc6800_reg_a : mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
-        }
-      else
-        {
-          loadRegFromAop (mc6800_reg_d, AOP (IC_LEFT (send1)), 0);
-        }
-      freeAsmop (IC_LEFT (send1), NULL, send1, true);
-    }
-  else
-    {
-      if (send1->argreg > send2->argreg)
-        {
-          iCode *sic = send1;
-          send1 = send2;
-          send2 = sic;
-        }
-      aopOp (IC_LEFT (send1), send1, false);
-      aopOp (IC_LEFT (send2), send2, false);
-      wassert (AOP_SIZE (IC_LEFT (send1)) == 1 && AOP_SIZE (IC_LEFT (send2)) == 1);
-      if (IS_AOP_A (AOP (IC_LEFT (send1))) && IS_AOP_B (AOP (IC_LEFT (send2))))
-        {
-          pushReg (mc6800_reg_a, false);
-          transferRegReg (mc6800_reg_b, mc6800_reg_a, false);
-          pullReg (mc6800_reg_b);
-        }
-      else if (IS_AOP_A (AOP (IC_LEFT (send2))) || IS_AOP_B (AOP (IC_LEFT (send2))))
-        {
-          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send2)), 0);
-          setupXForAop (AOP (IC_LEFT (send1)));
-          loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
-        }
-      else
-        {
-          setupXForAop (AOP (IC_LEFT (send1)));
-          loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (send1)), 0);
-          setupXForAop (AOP (IC_LEFT (send2)));
-          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (send2)), 0);
-        }
-      freeAsmop (IC_LEFT (send2), NULL, send2, true);
-      freeAsmop (IC_LEFT (send1), NULL, send1, true);
-    }
+  aopOp (IC_LEFT (ic), ic, false);
+  wassert (AOP_SIZE (IC_LEFT (ic)) <= 2);
+  reg = AOP_SIZE (IC_LEFT (ic)) == 2 ? mc6800_reg_d : mc6800_aop_pass[ic->argreg - 1]->aopu.aop_reg[0];
+
+  if (!regDead (reg->rIdx, ic))
+    for (walk = ic->next; walk && walk->op != CALL; walk = walk->next)
+      {
+        if (IC_LEFT (walk) && !IS_OP_LITERAL (IC_LEFT (walk)))
+          {
+            UNIMPLEMENTED;
+            goto release;
+          }
+        if (walk->op == PCALL)
+          break;
+      }
+
+  setupXForAop (AOP (IC_LEFT (ic)));
+  loadRegFromAop (reg, AOP (IC_LEFT (ic)), 0);
+
+release:
+  freeAsmop (IC_LEFT (ic), NULL, ic, true);
 }
 
 /*-----------------------------------------------------------------*/
 /* pushbigreturn - emit code to push hidden pointer for struct return */
 /*-----------------------------------------------------------------*/
 static void
-pushbigreturn (operand *result)
+pushbigreturn (iCode *ic, bool regssaved)
 {
+  operand *result = IC_RESULT (ic);
+  sym_link *ftype = ic->op == PCALL ? operandType (IC_LEFT (ic))->next : operandType (IC_LEFT (ic));
+  unsigned keep = 0;
+  value *arg;
+  reg_info *acc;
+  const char *save = NULL;
+
   wassert (result);
 
   D (emitcode (";", "pushbigreturn"));
@@ -2756,26 +2782,47 @@ pushbigreturn (operand *result)
   symbol *sym = OP_SYMBOL (result);
   wassert (sym);
 
+  for (arg = FUNC_ARGS (ftype); arg; arg = arg->next)
+    if (IS_REGPARM (arg->etype))
+      keep |= getSize (arg->type) == 2 ? MC6800MASK_D : mc6800_aop_pass[SPEC_ARGREG (arg->etype) - 1]->aopu.aop_reg[0]->mask;
+  if (ic->op == PCALL && IS_ITEMP (IC_LEFT (ic)) && !OP_SYMBOL (IC_LEFT (ic))->isspilt)
+    for (int i = 0; i < OP_SYMBOL (IC_LEFT (ic))->nRegs; i++)
+      if (OP_SYMBOL (IC_LEFT (ic))->regs[i])
+        keep |= OP_SYMBOL (IC_LEFT (ic))->regs[i]->mask;
+
+  acc = chooseAcc (ic, (MC6800MASK_D & ~keep) ? (MC6800MASK_D & ~keep) : MC6800MASK_B);
+  if ((acc->mask & keep) || !regssaved && !regDead (acc->rIdx, ic))
+    {
+      save = allocTemp ();
+      mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", save);
+    }
+
   if (sym->onStack)
     {
-      const char *tmp = setupTmpFromSP (_G.stackOfs + sym->stack + (sym->stack > 0 ? _G.param_offset : 0));
+      const char *tmp = allocTemp ();
+      int delta = 1 + _G.stackOfs + sym->stack + (sym->stack > 0 ? _G.param_offset : 0) + _G.stackPushes;
 
-      mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
-      mc6800_dirtyReg (mc6800_reg_b, false);
-      pushReg (mc6800_reg_b, true);
-      mc6800_emitOp ("ldab", MODE_DIR, "*%s", tmp);
-      mc6800_dirtyReg (mc6800_reg_b, false);
-      pushReg (mc6800_reg_b, true);
+      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
+      mc6800_emitOpWithAcc ("add", acc, MODE_IMM, "#%d", delta & 0xff);
+      pushReg (acc, false);
+      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
+      mc6800_emitOpWithAcc ("adc", acc, MODE_IMM, "#%d", (delta >> 8) & 0xff);
+      pushReg (acc, false);
       freeTemp ();
     }
   else
     {
-      mc6800_emitOp ("ldab", MODE_IMM, "#%s", sym->rname);
-      mc6800_dirtyReg (mc6800_reg_b, false);
-      pushReg (mc6800_reg_b, true);
-      mc6800_emitOp ("ldab", MODE_IMM, "#>%s", sym->rname);
-      mc6800_dirtyReg (mc6800_reg_b, false);
-      pushReg (mc6800_reg_b, true);
+      mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#%s", sym->rname);
+      pushReg (acc, false);
+      mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#>%s", sym->rname);
+      pushReg (acc, false);
+    }
+
+  if (save)
+    {
+      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", save);
+      freeTemp ();
     }
 }
 
@@ -2789,21 +2836,14 @@ genCall (iCode * ic)
 
   D (emitcode (";", "genCall"));
 
-  if (!ic->regsSaved)
-    saveRegisters (ic);
+  const bool regssaved = ic->regsSaved || saveRegisters (ic);
 
   dtype = operandType (IC_LEFT (ic));
 
   const bool bigreturn = IS_STRUCT (dtype->next);
 
   if (bigreturn)
-    pushbigreturn (IC_RESULT (ic));
-
-  if (_G.sendSet && !regalloc_dry_run)
-    {
-      genSend (_G.sendSet);
-      _G.sendSet = NULL;
-    }
+    pushbigreturn (ic, regssaved);
 
   if (IS_LITERAL (getSpec (dtype)))
     {
@@ -2860,12 +2900,11 @@ genPcall (iCode * ic)
 
   const bool bigreturn = IS_STRUCT (dtype->next);
 
-  if (bigreturn)
-    pushbigreturn (IC_RESULT (ic));
-
   /* if caller saves & we have not saved then */
-  if (!ic->regsSaved)
-    saveRegisters (ic);
+  const bool regssaved = ic->regsSaved || saveRegisters (ic);
+
+  if (bigreturn)
+    pushbigreturn (ic, regssaved);
 
   if (!IS_LITERAL (etype))
     {
@@ -2877,13 +2916,6 @@ genPcall (iCode * ic)
           mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
           mc6800_freeReg (mc6800_reg_d);
         }
-    }
-
-  /* if send set is not empty then assign */
-  if (_G.sendSet && !regalloc_dry_run)
-    {
-      genSend (reverseSet (_G.sendSet));
-      _G.sendSet = NULL;
     }
 
   /* make the call */
@@ -10285,10 +10317,21 @@ genReceive (iCode * ic)
 {
   int size;
   reg_info *reg;
+  iCode *nic;
+  unsigned keep = 0;
 
   D (emitcode (";", "genReceive"));
 
   aopOp (IC_RESULT (ic), ic, false);
+
+  for (nic = ic->next; nic && nic->op == RECEIVE && nic->argreg; nic = nic->next)
+    keep |= getSize (operandType (IC_RESULT (nic))) == 2 ? MC6800MASK_D : mc6800_aop_pass[nic->argreg - 1]->aopu.aop_reg[0]->mask;
+  if (AOP_TYPE (IC_RESULT (ic)) == AOP_REG && (AOP (IC_RESULT (ic))->regmask & keep))
+    {
+      UNIMPLEMENTED;
+      goto release;
+    }
+
   setupXForAop (AOP (IC_RESULT (ic)));
   size = AOP_SIZE (IC_RESULT (ic));
 
@@ -10300,6 +10343,7 @@ genReceive (iCode * ic)
       mc6800_freeReg (reg);
     }
 
+release:
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
 }
 
@@ -10707,17 +10751,7 @@ genmc6800iCode (iCode *ic)
 
   _G.param_offset = (currFunc && IS_STRUCT (currFunc->type->next)) ? 2 : 0;
     case SEND:
-      if (!regalloc_dry_run)
-        addSet (&_G.sendSet, ic);
-      else if (!(ic->prev && ic->prev->op == SEND))
-        {
-          set * sendSet = NULL;
-          addSet (&sendSet, ic);
-          if (ic->next && ic->next->op == SEND)
-            addSet (&sendSet, ic->next);
-          genSend (sendSet);
-          deleteSet (&sendSet);
-        }
+      genSend (ic);
       break;
 
     case DUMMY_READ_VOLATILE:
