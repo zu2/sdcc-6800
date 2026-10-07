@@ -1882,7 +1882,8 @@ sameRegs (asmop *aop1, asmop *aop2)
               return false;
           return true;
         case AOP_SOF:
-          return (!regalloc_dry_run && aop1->aopu.aop_stk == aop2->aopu.aop_stk);
+          return (aop1->aopu.aop_stk == aop2->aopu.aop_stk
+                  && (!regalloc_dry_run || OP_SYMBOL (aop1->op) == OP_SYMBOL (aop2->op)));
         case AOP_DIR:
         case AOP_EXT:
           return (aop1->aopu.aop_dir && aop2->aopu.aop_dir && !strcmp (aop1->aopu.aop_dir, aop2->aopu.aop_dir));
@@ -2004,7 +2005,10 @@ aopOp (operand *op, iCode * ic, bool result)
           else if (sym->usl.spillLoc)
             sym->aop = op->aop = aop = aopForSym (ic, sym->usl.spillLoc, result);
           else
-            sym->aop = op->aop = aop = newAsmop (options.xdata_spill ? AOP_EXT : AOP_DIR);
+            {
+              sym->aop = op->aop = aop = newAsmop (options.xdata_spill ? AOP_EXT : AOP_DIR);
+              aop->aopu.aop_dir = sym->name;
+            }
           aop->size = getSize (sym->type);
           aop->op = op;
           if (!result)
