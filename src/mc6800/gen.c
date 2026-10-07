@@ -2367,6 +2367,12 @@ genUminus (iCode * ic)
   aopOp (IC_LEFT (ic), ic, false);
   aopOp (IC_RESULT (ic), ic, true);
 
+  if (IS_AOP_X (AOP (IC_LEFT (ic))))
+    {
+      UNIMPLEMENTED;
+      goto release;
+    }
+
   /* if float then do float stuff */
   if (IS_FLOAT (operandType (IC_LEFT (ic))))
     {
@@ -3590,15 +3596,14 @@ genPlus1 (iCode *ic)
   aopOp (IC_RIGHT (ic), ic, false);
   aopOp (IC_RESULT (ic), ic, true);
 
-  if ((AOP_TYPE (IC_LEFT (ic)) == AOP_LIT) || (AOP_TYPE (IC_RIGHT (ic)) == AOP_REG && !IS_AOP_WITH_A (AOP (IC_LEFT (ic)))))
-    {
-      operand *t = IC_RIGHT (ic);
-      IC_RIGHT (ic) = IC_LEFT (ic);
-      IC_LEFT (ic) = t;
-    }
   leftOp = AOP (IC_LEFT (ic));
   rightOp = AOP (IC_RIGHT (ic));
   result = AOP (IC_RESULT (ic));
+  if (leftOp->type == AOP_LIT || rightOp->type == AOP_REG && !IS_AOP_WITH_A (leftOp))
+    {
+      leftOp = AOP (IC_RIGHT (ic));
+      rightOp = AOP (IC_LEFT (ic));
+    }
 
   if (IS_AOP_A (result) || IS_AOP_B (result))
     reg = result->aopu.aop_reg[0];
@@ -3615,8 +3620,10 @@ genPlus1 (iCode *ic)
     }
   if (rightOp->type == AOP_REG && rightOp->aopu.aop_reg[0] == reg)
     {
+      asmop *regOp = rightOp;
+
       rightOp = leftOp;
-      leftOp = AOP (IC_RIGHT (ic));
+      leftOp = regOp;
     }
   setupXBases (&xbases, leftOp, rightOp, result);
 
@@ -3661,15 +3668,14 @@ genPlus2 (iCode *ic)
   aopOp (IC_RIGHT (ic), ic, false);
   aopOp (IC_RESULT (ic), ic, true);
 
-  if ((AOP_TYPE (IC_LEFT (ic)) == AOP_LIT) || (AOP_TYPE (IC_RIGHT (ic)) == AOP_REG && !IS_AOP_WITH_A (AOP (IC_LEFT (ic)))))
-    {
-      operand *t = IC_RIGHT (ic);
-      IC_RIGHT (ic) = IC_LEFT (ic);
-      IC_LEFT (ic) = t;
-    }
   leftOp = AOP (IC_LEFT (ic));
   rightOp = AOP (IC_RIGHT (ic));
   result = AOP (IC_RESULT (ic));
+  if (leftOp->type == AOP_LIT || rightOp->type == AOP_REG && !IS_AOP_WITH_A (leftOp))
+    {
+      leftOp = AOP (IC_RIGHT (ic));
+      rightOp = AOP (IC_LEFT (ic));
+    }
 
   needpullb = pushRegIfSurv (mc6800_reg_b);
   needpulla = pushRegIfSurv (mc6800_reg_a);
@@ -3767,14 +3773,13 @@ genPlusMANY (iCode *ic)
   aopOp (IC_RIGHT (ic), ic, false);
   aopOp (IC_RESULT (ic), ic, true);
 
-  if (AOP_TYPE (IC_LEFT (ic)) == AOP_LIT)
-    {
-      operand *t = IC_RIGHT (ic);
-      IC_RIGHT (ic) = IC_LEFT (ic);
-      IC_LEFT (ic) = t;
-    }
   leftOp = AOP (IC_LEFT (ic));
   rightOp = AOP (IC_RIGHT (ic));
+  if (leftOp->type == AOP_LIT)
+    {
+      leftOp = AOP (IC_RIGHT (ic));
+      rightOp = AOP (IC_LEFT (ic));
+    }
   result = AOP (IC_RESULT (ic));
   size = getDataSize (IC_RESULT (ic));
 
@@ -10178,6 +10183,17 @@ genCast (iCode * ic)
 
   aopOp (right, ic, false);
   aopOp (result, ic, false);
+
+  if (IS_AOP_X (AOP (right)) && AOP_SIZE (result) != 2)
+    {
+      UNIMPLEMENTED;
+      goto release;
+    }
+  if (IS_AOP_X (AOP (result)) && AOP_SIZE (right) == 1)
+    {
+      UNIMPLEMENTED;
+      goto release;
+    }
 
   if (IS_BOOL (resulttype))
     {
