@@ -88,8 +88,8 @@ static void loadRegFromConst (reg_info * reg, int c);
 static asmop *newAsmop (short type);
 static const char *aopGet (asmop * aop, int loffset);
 static void setupXForAop (asmop * aop);
-static void setupXFromSP (int stackOffset);
-static const char *setupTmpFromSP (int stackOffset);
+static const char *setupTmpFromSP (int stackOffset, reg_info *acc);
+static bool stackBasedOffset (operand * opOffset);
 static void updateiTempRegisterUse (operand * op);
 static bool sameRegs (asmop *aop1, asmop *aop2);
 static void genAssign1 (operand *result, operand *right);
@@ -111,6 +111,19 @@ static void genAssignMANY (operand *result, operand *right);
 static bool regalloc_dry_run;
 static unsigned int regalloc_dry_run_cost;
 static float regalloc_dry_run_cost_cycles;
+
+static float
+codeCost (unsigned int bytes, float cycles, const iCode *ic)
+{
+  int byte_cost_weight = 1;
+
+  if (optimize.codeSize)
+    byte_cost_weight *= 4;
+  if (!optimize.codeSpeed)
+    byte_cost_weight *= 2;
+
+  return (float)bytes * byte_cost_weight + 4 * cycles * ic->count;
+}
 
 #define UNIMPLEMENTED do {if (!regalloc_dry_run) fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "Unimplemented"); regalloc_dry_run_cost += 1000; regalloc_dry_run_cost_cycles += 1000;} while(0)
 
@@ -717,15 +730,7 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
       mc6800_useReg (reg);
       return;
     }
-  if (aop->type == AOP_STL)
-    {
-      setupXFromSP (_G.stackOfs + aop->aopu.aop_stk);
-      if (regidx != X_IDX)
-        transferRegReg (mc6800_reg_x, reg, false);
-      else
-        mc6800_useReg (reg);
-      return;
-    }
+  wassertl (aop->type != AOP_STL, "AOP_STL into X");
 
 
   DD (emitcode ("", ";     loadRegFromAop (%s, %s, %d)", reg->name, aopName (aop), loffset));
@@ -1444,56 +1449,20 @@ newAsmop (short type)
 
 
 static const char *
-setupTmpFromSP (int stackOffset)
+setupTmpFromSP (int stackOffset, reg_info *acc)
 {
   const char *tmp = allocTemp ();
-  bool saveb = !mc6800_reg_b->isFree && !mc6800_reg_a->isFree;
-  int delta = (saveb ? 2 : 1) + stackOffset + _G.stackPushes;
+  int delta = 1 + stackOffset + _G.stackPushes;
 
-  if (mc6800_reg_b->isFree || saveb)
-    {
-      if (saveb)
-        {
-          mc6800_emitOp ("pshb", MODE_INH, "");
-        }
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("addb", MODE_IMM, "#%d", delta & 0xff);
-      mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("ldab", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("adcb", MODE_IMM, "#%d", (delta >> 8) & 0xff);
-      mc6800_emitOp ("stab", MODE_DIR, "*%s", tmp);
-      if (saveb)
-        {
-          mc6800_emitOp ("pulb", MODE_INH, "");
-        }
-      else
-        mc6800_dirtyReg (mc6800_reg_b, false);
-    }
-  else
-    {
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("adda", MODE_IMM, "#%d", delta & 0xff);
-      mc6800_emitOp ("staa", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
-      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
-      mc6800_dirtyReg (mc6800_reg_a, false);
-    }
+  mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+  mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
+  mc6800_emitOpWithAcc ("add", acc, MODE_IMM, "#%d", delta & 0xff);
+  mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
+  mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
+  mc6800_emitOpWithAcc ("adc", acc, MODE_IMM, "#%d", (delta >> 8) & 0xff);
+  mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", tmp);
+  mc6800_dirtyReg (acc, false);
   return tmp;
-}
-
-static void
-setupXFromSP (int stackOffset)
-{
-  const char *tmp = setupTmpFromSP (stackOffset);
-
-  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
-  freeTemp ();
-  mc6800_dirtyReg (mc6800_reg_x, false);
-  mc6800_reg_x->aop = &tsxaop;
-  mc6800_reg_x->stackOffset = stackOffset;
 }
 
 static int
@@ -2706,14 +2675,29 @@ genPointerPush (iCode *ic)
     mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", allocTemp ());
   bool needpullx = pushRegIfSurv (mc6800_reg_x);
 
-  loadRegFromAop (mc6800_reg_x, left->aop, 0);
-  /* so x now contains the address */
-
   int size = getSize (operandType (IC_LEFT (ic))->next);
-  while (size--)
+  if (AOP_TYPE (left) == AOP_STL)
     {
-      loadRegIndexed (acc, size, 0);
-      pushReg (acc, true);
+      asmop *derefaop = aopDerefAop (left->aop, 0);
+
+      derefaop->size = size;
+      for (int offset = 0; offset < size; offset++)
+        {
+          setupXForAop (derefaop);
+          loadRegFromAop (acc, derefaop, offset);
+          pushReg (acc, true);
+        }
+    }
+  else
+    {
+      loadRegFromAop (mc6800_reg_x, left->aop, 0);
+      /* so x now contains the address */
+
+      while (size--)
+        {
+          loadRegIndexed (acc, size, 0);
+          pushReg (acc, true);
+        }
     }
   pullOrFreeReg (mc6800_reg_x, needpullx);
   if (!acc->isDead)
@@ -2919,7 +2903,16 @@ genPcall (iCode * ic)
     }
 
   /* make the call */
-  if (!IS_LITERAL (etype))
+  if (!IS_LITERAL (etype) && AOP_TYPE (IC_LEFT (ic)) == AOP_STL)
+    {
+      asmop *derefaop = aopDerefAop (AOP (IC_LEFT (ic)), 0);
+
+      derefaop->size = 1;
+      setupXForAop (derefaop);
+      mc6800_emitOp_o ("jsr", derefaop, 0);
+      freeAsmop (IC_LEFT (ic), NULL, ic, true);
+    }
+  else if (!IS_LITERAL (etype))
     {
       if (IS_AOP_D (AOP (IC_LEFT (ic))))
         {
@@ -3272,12 +3265,14 @@ genRet (iCode * ic)
     {
       const char *dst = allocTemp ();
 
-      mc6800_useReg (mc6800_reg_x);
-      setupXFromSP (_G.stackOfs + 2);
-      mc6800_emitOp ("ldx", MODE_IDX, "0,x");
+      asmop *retaop = newAsmop (AOP_SOF);
+
+      retaop->size = 2;
+      retaop->aopu.aop_stk = 2;
+      setupXForAop (retaop);
+      mc6800_emitOpw_o ("ldx", retaop, 0);
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_emitOp ("stx", MODE_DIR, "*%s", dst);
-      mc6800_freeReg (mc6800_reg_x);
 
       if (size <= 2)
         {
@@ -3291,33 +3286,7 @@ genRet (iCode * ic)
           if (size > 1)
             mc6800_emitOp ("stab", MODE_IDX, "0,x");
         }
-      else if (AOP_TYPE (IC_LEFT (ic)) == AOP_SOF)
-        {
-          const char *src = allocTemp ();
-
-          setupXFromSP (_G.stackOfs + AOP (IC_LEFT (ic))->aopu.aop_stk);
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", src);
-
-          for (offset = 0; offset < size; offset += 2)
-            {
-              if (size - 1 > 255)
-                {
-                  UNIMPLEMENTED;
-                  break;
-                }
-              mc6800_emitOp ("ldx", MODE_DIR, "*%s", src);
-              mc6800_dirtyReg (mc6800_reg_x, false);
-              mc6800_emitOp ("ldaa", MODE_IDX, "%d,x", size - 1 - offset);
-              if (offset + 1 < size)
-                mc6800_emitOp ("ldab", MODE_IDX, "%d,x", size - 2 - offset);
-              mc6800_emitOp ("ldx", MODE_DIR, "*%s", dst);
-              mc6800_emitOp ("staa", MODE_IDX, "%d,x", size - 1 - offset);
-              if (offset + 1 < size)
-                mc6800_emitOp ("stab", MODE_IDX, "%d,x", size - 2 - offset);
-            }
-          freeTemp ();
-        }
-      else if (AOP_TYPE (IC_LEFT (ic)) == AOP_DIR || AOP_TYPE (IC_LEFT (ic)) == AOP_EXT)
+      else if (AOP_TYPE (IC_LEFT (ic)) == AOP_SOF || AOP_TYPE (IC_LEFT (ic)) == AOP_DIR || AOP_TYPE (IC_LEFT (ic)) == AOP_EXT)
         {
           for (offset = 0; offset < size; offset += 2)
             {
@@ -3326,6 +3295,7 @@ genRet (iCode * ic)
                   UNIMPLEMENTED;
                   break;
                 }
+              setupXForAop (AOP (IC_LEFT (ic)));
               loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (ic)), offset);
               if (offset + 1 < size)
                 loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (ic)), offset + 1);
@@ -3594,6 +3564,8 @@ genPlusIncr (iCode * ic)
   D (emitcode (";     genPlusIncr", ""));
 
   if (!IS_OP_LITERAL (IC_LEFT (ic)) && !IS_OP_LITERAL (IC_RIGHT (ic)))
+    return false;
+  if (stackBasedOffset (IC_LEFT (ic)) || stackBasedOffset (IC_RIGHT (ic)))
     return false;
   if (isOperandVolatile (IC_RESULT (ic), false))
     return false;
@@ -4072,6 +4044,8 @@ genMinusDec (iCode * ic)
   D (emitcode (";     genMinusDec", ""));
 
   if (!IS_OP_LITERAL (IC_RIGHT (ic)))
+    return false;
+  if (stackBasedOffset (IC_LEFT (ic)))
     return false;
   if (isOperandVolatile (IC_RESULT (ic), false))
     return false;
@@ -4745,16 +4719,6 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
           mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
           freeTemp ();
         }
-      else if (AOP_TYPE (right) == AOP_STL && AOP_TYPE (left) == AOP_LIT)
-        {
-          const char *tmp = setupTmpFromSP (_G.stackOfs + AOP (right)->aopu.aop_stk);
-
-          setupXForAop (AOP (left));
-          loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-          mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
-          mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
-          freeTemp ();
-        }
       else if (AOP_TYPE (right) == AOP_STL)
         {
           const char *tmp = allocTemp ();
@@ -5198,7 +5162,8 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       return;
     }
   if (AOP_TYPE (right) == AOP_STL && !IS_AOP_X (AOP (left)) && !IS_AOP_D (AOP (left))
-      || AOP_TYPE (left) == AOP_STL && AOP_SIZE (right) != 2)
+      || AOP_TYPE (left) == AOP_STL && AOP_SIZE (right) != 2
+      || AOP_TYPE (left) == AOP_STL && AOP_TYPE (right) == AOP_SOF && !regDead (X_IDX, ic))
     {
       UNIMPLEMENTED;
       freeAsmop (right, NULL, ic, false);
@@ -5224,20 +5189,69 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
     }
   else if (IS_AOP_X (AOP (left)) && AOP_TYPE (right) == AOP_STL)
     {
-      const char *tmp = setupTmpFromSP (_G.stackOfs + AOP (right)->aopu.aop_stk);
+      int k = _G.stackOfs + AOP (right)->aopu.aop_stk + _G.stackPushes;
+      reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+      int accpush = !regDead (acc->rIdx, ic);
+      int pushedaccs = 0;
+      const char *tmp;
+
+      if (regDead (X_IDX, ic) && k >= 0
+          && codeCost (5 + k, 13 + 4 * k, ic) < codeCost (16 + 2 * accpush, 27 + 8 * accpush, ic))
+        {
+          tmp = allocTemp ();
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("tsx", MODE_INH, "");
+          while (k--)
+            mc6800_emitOp ("inx", MODE_INH, "");
+          mc6800_dirtyReg (mc6800_reg_x, false);
+        }
+      else
+        {
+          pushedaccs = pushLiveAccs (ic, acc->mask);
+          tmp = setupTmpFromSP (_G.stackOfs + AOP (right)->aopu.aop_stk, acc);
+        }
       mc6800_emitOp ("cpx", MODE_DIR, "*%s", tmp);
       freeTemp ();
+      pullAccs (pushedaccs);
     }
   else if (IS_AOP_D (AOP (left)) && AOP_TYPE (right) == AOP_STL)
     {
-      const char *tmp = setupTmpFromSP (_G.stackOfs + AOP (right)->aopu.aop_stk);
-      mc6800_emitOp ("cmpb", MODE_DIR, "*%s+1", tmp);
-      if (!ifx && !needpulla)
-        needpulla = pushRegIfSurv (mc6800_reg_a);
-      if (!tlbl_NE && !regalloc_dry_run)
-        tlbl_NE = newiTempLabel (NULL);
-      emitBranch ("bne", tlbl_NE);
-      mc6800_emitOp ("cmpa", MODE_DIR, "*%s", tmp);
+      int k = _G.stackOfs + AOP (right)->aopu.aop_stk + _G.stackPushes;
+      int livaccs = !regDead (A_IDX, ic) + !regDead (B_IDX, ic);
+      const char *tmp = allocTemp ();
+
+      if (regDead (X_IDX, ic) && k >= 0
+          && codeCost (9 + k, 19 + 4 * k, ic) < codeCost (12 + 2 * livaccs, 19 + 8 * livaccs, ic))
+        {
+          mc6800_emitOp ("tsx", MODE_INH, "");
+          while (k--)
+            mc6800_emitOp ("inx", MODE_INH, "");
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("cmpb", MODE_DIR, "*%s+1", tmp);
+          if (!ifx && !needpulla)
+            needpulla = pushRegIfSurv (mc6800_reg_a);
+          if (!tlbl_NE && !regalloc_dry_run)
+            tlbl_NE = newiTempLabel (NULL);
+          emitBranch ("bne", tlbl_NE);
+          mc6800_emitOp ("cmpa", MODE_DIR, "*%s", tmp);
+        }
+      else
+        {
+          int pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
+          symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+          int delta = 1 + _G.stackOfs + AOP (right)->aopu.aop_stk + _G.stackPushes;
+
+          mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
+          mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
+          mc6800_emitOp ("cmpb", MODE_IMM, "#%d", delta & 0xff);
+          emitBranch ("bne", tlbl);
+          mc6800_emitOp ("cmpa", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl);
+          pullAccs (pushedaccs);
+        }
       freeTemp ();
     }
   else if (IS_AOP_D (AOP (left)) && IS_AOP_X (AOP (right)))
@@ -5262,51 +5276,68 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       setupXForAop (AOP (right));
       accopWithAop ("cmp", mc6800_reg_a, AOP (right), 1);
     }
-  else if (AOP_TYPE (left) == AOP_STL && mc6800_reg_x->isDead && AOP_SIZE (right) == 2)
+  else if (AOP_TYPE (left) == AOP_STL && regDead (X_IDX, ic) && AOP_SIZE (right) == 2)
     {
-      const char *tmp;
+      int k = _G.stackOfs + AOP (left)->aopu.aop_stk + _G.stackPushes;
+      reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+      int accpush = !regDead (acc->rIdx, ic);
+      int mode = (AOP_TYPE (right) == AOP_DIR) ? MODE_DIR : (AOP_TYPE (right) == AOP_EXT) ? MODE_EXT : MODE_IMM;
+      const mc6800opmode *cpx = &mc6800_getOpcodeData ("cpx")->mode[mode];
+      const mc6800opmode *ldx = &mc6800_getOpcodeData ("ldx")->mode[mode];
 
-      setupXForAop (AOP (right));
-      loadRegFromAop (mc6800_reg_x, AOP (right), 0);
-      tmp = setupTmpFromSP (_G.stackOfs + AOP (left)->aopu.aop_stk);
-      mc6800_emitOp ("cpx", MODE_DIR, "*%s", tmp);
-      freeTemp ();
+      if (k >= 0
+          && (AOP_TYPE (right) == AOP_DIR || AOP_TYPE (right) == AOP_EXT
+              || AOP_TYPE (right) == AOP_LIT || AOP_TYPE (right) == AOP_IMMD)
+          && codeCost (1 + k + cpx->bytes, 4 + 4 * k + cpx->cycles, ic)
+             < codeCost (ldx->bytes + 16 + 2 * accpush, ldx->cycles + 27 + 8 * accpush, ic))
+        {
+          mc6800_emitOp ("tsx", MODE_INH, "");
+          while (k--)
+            mc6800_emitOp ("inx", MODE_INH, "");
+          mc6800_dirtyReg (mc6800_reg_x, false);
+          mc6800_emitOpw_o ("cpx", AOP (right), 0);
+        }
+      else
+        {
+          int pushedaccs = 0;
+          const char *tmp;
+
+          setupXForAop (AOP (right));
+          loadRegFromAop (mc6800_reg_x, AOP (right), 0);
+          if (k >= 0 && codeCost (5 + k, 13 + 4 * k, ic) < codeCost (16 + 2 * accpush, 27 + 8 * accpush, ic))
+            {
+              tmp = allocTemp ();
+              mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+              mc6800_emitOp ("tsx", MODE_INH, "");
+              while (k--)
+                mc6800_emitOp ("inx", MODE_INH, "");
+              mc6800_dirtyReg (mc6800_reg_x, false);
+            }
+          else
+            {
+              pushedaccs = pushLiveAccs (ic, acc->mask);
+              tmp = setupTmpFromSP (_G.stackOfs + AOP (left)->aopu.aop_stk, acc);
+            }
+          mc6800_emitOp ("cpx", MODE_DIR, "*%s", tmp);
+          freeTemp ();
+          pullAccs (pushedaccs);
+        }
       mc6800_freeReg (mc6800_reg_x);
     }
   else if (AOP_TYPE (left) == AOP_STL)
     {
-      const char *xtmp = allocTemp ();
-      const char *rtmp = allocTemp ();
-      const char *tmp;
+      int pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
       symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-      bool xfree = mc6800_reg_x->isFree;
-      bool needpulla;
 
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", xtmp);
-      mc6800_freeReg (mc6800_reg_x);
-      needpulla = pushRegIfUsed (mc6800_reg_a);
+      loadRegFromAop (mc6800_reg_d, AOP (left), 0);
       setupXForAop (AOP (right));
-      loadRegFromAop (mc6800_reg_a, AOP (right), 0);
-      mc6800_emitOp ("staa", MODE_DIR, "*%s+1", rtmp);
-      setupXForAop (AOP (right));
-      loadRegFromAop (mc6800_reg_a, AOP (right), 1);
-      mc6800_emitOp ("staa", MODE_DIR, "*%s", rtmp);
-      tmp = setupTmpFromSP (_G.stackOfs + AOP (left)->aopu.aop_stk);
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", xtmp);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      mc6800_reg_x->isFree = xfree;
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s+1", rtmp);
-      mc6800_emitOp ("cmpa", MODE_DIR, "*%s+1", tmp);
+      accopWithAop ("cmp", mc6800_reg_b, AOP (right), 0);
       emitBranch ("bne", tlbl);
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", rtmp);
-      mc6800_emitOp ("cmpa", MODE_DIR, "*%s", tmp);
+      setupXForAop (AOP (right));
+      accopWithAop ("cmp", mc6800_reg_a, AOP (right), 1);
       if (!regalloc_dry_run)
         emitLabel (tlbl);
-      freeTemp ();
-      freeTemp ();
-      freeTemp ();
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
+      pullAccs (pushedaccs);
     }
   else
     {
@@ -9360,9 +9391,31 @@ genAddrOf (iCode * ic)
      variable */
   if (sym->onStack && IS_AOP_X (aopr))
     {
+      int stackOffset = _G.stackOfs + sym->stack + (sym->stack > 0 ? _G.param_offset : 0);
+      int k = stackOffset + _G.stackPushes;
+      reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+      int accpush = !regDead (acc->rIdx, ic);
+
       needpullx = pushRegIfSurv (mc6800_reg_x);
+      if (k >= 0 && codeCost (1 + k, 4 + 4 * k, ic) < codeCost (16 + 2 * accpush, 27 + 8 * accpush, ic))
+        {
+          mc6800_emitOp ("tsx", MODE_INH, "");
+          while (k--)
+            mc6800_emitOp ("inx", MODE_INH, "");
+        }
+      else
+        {
+          int pushedaccs = pushLiveAccs (ic, acc->mask);
+          const char *tmp = setupTmpFromSP (stackOffset, acc);
+
+          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+          freeTemp ();
+          pullAccs (pushedaccs);
+        }
       mc6800_useReg (mc6800_reg_x);
-      setupXFromSP (_G.stackOfs + sym->stack + (sym->stack > 0 ? _G.param_offset : 0));
+      mc6800_dirtyReg (mc6800_reg_x, false);
+      mc6800_reg_x->aop = &tsxaop;
+      mc6800_reg_x->stackOffset = stackOffset;
       storeRegToAop (mc6800_reg_x, AOP (IC_RESULT (ic)), 0);
       pullOrFreeReg (mc6800_reg_x, needpullx);
       goto release;
@@ -9723,6 +9776,15 @@ genAssign (iCode * ic)
         {
           for (offset = AOP_SIZE (result) - 1; offset >= 0; offset--)
             storeRegToAop (AOP (right)->aopu.aop_reg[offset], AOP (result), offset);
+        }
+      else if (AOP_TYPE (right) == AOP_STL)
+        {
+          int pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
+
+          loadRegFromAop (mc6800_reg_d, AOP (right), 0);
+          setupXForAop (AOP (result));
+          storeRegToAop (mc6800_reg_d, AOP (result), 0);
+          pullAccs (pushedaccs);
         }
       else if (AOP_SIZE (result) % 2 == 0 && AOP_TYPE (result) != AOP_SOF && mc6800_reg_x->isFree)
         {
@@ -10812,8 +10874,6 @@ init_aop_pass(void)
 float
 drymc6800iCode (iCode *ic)
 {
-  int byte_cost_weight = 1;
-
   regalloc_dry_run = true;
   regalloc_dry_run_cost = 0;
   regalloc_dry_run_cost_cycles = 0;
@@ -10834,12 +10894,7 @@ drymc6800iCode (iCode *ic)
   destroy_line_list ();
   /*freeTrace (&_G.trace.aops);*/
 
-  if (optimize.codeSize)
-    byte_cost_weight *= 4;
-  if (!optimize.codeSpeed)
-    byte_cost_weight *= 2;
-
-  return ((float)regalloc_dry_run_cost * byte_cost_weight + 4 * regalloc_dry_run_cost_cycles * ic->count);
+  return codeCost (regalloc_dry_run_cost, regalloc_dry_run_cost_cycles, ic);
 }
 
 /*-----------------------------------------------------------------*/
