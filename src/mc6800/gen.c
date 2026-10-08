@@ -2273,8 +2273,7 @@ getDataSize (operand *op)
 static void
 genNot (iCode * ic)
 {
-  bool needpull;
-  bool needpulla = false;
+  int pushedaccs;
   reg_info *reg;
   asmop *aop;
   int offset;
@@ -2289,14 +2288,15 @@ genNot (iCode * ic)
       setupXForAop (AOP (IC_RESULT (ic)));
       setupXForAop (AOP (IC_LEFT (ic)));
     }
-  if (AOP_TYPE (IC_RESULT (ic)) == AOP_REG
-      && (AOP (IC_RESULT (ic))->aopu.aop_reg[0] == mc6800_reg_a || AOP (IC_RESULT (ic))->aopu.aop_reg[0] == mc6800_reg_b))
-    reg = AOP (IC_RESULT (ic))->aopu.aop_reg[0];
-  else
-    reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (reg);
-
   aop = AOP (IC_LEFT (ic));
+  if (IS_AOP_A (AOP (IC_RESULT (ic))) || IS_AOP_B (AOP (IC_RESULT (ic))))
+    reg = AOP (IC_RESULT (ic))->aopu.aop_reg[0];
+  else if (IS_AOP_D (aop))
+    reg = mc6800_reg_a;
+  else
+    reg = chooseAcc (ic, MC6800MASK_D & ~(aop->type == AOP_REG ? aop->aopu.aop_reg[0]->mask : 0));
+  pushedaccs = pushLiveAccs (ic, reg->mask | (IS_AOP_D (aop) ? MC6800MASK_A : 0));
+
   offset = aop->size - 1;
   if (IS_BOOL (operandType (IC_LEFT (ic))))
     {
@@ -2323,7 +2323,6 @@ genNot (iCode * ic)
     {
       if (IS_AOP_D (aop))
         {
-          needpulla = reg == mc6800_reg_b && pushRegIfSurv (mc6800_reg_a);
           mc6800_emitOp ("aba", MODE_INH, "");
           mc6800_emitOp ("adca", MODE_IMM, "#0xff");
         }
@@ -2351,15 +2350,10 @@ genNot (iCode * ic)
         }
       mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
       mc6800_emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
-      if (needpulla)
-        {
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          pullReg (mc6800_reg_a);
-        }
     }
   mc6800_dirtyReg (reg, false);
   storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
-  pullOrFreeReg (reg, needpull);
+  pullAccs (pushedaccs);
 
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
@@ -2654,7 +2648,7 @@ genIpush (iCode * ic)
       return;
     }
 
-  acc = regDead (A_IDX, ic) ? mc6800_reg_a : mc6800_reg_b;
+  acc = chooseAcc (ic, MC6800MASK_D);
   if (!regDead (acc->rIdx, ic))
     mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", allocTemp ());
 
@@ -2709,7 +2703,7 @@ genPointerPush (iCode *ic)
   wassertl (IS_OP_LITERAL (IC_RIGHT (ic)), "IPUSH_VALUE_AT_ADDRESS with non-literal right operand");
   wassertl (!operandLitValue (IC_RIGHT(ic)), "IPUSH_VALUE_AT_ADDRESS with non-zero right operand");
 
-  reg_info *acc = regDead (A_IDX, ic) ? mc6800_reg_a : mc6800_reg_b;
+  reg_info *acc = chooseAcc (ic, MC6800MASK_D);
   if (!regDead (acc->rIdx, ic))
     mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", allocTemp ());
   bool needpullx = pushRegIfSurv (mc6800_reg_x);
@@ -3286,7 +3280,7 @@ genRet (iCode * ic)
   int size, offset = 0;
 //  int pushed = 0;
   reg_info *acc;
-  bool needpull;
+  int pushedaccs;
 
   D (emitcode (";     genRet", ""));
 
@@ -3363,15 +3357,15 @@ genRet (iCode * ic)
     }
   else
     {
-      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfSurv (acc);
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXForAop (AOP (IC_LEFT (ic)));
       for (offset = 0; offset < size; offset++)
         {
           loadRegFromAop (acc, AOP (IC_LEFT (ic)), offset);
           storeRegToAop (acc, mc6800_aop_ret[offset], 0);
         }
-      pullOrFreeReg (acc, needpull);
+      pullAccs (pushedaccs);
     }
 
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
@@ -3629,7 +3623,7 @@ genPlus1 (iCode *ic)
   asmop *rightOp;
   asmop *result;
   reg_info *reg;
-  bool needpullb = false;
+  int pushedaccs;
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
@@ -3652,15 +3646,17 @@ genPlus1 (iCode *ic)
     reg = result->aopu.aop_reg[0];
   else if ((IS_AOP_A (leftOp) || IS_AOP_B (leftOp)) && regDead (leftOp->aopu.aop_reg[0]->rIdx, ic))
     reg = leftOp->aopu.aop_reg[0];
-  else if (mc6800_reg_b->isFree)
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
   else
     {
-      reg = mc6800_reg_b;
-      needpullb = pushRegIfSurv (mc6800_reg_b);
+      int candidates = MC6800MASK_D;
+
+      if (IS_AOP_A (leftOp) || IS_AOP_B (leftOp))
+        candidates &= ~leftOp->aopu.aop_reg[0]->mask;
+      if (IS_AOP_A (rightOp) || IS_AOP_B (rightOp))
+        candidates &= ~rightOp->aopu.aop_reg[0]->mask;
+      reg = candidates ? chooseAcc (ic, candidates) : mc6800_reg_b;
     }
+  pushedaccs = pushLiveAccs (ic, reg->mask);
   if (rightOp->type == AOP_REG && rightOp->aopu.aop_reg[0] == reg)
     {
       asmop *regOp = rightOp;
@@ -3687,7 +3683,7 @@ genPlus1 (iCode *ic)
   switchXToAop (&xbases, result);
   storeRegToAop (reg, result, 0);
   freeXBases (&xbases);
-  pullOrFreeReg (mc6800_reg_b, needpullb);
+  pullAccs (pushedaccs);
 
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
   freeAsmop (IC_RIGHT (ic), NULL, ic, true);
@@ -3700,8 +3696,7 @@ genPlus2 (iCode *ic)
   asmop *leftOp;
   asmop *rightOp;
   asmop *result;
-  bool needpullb;
-  bool needpulla;
+  int pushedaccs;
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
@@ -3720,8 +3715,7 @@ genPlus2 (iCode *ic)
       rightOp = AOP (IC_LEFT (ic));
     }
 
-  needpullb = pushRegIfSurv (mc6800_reg_b);
-  needpulla = pushRegIfSurv (mc6800_reg_a);
+  pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
   setupXBases (&xbases, leftOp, rightOp, result);
 
   if (leftOp->type == AOP_STL || rightOp->type == AOP_STL)
@@ -3767,8 +3761,7 @@ genPlus2 (iCode *ic)
           storeRegToAop (mc6800_reg_d, result, 0);
         }
       freeXBases (&xbases);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-      pullOrFreeReg (mc6800_reg_b, needpullb);
+      pullAccs (pushedaccs);
       goto release;
     }
 
@@ -3787,8 +3780,7 @@ genPlus2 (iCode *ic)
   storeRegToAop (mc6800_reg_d, result, 0);
   freeXBases (&xbases);
 
-  pullOrFreeReg (mc6800_reg_a, needpulla);
-  pullOrFreeReg (mc6800_reg_b, needpullb);
+  pullAccs (pushedaccs);
 
 release:
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
@@ -3805,7 +3797,7 @@ genPlusMANY (iCode *ic)
   int size;
   int offset;
   reg_info *reg;
-  bool needpull = false;
+  int pushedaccs;
   bool mayskip = true;
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
@@ -3826,15 +3818,9 @@ genPlusMANY (iCode *ic)
   result = AOP (IC_RESULT (ic));
   size = getDataSize (IC_RESULT (ic));
 
-  if (mc6800_reg_b->isFree)
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
-  else
-    {
-      reg = mc6800_reg_b;
-      needpull = pushRegIfSurv (reg);
-    }
+  reg = chooseAcc (ic, MC6800MASK_D);
+
+  pushedaccs = pushLiveAccs (ic, reg->mask);
   setupXBases (&xbases, leftOp, rightOp, result);
 
   offset = 0;
@@ -3864,7 +3850,7 @@ genPlusMANY (iCode *ic)
       switchXToAop (&xbases, result);
       storeRegToAop (reg, result, offset);
     }
-  pullOrFreeReg (reg, needpull);
+  pullAccs (pushedaccs);
 
   freeXBases (&xbases);
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
@@ -4240,8 +4226,7 @@ genMinus2 (iCode *ic)
 {
   asmop *leftOp;
   asmop *rightOp;
-  bool needpullb;
-  bool needpulla;
+  int pushedaccs;
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
@@ -4253,8 +4238,7 @@ genMinus2 (iCode *ic)
   leftOp = AOP (IC_LEFT (ic));
   rightOp = AOP (IC_RIGHT (ic));
 
-  needpullb = pushRegIfSurv (mc6800_reg_b);
-  needpulla = pushRegIfSurv (mc6800_reg_a);
+  pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
 
   if (IS_AOP_WITH_A (rightOp))
     mc6800_useReg (mc6800_reg_a);
@@ -4329,8 +4313,7 @@ genMinus2 (iCode *ic)
   storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
   freeXBases (&xbases);
 
-  pullOrFreeReg (mc6800_reg_a, needpulla);
-  pullOrFreeReg (mc6800_reg_b, needpullb);
+  pullAccs (pushedaccs);
 
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
   freeAsmop (IC_RIGHT (ic), NULL, ic, true);
@@ -4344,7 +4327,7 @@ genMinusMANY (iCode *ic)
   int size;
   int offset;
   reg_info *reg;
-  bool needpull = false;
+  int pushedaccs;
   bool mayskip = true;
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
@@ -4357,15 +4340,9 @@ genMinusMANY (iCode *ic)
   result = AOP (IC_RESULT (ic));
   size = getDataSize (IC_RESULT (ic));
 
-  if (mc6800_reg_b->isFree)
-    reg = mc6800_reg_b;
-  else if (mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
-  else
-    {
-      reg = mc6800_reg_b;
-      needpull = pushRegIfSurv (reg);
-    }
+  reg = chooseAcc (ic, MC6800MASK_D);
+
+  pushedaccs = pushLiveAccs (ic, reg->mask);
   setupXBases (&xbases, AOP (IC_LEFT (ic)), AOP (IC_RIGHT (ic)), result);
 
   offset = 0;
@@ -4395,7 +4372,7 @@ genMinusMANY (iCode *ic)
       switchXToAop (&xbases, result);
       storeRegToAop (reg, result, offset);
     }
-  pullOrFreeReg (reg, needpull);
+  pullAccs (pushedaccs);
 
   freeXBases (&xbases);
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
@@ -6095,9 +6072,7 @@ genXor (iCode * ic, iCode * ifx)
 {
   operand *left, *right, *result;
   int size, offset = 0;
-  bool needpulla = false;
-  bool needpullb = false;
-  bool needpull = false;
+  int pushedaccs;
   reg_info *acc;
   struct xbases xbases;
 
@@ -6132,9 +6107,7 @@ genXor (iCode * ic, iCode * ifx)
     {
       symbol *tlbl;
 
-      needpulla = pushRegIfSurv (mc6800_reg_a);
-      if (IS_AOP_D (AOP (left)))
-        needpullb = pushRegIfSurv (mc6800_reg_b);
+      pushedaccs = pushLiveAccs (ic, IS_AOP_D (AOP (left)) ? MC6800MASK_D : MC6800MASK_A);
       if (IS_AOP_WITH_A (AOP (left)))
         mc6800_useReg (mc6800_reg_a);
       if (IS_AOP_D (AOP (left)))
@@ -6189,8 +6162,7 @@ genXor (iCode * ic, iCode * ifx)
                 emitLabel (tlbl);
               if (offset)
                 mc6800_dirtyReg (mc6800_reg_x, false);
-              pullOrFreeReg (mc6800_reg_b, needpullb);
-              pullOrFreeReg (mc6800_reg_a, needpulla);
+              pullAccs (pushedaccs);
               if (ifx)
                 genIfxJump (ifx, "a");
             }
@@ -6201,17 +6173,19 @@ genXor (iCode * ic, iCode * ifx)
 
   size = AOP_SIZE (result);
 
-  if (mc6800_reg_b->isFree)
-    acc = mc6800_reg_b;
-  else if (mc6800_reg_a->isFree)
-    acc = mc6800_reg_a;
-  else
-    {
-      acc = IS_AOP_WITH_B (AOP (right)) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfSurv (acc);
-      if (AOP (left)->regmask & acc->mask)
-        mc6800_useReg (acc);
-    }
+  {
+    int candidates = MC6800MASK_D & ~(AOP (left)->regmask | AOP (right)->regmask);
+
+    if (candidates)
+      acc = chooseAcc (ic, candidates);
+    else
+      {
+        acc = IS_AOP_WITH_B (AOP (right)) ? mc6800_reg_a : mc6800_reg_b;
+        if (AOP (left)->regmask & acc->mask)
+          mc6800_useReg (acc);
+      }
+  }
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, AOP (left), AOP (right), AOP (result));
 
   offset = 0;
@@ -6246,7 +6220,7 @@ genXor (iCode * ic, iCode * ifx)
     }
 
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 
 release:
 
@@ -6403,7 +6377,7 @@ genRRC (iCode * ic)
 {
   operand *left, *result;
   int size, offset;
-  bool needpull;
+  int pushedaccs;
 
   D (emitcode (";     genRRC", ""));
 
@@ -6425,7 +6399,7 @@ genRRC (iCode * ic)
     {
       symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
 
-      needpull = pushRegIfSurv (mc6800_reg_d);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
       mc6800_emitOp ("lsra", MODE_INH, "");
       mc6800_emitOp ("rorb", MODE_INH, "");
@@ -6435,11 +6409,11 @@ genRRC (iCode * ic)
         emitLabel (tlbl);
       mc6800_dirtyReg (mc6800_reg_d, false);
       storeRegToAop (mc6800_reg_d, AOP (result), 0);
-      pullOrFreeReg (mc6800_reg_d, needpull);
+      pullAccs (pushedaccs);
     }
   else
     {
-      needpull = pushRegIfSurv (mc6800_reg_a);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
       loadRegFromAop (mc6800_reg_a, AOP (left), 0);
       mc6800_emitOp ("lsra", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
@@ -6450,7 +6424,7 @@ genRRC (iCode * ic)
           mc6800_dirtyReg (mc6800_reg_a, false);
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
         }
-      pullOrFreeReg (mc6800_reg_a, needpull);
+      pullAccs (pushedaccs);
     }
 
   freeAsmop (left, NULL, ic, true);
@@ -6465,7 +6439,7 @@ genRLC (iCode * ic)
 {
   operand *left, *result;
   int size, offset;
-  bool needpull;
+  int pushedaccs;
 
   D (emitcode (";     genRLC", ""));
 
@@ -6485,18 +6459,18 @@ genRLC (iCode * ic)
     }
   else if (size == 2)
     {
-      needpull = pushRegIfSurv (mc6800_reg_d);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
       mc6800_emitOp ("aslb", MODE_INH, "");
       mc6800_emitOp ("rola", MODE_INH, "");
       mc6800_emitOp ("adcb", MODE_IMM, "#0x00");
       mc6800_dirtyReg (mc6800_reg_d, false);
       storeRegToAop (mc6800_reg_d, AOP (result), 0);
-      pullOrFreeReg (mc6800_reg_d, needpull);
+      pullAccs (pushedaccs);
     }
   else
     {
-      needpull = pushRegIfSurv (mc6800_reg_a);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
       loadRegFromAop (mc6800_reg_a, AOP (left), size - 1);
       mc6800_emitOp ("asla", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
@@ -6507,7 +6481,7 @@ genRLC (iCode * ic)
           mc6800_dirtyReg (mc6800_reg_a, false);
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
         }
-      pullOrFreeReg (mc6800_reg_a, needpull);
+      pullAccs (pushedaccs);
     }
 
   freeAsmop (left, NULL, ic, true);
@@ -6522,7 +6496,7 @@ genGetAbit (iCode * ic)
 {
   operand *left, *right, *result;
   int shCount;
-  bool needpull;
+  int pushedaccs;
   reg_info *reg;
 
   D (emitcode (";     genGetAbit", ""));
@@ -6540,12 +6514,9 @@ genGetAbit (iCode * ic)
 
   if (AOP_TYPE (result) == AOP_REG)
     reg = AOP (result)->aopu.aop_reg[0];
-  else if (!mc6800_reg_b->isFree && mc6800_reg_a->isFree)
-    reg = mc6800_reg_a;
   else
-    reg = mc6800_reg_b;
-
-  needpull = pushRegIfSurv (reg);
+    reg = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, reg->mask);
 
   /* get the needed byte into Acc */
   loadRegFromAop (reg, AOP (left), shCount / 8);
@@ -6560,7 +6531,7 @@ genGetAbit (iCode * ic)
       mc6800_dirtyReg (reg, false);
       storeRegToFullAop (reg, AOP (result), false);
     }
-  pullOrFreeReg (reg, needpull);
+  pullAccs (pushedaccs);
 
   freeAsmop (result, NULL, ic, true);
   freeAsmop (right, NULL, ic, true);
@@ -6576,7 +6547,7 @@ genGetByte (iCode * ic)
   operand *left, *right, *result;
   int offset;
   reg_info *acc;
-  bool needpull;
+  int pushedaccs;
   struct xbases xbases;
 
   D (emitcode (";", "genGetByte"));
@@ -6602,15 +6573,15 @@ genGetByte (iCode * ic)
     }
   else
     {
-      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfSurv (acc);
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXBases (&xbases, AOP (left), NULL, AOP (result));
       switchXToAop (&xbases, AOP (left));
       loadRegFromAop (acc, AOP (left), offset);
       switchXToAop (&xbases, AOP (result));
       storeRegToAop (acc, AOP (result), 0);
       freeXBases (&xbases);
-      pullOrFreeReg (acc, needpull);
+      pullAccs (pushedaccs);
     }
 
   freeAsmop (result, NULL, ic, true);
@@ -6628,7 +6599,7 @@ genGetWord (iCode * ic)
   int offset;
   int i;
   reg_info *acc;
-  bool needpull;
+  int pushedaccs;
   struct xbases xbases;
 
   D (emitcode (";", "genGetWord"));
@@ -6656,8 +6627,8 @@ genGetWord (iCode * ic)
     }
   else
     {
-      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfSurv (acc);
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXBases (&xbases, AOP (left), NULL, AOP (result));
       for (i = 1; i >= 0; i--)
         {
@@ -6667,7 +6638,7 @@ genGetWord (iCode * ic)
           storeRegToAop (acc, AOP (result), i);
         }
       freeXBases (&xbases);
-      pullOrFreeReg (acc, needpull);
+      pullAccs (pushedaccs);
     }
 
   freeAsmop (result, NULL, ic, true);
@@ -6682,7 +6653,7 @@ static void
 genSwap (iCode * ic)
 {
   operand *left, *result;
-  bool needpull;
+  int pushedaccs;
 
   D (emitcode (";     genSwap", ""));
 
@@ -6691,7 +6662,7 @@ genSwap (iCode * ic)
   aopOp (left, ic, false);
   aopOp (result, ic, false);
 
-  needpull = pushRegIfSurv (mc6800_reg_d);
+  pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
   if (IS_AOP_D (AOP (left)))
     {
       mc6800_emitOp ("psha", MODE_INH, "");
@@ -6705,7 +6676,7 @@ genSwap (iCode * ic)
     }
   mc6800_dirtyReg (mc6800_reg_d, false);
   storeRegToAop (mc6800_reg_d, AOP (result), 0);
-  pullOrFreeReg (mc6800_reg_d, needpull);
+  pullAccs (pushedaccs);
 
   freeAsmop (left, NULL, ic, true);
   freeAsmop (result, NULL, ic, true);
@@ -7032,11 +7003,11 @@ genRot1 (iCode *ic)
                      result->aop, 0);
   else
     {
-      bool needpulla = pushRegIfSurv (mc6800_reg_a);
+      int pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
       loadRegFromAop (mc6800_reg_a, left->aop, 0);
       AccRol (mc6800_reg_a, operandLitValueUll (right) % 8);
       storeRegToAop (mc6800_reg_a, result->aop, 0);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
+      pullAccs (pushedaccs);
     }
 
   freeAsmop (result, NULL, ic, true);
@@ -8039,10 +8010,10 @@ finish:
 
 
 static void
-genDataPointerGet1 (asmop *result, asmop *derefaop)
+genDataPointerGet1 (asmop *result, asmop *derefaop, const iCode *ic)
 {
   reg_info *acc;
-  bool needpull;
+  int pushedaccs;
   struct xbases xbases;
 
   if (result->type == AOP_REG)
@@ -8052,22 +8023,22 @@ genDataPointerGet1 (asmop *result, asmop *derefaop)
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, derefaop, NULL, result);
   switchXToAop (&xbases, derefaop);
   loadRegFromAop (acc, derefaop, 0);
   switchXToAop (&xbases, result);
   storeRegToAop (acc, result, 0);
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 static void
-genDataPointerGet2 (asmop *result, asmop *derefaop)
+genDataPointerGet2 (asmop *result, asmop *derefaop, const iCode *ic)
 {
   reg_info *acc;
-  bool needpull;
+  int pushedaccs;
   struct xbases xbases;
 
   if (IS_AOP_X (result))
@@ -8094,8 +8065,8 @@ genDataPointerGet2 (asmop *result, asmop *derefaop)
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, derefaop, NULL, result);
   switchXToAop (&xbases, derefaop);
   loadRegFromAop (acc, derefaop, 1);
@@ -8106,19 +8077,19 @@ genDataPointerGet2 (asmop *result, asmop *derefaop)
   switchXToAop (&xbases, result);
   storeRegToAop (acc, result, 0);
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 static void
-genDataPointerGetMANY (asmop *result, asmop *derefaop)
+genDataPointerGetMANY (asmop *result, asmop *derefaop, const iCode *ic)
 {
   reg_info *acc;
-  bool needpull;
+  int pushedaccs;
   struct xbases xbases;
   int offset;
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, derefaop, NULL, result);
   for (offset = derefaop->size - 1; offset >= 0; offset--)
     {
@@ -8128,7 +8099,7 @@ genDataPointerGetMANY (asmop *result, asmop *derefaop)
       storeRegToAop (acc, result, offset);
     }
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 /*-----------------------------------------------------------------*/
@@ -8161,7 +8132,7 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
   if (ifx)
     {
       reg_info *acc = NULL;
-      bool needpull = false;
+      int pushedaccs;
 
       if (size == 2 && mc6800_reg_x->isFree && !needrestorex)
         {
@@ -8171,8 +8142,8 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
         }
       else
         {
-          acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-          needpull = pushRegIfSurv (acc);
+          acc = chooseAcc (ic, MC6800MASK_D);
+          pushedaccs = pushLiveAccs (ic, acc->mask);
           setupXForAop (derefaop);
           loadRegFromAop (acc, derefaop, size - 1);
           for (offset = size - 2; offset >= 0; offset--)
@@ -8184,7 +8155,7 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
           mc6800_emitOpWithAcc ("tst", acc, MODE_INH, "");
         }
       if (acc)
-        pullOrFreeReg (acc, needpull);
+        pullAccs (pushedaccs);
       freeAsmop (NULL, derefaop, ic, true);
       freeAsmop (result, NULL, ic, true);
       if (!ifx->generated)
@@ -8193,11 +8164,11 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
     }
 
   if (size == 1)
-    genDataPointerGet1 (AOP (result), derefaop);
+    genDataPointerGet1 (AOP (result), derefaop, ic);
   else if (size == 2)
-    genDataPointerGet2 (AOP (result), derefaop);
+    genDataPointerGet2 (AOP (result), derefaop, ic);
   else
-    genDataPointerGetMANY (AOP (result), derefaop);
+    genDataPointerGetMANY (AOP (result), derefaop, ic);
 
   if (needrestorex)
     pullReg (mc6800_reg_x);
@@ -8884,10 +8855,10 @@ release:
 }
 
 static void
-genDataPointerSet1 (asmop *derefaop, asmop *right, bool derefvolatile)
+genDataPointerSet1 (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic)
 {
   reg_info *acc;
-  bool needpull;
+  int pushedaccs;
   struct xbases xbases;
 
   if (right->type == AOP_REG)
@@ -8906,31 +8877,31 @@ genDataPointerSet1 (asmop *derefaop, asmop *right, bool derefvolatile)
 
   if (right->type == AOP_LIT)
     {
-      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfSurv (acc);
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXForAop (derefaop);
       loadRegFromConst (acc, byteOfVal (right->aopu.aop_lit, 0));
       storeRegToAop (acc, derefaop, 0);
-      pullOrFreeReg (acc, needpull);
+      pullAccs (pushedaccs);
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, right, NULL, derefaop);
   switchXToAop (&xbases, right);
   loadRegFromAop (acc, right, 0);
   switchXToAop (&xbases, derefaop);
   storeRegToAop (acc, derefaop, 0);
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 static void
-genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile)
+genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic)
 {
   reg_info *acc;
-  bool needpull;
+  int pushedaccs;
   struct xbases xbases;
   int offset;
 
@@ -8950,15 +8921,13 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile)
 
   if (right->type == AOP_STL)
     {
-      bool needpullb = pushRegIfSurv (mc6800_reg_b);
-      bool needpulla = pushRegIfSurv (mc6800_reg_a);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
 
       loadRegFromAop (mc6800_reg_d, right, 0);
       setupXForAop (derefaop);
       storeRegToAop (mc6800_reg_a, derefaop, 1);
       storeRegToAop (mc6800_reg_b, derefaop, 0);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-      pullOrFreeReg (mc6800_reg_b, needpullb);
+      pullAccs (pushedaccs);
       return;
     }
 
@@ -8981,8 +8950,8 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile)
 
   if (right->type == AOP_LIT)
     {
-      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfSurv (acc);
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXForAop (derefaop);
       for (offset = 1; offset >= 0; offset--)
         {
@@ -8996,12 +8965,12 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile)
               storeRegToAop (acc, derefaop, offset);
             }
         }
-      pullOrFreeReg (acc, needpull);
+      pullAccs (pushedaccs);
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, right, NULL, derefaop);
   switchXToAop (&xbases, right);
   loadRegFromAop (acc, right, 1);
@@ -9012,14 +8981,14 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile)
   switchXToAop (&xbases, derefaop);
   storeRegToAop (acc, derefaop, 0);
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 static void
-genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile)
+genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic)
 {
   reg_info *acc;
-  bool needpull;
+  int pushedaccs;
   struct xbases xbases;
   int offset;
 
@@ -9033,8 +9002,8 @@ genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile)
 
   if (right->type == AOP_LIT)
     {
-      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfSurv (acc);
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXForAop (derefaop);
       for (offset = derefaop->size - 1; offset >= 0; offset--)
         {
@@ -9048,12 +9017,12 @@ genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile)
               storeRegToAop (acc, derefaop, offset);
             }
         }
-      pullOrFreeReg (acc, needpull);
+      pullAccs (pushedaccs);
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, right, NULL, derefaop);
   for (offset = derefaop->size - 1; offset >= 0; offset--)
     {
@@ -9063,7 +9032,7 @@ genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile)
       storeRegToAop (acc, derefaop, offset);
     }
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 /*-----------------------------------------------------------------*/
@@ -9094,11 +9063,11 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
     needrestorex = pushRegIfSurv (mc6800_reg_x);
 
   if (size == 1)
-    genDataPointerSet1 (derefaop, AOP (right), derefvolatile);
+    genDataPointerSet1 (derefaop, AOP (right), derefvolatile, ic);
   else if (size == 2)
-    genDataPointerSet2 (derefaop, AOP (right), derefvolatile);
+    genDataPointerSet2 (derefaop, AOP (right), derefvolatile, ic);
   else
-    genDataPointerSetMANY (derefaop, AOP (right), derefvolatile);
+    genDataPointerSetMANY (derefaop, AOP (right), derefvolatile, ic);
 
   if (needrestorex)
     pullReg (mc6800_reg_x);
@@ -9448,13 +9417,11 @@ genAddrOf (iCode * ic)
         }
       else
         {
-          bool needpullb = pushRegIfSurv (mc6800_reg_b);
-          bool needpulla = pushRegIfSurv (mc6800_reg_a);
+          int pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
 
           loadRegFromAop (mc6800_reg_d, stl, 0);
           storeRegToAop (mc6800_reg_d, aopr, 0);
-          pullOrFreeReg (mc6800_reg_a, needpulla);
-          pullOrFreeReg (mc6800_reg_b, needpullb);
+          pullAccs (pushedaccs);
         }
       goto release;
     }
@@ -9867,7 +9834,7 @@ genJumpTab (iCode * ic)
   symbol *jtab;
   symbol *jtablbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   const char *tmp;
-  bool needpullb, needpulla;
+  int pushedaccs;
 
   D (emitcode (";     genJumpTab", ""));
 
@@ -9903,8 +9870,7 @@ genJumpTab (iCode * ic)
   if (!regDead (X_IDX, ic))
     UNIMPLEMENTED;
 
-  needpullb = pushRegIfSurv (mc6800_reg_b);
-  needpulla = pushRegIfSurv (mc6800_reg_a);
+  pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
   loadRegFromAop (mc6800_reg_b, AOP (IC_JTCOND (ic)), 0);
   freeAsmop (IC_JTCOND (ic), NULL, ic, true);
   tmp = allocTemp ();
@@ -9918,8 +9884,7 @@ genJumpTab (iCode * ic)
   mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
   mc6800_emitOp ("ldx", MODE_IDX, "0,x");
   freeTemp ();
-  pullOrFreeReg (mc6800_reg_a, needpulla);
-  pullOrFreeReg (mc6800_reg_b, needpullb);
+  pullAccs (pushedaccs);
   mc6800_emitOp ("jmp", MODE_IDX, "0,x");
 
   if (!regalloc_dry_run)
@@ -9950,11 +9915,11 @@ fixTopByte (reg_info *reg, sym_link *resulttype)
 }
 
 static void
-genCast1 (operand *result, operand *right, bool fixtopbyte)
+genCast1 (operand *result, operand *right, bool fixtopbyte, const iCode *ic)
 {
   sym_link *resulttype = operandType (result);
   reg_info *acc;
-  bool needpull = false;
+  int pushedaccs;
   struct xbases xbases;
 
   if (AOP_TYPE (result) == AOP_REG)
@@ -9971,18 +9936,18 @@ genCast1 (operand *result, operand *right, bool fixtopbyte)
       acc = AOP (right)->aopu.aop_reg[0];
       if (fixtopbyte)
         {
-          needpull = pushRegIfSurv (acc);
+          pushedaccs = pushLiveAccs (ic, acc->mask);
           fixTopByte (acc, resulttype);
         }
       setupXForAop (AOP (result));
       storeRegToAop (acc, AOP (result), 0);
       if (fixtopbyte)
-        pullOrFreeReg (acc, needpull);
+        pullAccs (pushedaccs);
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, AOP (right), NULL, AOP (result));
   switchXToAop (&xbases, AOP (right));
   loadRegFromAop (acc, AOP (right), 0);
@@ -9991,7 +9956,7 @@ genCast1 (operand *result, operand *right, bool fixtopbyte)
   switchXToAop (&xbases, AOP (result));
   storeRegToAop (acc, AOP (result), 0);
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 static void
@@ -10168,7 +10133,7 @@ genCast2 (operand *result, operand *right, bool fixtopbyte, iCode *ic)
 }
 
 static void
-genCastMANY (operand *result, operand *right, bool fixtopbyte)
+genCastMANY (operand *result, operand *right, bool fixtopbyte, const iCode *ic)
 {
   sym_link *resulttype = operandType (result);
   sym_link *righttype = operandType (right);
@@ -10176,13 +10141,13 @@ genCastMANY (operand *result, operand *right, bool fixtopbyte)
   bool signExtend = AOP_SIZE (right) < AOP_SIZE (result) && !IS_BOOL (righttype) && IS_SPEC (righttype) && !SPEC_USIGN (righttype);
   int offset;
   reg_info *acc;
-  bool needpull = false;
+  int pushedaccs;
   struct xbases xbases;
 
   if (AOP_SIZE (right) >= AOP_SIZE (result))
     {
-      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfSurv (acc);
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXBases (&xbases, AOP (right), NULL, AOP (result));
       switchXToAop (&xbases, AOP (right));
       loadRegFromAop (acc, AOP (right), top);
@@ -10198,21 +10163,19 @@ genCastMANY (operand *result, operand *right, bool fixtopbyte)
           storeRegToAop (acc, AOP (result), offset);
         }
       freeXBases (&xbases);
-      pullOrFreeReg (acc, needpull);
+      pullAccs (pushedaccs);
       return;
     }
 
   if (AOP_TYPE (right) == AOP_STL)
     {
-      bool needpullb = pushRegIfSurv (mc6800_reg_b);
-      bool needpulla = pushRegIfSurv (mc6800_reg_a);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
       loadRegFromAop (mc6800_reg_d, AOP (right), 0);
       setupXForAop (AOP (result));
       storeRegToAop (mc6800_reg_d, AOP (result), 0);
       for (offset = 2; offset <= top; offset++)
         rmwWithAop ("clr", AOP (result), offset);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-      pullOrFreeReg (mc6800_reg_b, needpullb);
+      pullAccs (pushedaccs);
       return;
     }
 
@@ -10220,7 +10183,7 @@ genCastMANY (operand *result, operand *right, bool fixtopbyte)
     {
       acc = AOP (right)->aopu.aop_reg[AOP_SIZE (right) - 1];
       if (signExtend)
-        needpull = pushRegIfSurv (acc);
+        pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXForAop (AOP (result));
       storeRegToAop (AOP_SIZE (right) == 1 ? acc : mc6800_reg_d, AOP (result), 0);
       if (signExtend)
@@ -10235,7 +10198,7 @@ genCastMANY (operand *result, operand *right, bool fixtopbyte)
                 fixTopByte (acc, resulttype);
               storeRegToAop (acc, AOP (result), offset);
             }
-          pullOrFreeReg (acc, needpull);
+          pullAccs (pushedaccs);
         }
       else
         for (offset = AOP_SIZE (right); offset <= top; offset++)
@@ -10254,8 +10217,8 @@ genCastMANY (operand *result, operand *right, bool fixtopbyte)
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, AOP (right), NULL, AOP (result));
   for (offset = 0; offset < AOP_SIZE (right); offset++)
     {
@@ -10281,7 +10244,7 @@ genCastMANY (operand *result, operand *right, bool fixtopbyte)
     for (offset = AOP_SIZE (right); offset <= top; offset++)
       rmwWithAop ("clr", AOP (result), offset);
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 /*-----------------------------------------------------------------*/
@@ -10296,8 +10259,6 @@ genCast (iCode * ic)
   sym_link *righttype = operandType (right);
   bool resultsigned = IS_SPEC (resulttype) && !SPEC_USIGN (resulttype);
   bool rightvaluesfit;
-  bool needpull = false;
-  bool needpulla = false;
   struct xbases xbases;
 
   D (emitcode (";     genCast", ""));
@@ -10336,13 +10297,15 @@ genCast (iCode * ic)
       asmop *aop = AOP (right);
       int offset = aop->size - 1;
 
+      int pushedaccs;
+
       if (AOP_TYPE (result) == AOP_REG)
         reg = AOP (result)->aopu.aop_reg[0];
+      else if (IS_AOP_D (aop))
+        reg = mc6800_reg_a;
       else
-        reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfSurv (reg);
-      if (IS_AOP_D (aop) && reg == mc6800_reg_b)
-        needpulla = pushRegIfSurv (mc6800_reg_a);
+        reg = chooseAcc (ic, MC6800MASK_D & ~(aop->type == AOP_REG ? aop->aopu.aop_reg[0]->mask : 0));
+      pushedaccs = pushLiveAccs (ic, reg->mask | (IS_AOP_D (aop) ? MC6800MASK_A : 0));
       setupXBases (&xbases, aop, NULL, AOP (result));
       switchXToAop (&xbases, aop);
 
@@ -10390,21 +10353,16 @@ genCast (iCode * ic)
       switchXToAop (&xbases, AOP (result));
       storeRegToAop (reg, AOP (result), 0);
       freeXBases (&xbases);
-      if (needpulla)
-        {
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          pullReg (mc6800_reg_a);
-        }
-      pullOrFreeReg (reg, needpull);
+      pullAccs (pushedaccs);
       goto release;
     }
 
   if (AOP_SIZE (result) == 1)
-    genCast1 (result, right, fixtopbyte);
+    genCast1 (result, right, fixtopbyte, ic);
   else if (AOP_SIZE (result) == 2)
     genCast2 (result, right, fixtopbyte, ic);
   else
-    genCastMANY (result, right, fixtopbyte);
+    genCastMANY (result, right, fixtopbyte, ic);
 
 release:
   freeAsmop (right, NULL, ic, true);
@@ -10458,13 +10416,13 @@ genDummyRead (iCode * ic)
 {
   operand *op;
   int size, offset;
-  bool needpulla;
+  int pushedaccs;
 
   D (emitcode (";     genDummyRead", ""));
 
   op = IC_RIGHT (ic);
 
-  needpulla = pushRegIfSurv (mc6800_reg_a);
+  pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
   if (op && IS_SYMOP (op))
     {
 
@@ -10500,7 +10458,7 @@ genDummyRead (iCode * ic)
 
       freeAsmop (op, NULL, ic, true);
     }
-  pullOrFreeReg (mc6800_reg_a, needpulla);
+  pullAccs (pushedaccs);
 }
 
 /*-----------------------------------------------------------------*/
