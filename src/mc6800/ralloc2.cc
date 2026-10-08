@@ -435,6 +435,24 @@ iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
 
   if(options.stackAuto || IFFUNC_ISREENT(currFunc->type))
     {
+      std::map<const symbol *, var_t> sindex;
+
+      for(var_t v = 0; v < (var_t)boost::num_vertices(stack_conflict_graph); v++)
+        sindex[stack_conflict_graph[v].sym] = v;
+      for(unsigned int i = 0; i < boost::num_vertices(control_flow_graph); i++)
+        {
+          const iCode *gic = control_flow_graph[i].ic;
+
+          if(gic->op != GETWORD || !IS_SYMOP(IC_RESULT(gic)) || !IS_SYMOP(IC_LEFT(gic)))
+            continue;
+          auto result = sindex.find(OP_SYMBOL(IC_RESULT(gic)));
+          auto left = sindex.find(OP_SYMBOL(IC_LEFT(gic)));
+          if(result == sindex.end() || left == sindex.end())
+            continue;
+          const auto edge = boost::add_edge(result->second, left->second, stack_conflict_graph).first;
+          stack_conflict_graph[edge].alignment_conflict_only = false;
+        }
+
       mergeSpiltParms(stack_conflict_graph);
       chaitin_salloc(stack_conflict_graph);
 

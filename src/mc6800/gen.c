@@ -2444,7 +2444,7 @@ genUminus (iCode * ic)
       needpull = false;
       if (AOP_TYPE (IC_RESULT (ic)) == AOP_REG)
         acc = AOP (IC_RESULT (ic))->aopu.aop_reg[0];
-      else if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && AOP (IC_LEFT (ic))->aopu.aop_reg[0]->isDead)
+      else if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && regDead (AOP (IC_LEFT (ic))->aopu.aop_reg[0]->rIdx, ic))
         acc = AOP (IC_LEFT (ic))->aopu.aop_reg[0];
       else
         {
@@ -2646,7 +2646,7 @@ genIpush (iCode * ic)
       return;
     }
 
-  if (AOP_TYPE (IC_LEFT (ic)) == AOP_STL && size == 2 && mc6800_reg_d->isDead)
+  if (AOP_TYPE (IC_LEFT (ic)) == AOP_STL && size == 2 && regDead (D_IDX, ic))
     {
       loadRegFromAop (mc6800_reg_d, AOP (IC_LEFT (ic)), 0);
       pushReg (mc6800_reg_d, true);
@@ -2654,8 +2654,8 @@ genIpush (iCode * ic)
       return;
     }
 
-  acc = mc6800_reg_a->isDead ? mc6800_reg_a : mc6800_reg_b;
-  if (!acc->isDead)
+  acc = regDead (A_IDX, ic) ? mc6800_reg_a : mc6800_reg_b;
+  if (!regDead (acc->rIdx, ic))
     mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", allocTemp ());
 
   if (IS_AOP_X (AOP (IC_LEFT (ic))))
@@ -2681,7 +2681,7 @@ genIpush (iCode * ic)
         }
     }
 
-  if (!acc->isDead)
+  if (!regDead (acc->rIdx, ic))
     {
       mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", freeTemp ());
       mc6800_dirtyReg (acc, false);
@@ -2709,8 +2709,8 @@ genPointerPush (iCode *ic)
   wassertl (IS_OP_LITERAL (IC_RIGHT (ic)), "IPUSH_VALUE_AT_ADDRESS with non-literal right operand");
   wassertl (!operandLitValue (IC_RIGHT(ic)), "IPUSH_VALUE_AT_ADDRESS with non-zero right operand");
 
-  reg_info *acc = mc6800_reg_a->isDead ? mc6800_reg_a : mc6800_reg_b;
-  if (!acc->isDead)
+  reg_info *acc = regDead (A_IDX, ic) ? mc6800_reg_a : mc6800_reg_b;
+  if (!regDead (acc->rIdx, ic))
     mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", allocTemp ());
   bool needpullx = pushRegIfSurv (mc6800_reg_x);
 
@@ -2739,7 +2739,7 @@ genPointerPush (iCode *ic)
         }
     }
   pullOrFreeReg (mc6800_reg_x, needpullx);
-  if (!acc->isDead)
+  if (!regDead (acc->rIdx, ic))
     {
       mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", freeTemp ());
       mc6800_dirtyReg (acc, false);
@@ -3476,7 +3476,7 @@ genPlusIncr2 (iCode * ic)
   if (!sameRegs (AOP (left), result))
     {
       if (result->type == AOP_SOF || (result->type == AOP_REG && !IS_AOP_X (result))
-          || !mc6800_reg_x->isDead || (AOP_TYPE (left) == AOP_REG && !IS_AOP_X (AOP (left))))
+          || !regDead (X_IDX, ic) || (AOP_TYPE (left) == AOP_REG && !IS_AOP_X (AOP (left))))
         return false;
       if (IS_AOP_X (result))
         {
@@ -3650,7 +3650,7 @@ genPlus1 (iCode *ic)
 
   if (IS_AOP_A (result) || IS_AOP_B (result))
     reg = result->aopu.aop_reg[0];
-  else if ((IS_AOP_A (leftOp) || IS_AOP_B (leftOp)) && leftOp->aopu.aop_reg[0]->isDead)
+  else if ((IS_AOP_A (leftOp) || IS_AOP_B (leftOp)) && regDead (leftOp->aopu.aop_reg[0]->rIdx, ic))
     reg = leftOp->aopu.aop_reg[0];
   else if (mc6800_reg_b->isFree)
     reg = mc6800_reg_b;
@@ -3947,7 +3947,7 @@ genMinusDec2 (iCode * ic)
   if (!sameRegs (AOP (IC_LEFT (ic)), result))
     {
       if (result->type == AOP_SOF || (result->type == AOP_REG && !IS_AOP_X (result))
-          || !mc6800_reg_x->isDead || (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && !IS_AOP_X (AOP (IC_LEFT (ic)))))
+          || !regDead (X_IDX, ic) || (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && !IS_AOP_X (AOP (IC_LEFT (ic)))))
         return false;
       if (IS_AOP_X (result))
         {
@@ -4195,7 +4195,7 @@ genMinus1 (iCode *ic)
 
   if (IS_AOP_A (result) || IS_AOP_B (result))
     reg = result->aopu.aop_reg[0];
-  else if ((IS_AOP_A (leftOp) || IS_AOP_B (leftOp)) && leftOp->aopu.aop_reg[0]->isDead)
+  else if ((IS_AOP_A (leftOp) || IS_AOP_B (leftOp)) && regDead (leftOp->aopu.aop_reg[0]->rIdx, ic))
     reg = leftOp->aopu.aop_reg[0];
   else if (mc6800_reg_b->isFree)
     reg = mc6800_reg_b;
@@ -4649,7 +4649,7 @@ genCmp1 (iCode * ic, iCode * ifx, int opcode, int sign)
     reg = AOP (left)->aopu.aop_reg[0];
   else
     {
-      reg = (mc6800_reg_b->isDead && !IS_AOP_B (AOP (right))) ? mc6800_reg_b : mc6800_reg_a;
+      reg = (regDead (B_IDX, ic) && !IS_AOP_B (AOP (right))) ? mc6800_reg_b : mc6800_reg_a;
       needpull = pushRegIfSurv (reg);
     }
   setupXBases (&xbases, AOP (left), AOP (right), NULL);
@@ -4724,14 +4724,14 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
       opcode = exchangedCmp (opcode);
     }
 
-  if (AOP_TYPE (right) == AOP_STL && AOP_TYPE (left) != AOP_STL && AOP_TYPE (left) != AOP_REG && mc6800_reg_d->isDead)
+  if (AOP_TYPE (right) == AOP_STL && AOP_TYPE (left) != AOP_STL && AOP_TYPE (left) != AOP_REG && regDead (D_IDX, ic))
     {
       operand *temp = left;
       left = right;
       right = temp;
       opcode = exchangedCmp (opcode);
     }
-  if (!mc6800_reg_d->isDead)
+  if (!regDead (D_IDX, ic))
     {
       bool needpulla;
       bool needpullb;
@@ -5015,7 +5015,7 @@ genCmpMANY (iCode * ic, iCode * ifx, int opcode, int sign)
           size--;
         }
     }
-  reg = mc6800_reg_b->isDead ? mc6800_reg_b : mc6800_reg_a;
+  reg = regDead (B_IDX, ic) ? mc6800_reg_b : mc6800_reg_a;
   needpull = pushRegIfSurv (reg);
   setupXBases (&xbases, AOP (left), AOP (right), AOP (IC_RESULT (ic)));
   sub = "sub";
@@ -5215,7 +5215,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
 
   if (AOP_SIZE (left) == 2 &&
     (AOP_TYPE (left) == AOP_DIR || AOP_TYPE (left) == AOP_EXT || IS_AOP_X (AOP (left))) &&
-    (mc6800_reg_x->isDead || IS_AOP_X (AOP (left))) &&
+    (regDead (X_IDX, ic) || IS_AOP_X (AOP (left))) &&
     ((AOP_TYPE (right) == AOP_LIT && AOP_SIZE (right) <= 2) ||
     (AOP_TYPE (right) == AOP_IMMD && AOP_SIZE (right) <= 2) ||
     (AOP_TYPE (right) == AOP_DIR && AOP_SIZE (right) == 2) ||
@@ -5301,7 +5301,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       mc6800_emitOp ("cpx", MODE_DIR, "*%s", tmp);
       freeTemp ();
     }
-  else if (AOP_TYPE (left) == AOP_STL && mc6800_reg_a->isDead && mc6800_reg_b->isDead)
+  else if (AOP_TYPE (left) == AOP_STL && regDead (A_IDX, ic) && regDead (B_IDX, ic))
     {
       setupXForAop (AOP (left));
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
@@ -5808,7 +5808,7 @@ genAnd (iCode * ic, iCode * ifx)
               && !(AOP (right)->regmask & AOP (result)->regmask))
             reg = AOP (result)->aopu.aop_reg[offset];
           else if (AOP_TYPE (left) == AOP_REG && !IS_AOP_X (AOP (left))
-                   && AOP (left)->aopu.aop_reg[offset]->isDead)
+                   && regDead (AOP (left)->aopu.aop_reg[offset]->rIdx, ic))
             reg = AOP (left)->aopu.aop_reg[offset];
           switchXToAop (&xbases, AOP (left));
           loadRegFromAop (reg, AOP (left), offset);
@@ -6060,7 +6060,7 @@ genOr (iCode * ic, iCode * ifx)
               && !(AOP (right)->regmask & AOP (result)->regmask))
             reg = AOP (result)->aopu.aop_reg[offset];
           else if (AOP_TYPE (left) == AOP_REG && !IS_AOP_X (AOP (left))
-                   && AOP (left)->aopu.aop_reg[offset]->isDead)
+                   && regDead (AOP (left)->aopu.aop_reg[offset]->rIdx, ic))
             reg = AOP (left)->aopu.aop_reg[offset];
           switchXToAop (&xbases, AOP (left));
           loadRegFromAop (reg, AOP (left), offset);
@@ -6225,7 +6225,7 @@ genXor (iCode * ic, iCode * ifx)
               && !(AOP (right)->regmask & AOP (result)->regmask))
             reg = AOP (result)->aopu.aop_reg[offset];
           else if (AOP_TYPE (left) == AOP_REG && !IS_AOP_X (AOP (left))
-                   && AOP (left)->aopu.aop_reg[offset]->isDead)
+                   && regDead (AOP (left)->aopu.aop_reg[offset]->rIdx, ic))
             reg = AOP (left)->aopu.aop_reg[offset];
           switchXToAop (&xbases, AOP (left));
           loadRegFromAop (reg, AOP (left), offset);
@@ -8332,7 +8332,7 @@ genPointerGet (iCode * ic, iCode * ifx)
         }
       else
         {
-          if (IS_AOP_X (AOP (left)) && !mc6800_reg_x->isDead)
+          if (IS_AOP_X (AOP (left)) && !regDead (X_IDX, ic))
             pushReg (mc6800_reg_x, true);
           for (offset = 0; offset < size; offset++)
             {
@@ -8346,7 +8346,7 @@ genPointerGet (iCode * ic, iCode * ifx)
               pullReg (mc6800_reg_a);
               storeRegToAop (mc6800_reg_a, AOP (result), offset);
             }
-          if (IS_AOP_X (AOP (left)) && !mc6800_reg_x->isDead)
+          if (IS_AOP_X (AOP (left)) && !regDead (X_IDX, ic))
             pullReg (mc6800_reg_x);
         }
     }
@@ -8362,7 +8362,7 @@ genPointerGet (iCode * ic, iCode * ifx)
       const char *srctmp = NULL;
       const char *dsttmp = NULL;
       int dstofs = 0;
-      bool keepx = IS_AOP_X (AOP (left)) && !mc6800_reg_x->isDead;
+      bool keepx = IS_AOP_X (AOP (left)) && !regDead (X_IDX, ic);
 
       needpullb = pushRegIfSurv (mc6800_reg_b);
       needpulla = pushRegIfSurv (mc6800_reg_a);
@@ -8417,17 +8417,17 @@ genPointerGet (iCode * ic, iCode * ifx)
       if (srctmp)
         freeTemp ();
     }
-  else if (ifx && size == 2 && mc6800_reg_x->isDead && !needpullx && !rematOffset)
+  else if (ifx && size == 2 && regDead (X_IDX, ic) && !needpullx && !rematOffset)
     {
       mc6800_emitOp ("ldx", MODE_IDX, "%d,x", litOffset);
       mc6800_dirtyReg (mc6800_reg_x, false);
     }
   else if (ifx && size == 1 && !needpullx && !rematOffset
-           && !mc6800_reg_a->isDead && !(mc6800_reg_b->isFree && mc6800_reg_b->isDead))
+           && !regDead (A_IDX, ic) && !(mc6800_reg_b->isFree && regDead (B_IDX, ic)))
     mc6800_emitOp ("tst", MODE_IDX, "%d,x", litOffset);
   else
     {
-      acc = (!ifx || mc6800_reg_a->isDead || !mc6800_reg_b->isFree || !mc6800_reg_b->isDead) ? mc6800_reg_a : mc6800_reg_b;
+      acc = (!ifx || regDead (A_IDX, ic) || !mc6800_reg_b->isFree || !regDead (B_IDX, ic)) ? mc6800_reg_a : mc6800_reg_b;
       if (acc == mc6800_reg_a)
         needpulla = pushRegIfSurv (mc6800_reg_a);
 
@@ -8473,7 +8473,7 @@ release:
 /* genPackBits - generates code for packed bit storage             */
 /*-----------------------------------------------------------------*/
 static void
-genPackBits (operand * result, operand * left, sym_link * etype, operand * right)
+genPackBits (operand * result, operand * left, sym_link * etype, operand * right, iCode *ic)
 {
   int offset = 0;               /* source byte offset */
   int rlen = 0;                 /* remaining bitfield length */
@@ -8492,7 +8492,7 @@ genPackBits (operand * result, operand * left, sym_link * etype, operand * right
   blen = SPEC_BLEN (etype);
   bstr = SPEC_BSTR (etype);
 
-  if ((IS_AOP_A (AOP (right)) || IS_AOP_B (AOP (right))) && AOP (right)->aopu.aop_reg[0]->isDead)
+  if ((IS_AOP_A (AOP (right)) || IS_AOP_B (AOP (right))) && regDead (AOP (right)->aopu.aop_reg[0]->rIdx, ic))
     reg = AOP (right)->aopu.aop_reg[0];
   else
     reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
@@ -8727,7 +8727,7 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
     }
   freeAsmop (result, NULL, ic, true);
 
-  if ((IS_AOP_A (AOP (right)) || IS_AOP_B (AOP (right))) && AOP (right)->aopu.aop_reg[0]->isDead)
+  if ((IS_AOP_A (AOP (right)) || IS_AOP_B (AOP (right))) && regDead (AOP (right)->aopu.aop_reg[0]->rIdx, ic))
     reg = AOP (right)->aopu.aop_reg[0];
   else
     reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
@@ -9152,7 +9152,7 @@ genPointerSet (iCode * ic)
   /* if bit-field then pack */
   if (bit_field)
     {
-      genPackBits (result, left, operandType (result)->next, right);
+      genPackBits (result, left, operandType (result)->next, right, ic);
     }
   else
     {
@@ -9873,7 +9873,7 @@ genJumpTab (iCode * ic)
 
   aopOp (IC_JTCOND (ic), ic, false);
 
-  if (elementsInSet (IC_JTLABELS (ic)) <= 4 && mc6800_reg_b->isDead)
+  if (elementsInSet (IC_JTLABELS (ic)) <= 4 && regDead (B_IDX, ic))
     {
       int count = elementsInSet (IC_JTLABELS (ic));
 
@@ -9900,7 +9900,7 @@ genJumpTab (iCode * ic)
       return;
     }
 
-  if (!mc6800_reg_x->isDead)
+  if (!regDead (X_IDX, ic))
     UNIMPLEMENTED;
 
   needpullb = pushRegIfSurv (mc6800_reg_b);
@@ -10514,7 +10514,7 @@ genCritical (iCode * ic)
   if (IC_RESULT (ic))
     aopOp (IC_RESULT (ic), ic, true);
 
-  if (!mc6800_reg_a->isDead)
+  if (!regDead (A_IDX, ic))
     mc6800_emitOp ("staa", MODE_DIR, "*%s", allocTemp ());
 
   mc6800_emitOp ("tpa", MODE_INH, "");
@@ -10527,7 +10527,7 @@ genCritical (iCode * ic)
     pushReg (mc6800_reg_a, false);
 
   mc6800_freeReg (mc6800_reg_a);
-  if (!mc6800_reg_a->isDead)
+  if (!regDead (A_IDX, ic))
     {
       mc6800_emitOp ("ldaa", MODE_DIR, "*%s", freeTemp ());
       mc6800_dirtyReg (mc6800_reg_a, false);
@@ -10545,7 +10545,7 @@ genEndCritical (iCode * ic)
 {
   D (emitcode (";     genEndCritical", ""));
 
-  if (!mc6800_reg_a->isDead)
+  if (!regDead (A_IDX, ic))
     mc6800_emitOp ("staa", MODE_DIR, "*%s", allocTemp ());
 
   if (IC_RIGHT (ic))
@@ -10562,7 +10562,7 @@ genEndCritical (iCode * ic)
       mc6800_emitOp ("tap", MODE_INH, "");
     }
 
-  if (!mc6800_reg_a->isDead)
+  if (!regDead (A_IDX, ic))
     {
       mc6800_emitOp ("ldaa", MODE_DIR, "*%s", freeTemp ());
       mc6800_dirtyReg (mc6800_reg_a, false);
