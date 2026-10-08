@@ -904,30 +904,7 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
           mc6800_dirtyReg (aop->aopu.aop_reg[loffset], false);
           break;
         }
-      if (aop->type == AOP_SOF) {
-        const char *tmp = allocTemp ();
-        reg_info *acc = mc6800_reg_a->isFree || !mc6800_reg_b->isFree ? mc6800_reg_a : mc6800_reg_b;
-        bool needpull;
-        bool xfree = mc6800_reg_x->isFree;
-
-        mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-        mc6800_freeReg (mc6800_reg_x);
-        needpull = pushRegIfUsed (acc);
-        setupXForAop (aop);
-        mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
-        storeRegToAop (acc, aop, loffset);
-        if (loffset + 1 < aop->size)
-          {
-            mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
-            storeRegToAop (acc, aop, loffset + 1);
-          }
-        pullOrFreeReg (acc, needpull);
-        mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
-        mc6800_dirtyReg (mc6800_reg_x, false);
-        mc6800_reg_x->isFree = xfree;
-        freeTemp ();
-        break;
-      }
+      wassertl (aop->type != AOP_SOF, "X to AOP_SOF needs storeXToSof");
       mc6800_emitOpw_o ("stx", aop, loffset);
       break;
     case D_IDX:
@@ -1089,7 +1066,7 @@ storeConstToAop (int c, asmop * aop, int loffset)
 /* storeImmToAop- Store immediate value c to logical offset loffset of asmop aop.*/
 /*--------------------------------------------------------------------------*/
 static void
-storeImmToAop (char *c, asmop * aop, int loffset)
+storeImmToAop (char *c, asmop * aop, int loffset, reg_info *acc)
 {
 
   switch (aop->type)
@@ -1100,28 +1077,33 @@ storeImmToAop (char *c, asmop * aop, int loffset)
     case AOP_DUMMY:
       break;
     default:
-      if (mc6800_reg_a->isFree)
-        {
-          loadRegFromImm (mc6800_reg_a, c);
-          storeRegToAop (mc6800_reg_a, aop, loffset);
-          mc6800_freeReg (mc6800_reg_a);
-        }
-      else if (mc6800_reg_b->isFree)
-        {
-          loadRegFromImm (mc6800_reg_b, c);
-          storeRegToAop (mc6800_reg_b, aop, loffset);
-          mc6800_freeReg (mc6800_reg_b);
-        }
-      else
-        {
-          pushReg (mc6800_reg_a, true);
-          loadRegFromImm (mc6800_reg_a, c);
-          storeRegToAop (mc6800_reg_a, aop, loffset);
-          pullReg (mc6800_reg_a);
-        }
+      loadRegFromImm (acc, c);
+      storeRegToAop (acc, aop, loffset);
     }
 }
 
+static void
+storeXToSof (asmop *aop, int loffset, reg_info *acc)
+{
+  const char *tmp = allocTemp ();
+  bool xfree = mc6800_reg_x->isFree;
+
+  wassert (aop->type == AOP_SOF);
+  mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+  mc6800_freeReg (mc6800_reg_x);
+  setupXForAop (aop);
+  mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
+  storeRegToAop (acc, aop, loffset);
+  if (loffset + 1 < aop->size)
+    {
+      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
+      storeRegToAop (acc, aop, loffset + 1);
+    }
+  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+  mc6800_dirtyReg (mc6800_reg_x, false);
+  mc6800_reg_x->isFree = xfree;
+  freeTemp ();
+}
 
 /*--------------------------------------------------------------------------*/
 /* storeRegSignToUpperAop - If isSigned is true, the sign bit of register   */
@@ -2580,12 +2562,10 @@ unsaveRegisters (iCode *ic)
 /* assignResultValue - store the return value of a call to oper   */
 /*-----------------------------------------------------------------*/
 static void
-assignResultValue (operand * oper)
+assignResultValue (operand * oper, reg_info *acc)
 {
   int size = AOP_SIZE (oper);
   int offset;
-  reg_info *acc;
-  bool needpull;
 
   if (size <= 2)
     {
@@ -2595,15 +2575,12 @@ assignResultValue (operand * oper)
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (acc);
   setupXForAop (AOP (oper));
   for (offset = 0; offset < size; offset++)
     {
       loadRegFromAop (acc, mc6800_aop_ret[offset], 0);
       storeRegToAop (acc, AOP (oper), offset);
     }
-  pullOrFreeReg (acc, needpull);
 }
 
 /*-----------------------------------------------------------------*/
@@ -2891,7 +2868,17 @@ genCall (iCode * ic)
         }
       aopOp (IC_RESULT (ic), ic, false);
 
-      assignResultValue (IC_RESULT (ic));
+      if (operandSize (IC_RESULT (ic)) <= 2)
+        assignResultValue (IC_RESULT (ic), NULL);
+      else
+        {
+          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+          int pushedaccs = pushLiveAccs (ic, acc->mask);
+
+          assignResultValue (IC_RESULT (ic), acc);
+          mc6800_freeReg (acc);
+          pullAccs (pushedaccs);
+        }
 
       freeAsmop (IC_RESULT (ic), NULL, ic, true);
     }
@@ -2986,7 +2973,17 @@ genPcall (iCode * ic)
         }
       aopOp (IC_RESULT (ic), ic, false);
 
-      assignResultValue (IC_RESULT (ic));
+      if (operandSize (IC_RESULT (ic)) <= 2)
+        assignResultValue (IC_RESULT (ic), NULL);
+      else
+        {
+          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+          int pushedaccs = pushLiveAccs (ic, acc->mask);
+
+          assignResultValue (IC_RESULT (ic), acc);
+          mc6800_freeReg (acc);
+          pullAccs (pushedaccs);
+        }
 
       freeAsmop (IC_RESULT (ic), NULL, ic, true);
     }
@@ -7154,7 +7151,8 @@ genLeftShift (iCode *ic)
 
   if (AOP_TYPE (result) != AOP_REG && !valueind)
     {
-      if (AOP_TYPE (left) != AOP_REG && !sameRegs (AOP (left), AOP (result)))
+      if ((AOP_TYPE (left) != AOP_REG || (IS_AOP_X (AOP (left)) && AOP_TYPE (result) == AOP_SOF))
+          && !sameRegs (AOP (left), AOP (result)))
         copyacc = countreg ? (countreg == mc6800_reg_a ? mc6800_reg_b : mc6800_reg_a) : chooseAcc (ic, MC6800MASK_D);
       else if (topbytemask != 0xff)
         copyacc = countreg ? countreg : chooseAcc (ic, MC6800MASK_D);
@@ -7180,7 +7178,9 @@ genLeftShift (iCode *ic)
 
   if (!sameRegs (AOP (left), AOP (result)) && !(valueind && AOP_TYPE (result) != AOP_REG))
     {
-      if (AOP_TYPE (left) == AOP_REG)
+      if (IS_AOP_X (AOP (left)) && AOP_TYPE (result) == AOP_SOF)
+        storeXToSof (AOP (result), 0, copyacc);
+      else if (AOP_TYPE (left) == AOP_REG)
         {
           switchXToAop (&xbases, AOP (result));
           storeRegToAop (AOP_SIZE (left) == 1 ? AOP (left)->aopu.aop_reg[0] : IS_AOP_X (AOP (left)) ? mc6800_reg_x : mc6800_reg_d,
@@ -7551,7 +7551,8 @@ genRightShift (iCode *ic)
   skipzero = AOP_TYPE (right) == AOP_LIT && (byteOfVal (AOP (right)->aopu.aop_lit, 0) != 0);
 
   if (AOP_TYPE (result) != AOP_REG && !valueind
-      && AOP_TYPE (left) != AOP_REG && !sameRegs (AOP (left), AOP (result)))
+      && (AOP_TYPE (left) != AOP_REG || (IS_AOP_X (AOP (left)) && AOP_TYPE (result) == AOP_SOF))
+      && !sameRegs (AOP (left), AOP (result)))
     copyacc = countreg ? (countreg == mc6800_reg_a ? mc6800_reg_b : mc6800_reg_a) : chooseAcc (ic, MC6800MASK_D);
 
   pushedaccs = pushLiveAccs (ic, (countreg ? countreg->mask : 0) | (copyacc ? copyacc->mask : 0) | (valueind ? MC6800MASK_D : 0));
@@ -7574,7 +7575,9 @@ genRightShift (iCode *ic)
 
   if (!sameRegs (AOP (left), AOP (result)) && !(valueind && AOP_TYPE (result) != AOP_REG))
     {
-      if (AOP_TYPE (left) == AOP_REG)
+      if (IS_AOP_X (AOP (left)) && AOP_TYPE (result) == AOP_SOF)
+        storeXToSof (AOP (result), 0, copyacc);
+      else if (AOP_TYPE (left) == AOP_REG)
         {
           switchXToAop (&xbases, AOP (result));
           storeRegToAop (AOP_SIZE (left) == 1 ? AOP (left)->aopu.aop_reg[0] : IS_AOP_X (AOP (left)) ? mc6800_reg_x : mc6800_reg_d,
@@ -8959,6 +8962,16 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
   struct xbases xbases;
   int offset;
 
+  if (IS_AOP_X (right) && derefaop->type == AOP_SOF)
+    {
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
+      storeXToSof (derefaop, 0, acc);
+      mc6800_freeReg (acc);
+      pullAccs (pushedaccs);
+      return;
+    }
+
   if (IS_AOP_X (right))
     {
       storeRegToAop (mc6800_reg_x, derefaop, 0);
@@ -9440,6 +9453,8 @@ genAddrOf (iCode * ic)
   symbol *sym = OP_SYMBOL (IC_LEFT (ic));
   asmop *aopr;
   int size, offset;
+  reg_info *acc;
+  int pushedaccs;
   struct dbuf_s dbuf;
 
   D (emitcode (";     genAddrOf", ""));
@@ -9490,6 +9505,8 @@ genAddrOf (iCode * ic)
   size = AOP_SIZE (IC_RESULT (ic));
   wassertl (size <= 2, "genAddrOf: result wider than a pointer");
   offset = 0;
+  acc = AOP_TYPE (IC_RESULT (ic)) == AOP_REG ? NULL : chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc ? acc->mask : 0);
 
   while (size--)
     {
@@ -9503,8 +9520,11 @@ genAddrOf (iCode * ic)
           dbuf_printf (&dbuf, "#>%s", sym->rname);
           break;
         }
-      storeImmToAop (dbuf_detach_c_str (&dbuf), AOP (IC_RESULT (ic)), offset++);
+      storeImmToAop (dbuf_detach_c_str (&dbuf), AOP (IC_RESULT (ic)), offset++, acc);
     }
+  if (acc)
+    mc6800_freeReg (acc);
+  pullAccs (pushedaccs);
 
 release:
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
@@ -9820,6 +9840,15 @@ genAssign (iCode * ic)
           for (offset = AOP_SIZE (result) - 1; offset >= 0; offset--)
             storeConstToAop (byteOfVal (AOP (right)->aopu.aop_lit, offset), AOP (result), offset);
         }
+      else if (IS_AOP_X (AOP (right)) && AOP_TYPE (result) == AOP_SOF)
+        {
+          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+          pushedaccs = pushLiveAccs (ic, acc->mask);
+
+          storeXToSof (AOP (result), 0, acc);
+          mc6800_freeReg (acc);
+          pullAccs (pushedaccs);
+        }
       else if (IS_AOP_X (AOP (right)))
         storeRegToAop (mc6800_reg_x, AOP (result), 0);
       else if (AOP_TYPE (right) == AOP_REG)
@@ -10072,6 +10101,16 @@ genCast2 (operand *result, operand *right, bool fixtopbyte, iCode *ic)
         loadRegFromAop (mc6800_reg_d, AOP (right), 0);
       if (fixtopbyte)
         fixTopByte (mc6800_reg_a, resulttype);
+      return;
+    }
+
+  if (IS_AOP_X (AOP (right)) && !fixtopbyte && AOP_TYPE (result) == AOP_SOF)
+    {
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
+      storeXToSof (AOP (result), 0, acc);
+      mc6800_freeReg (acc);
+      pullAccs (pushedaccs);
       return;
     }
 
