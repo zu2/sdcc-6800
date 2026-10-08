@@ -92,9 +92,9 @@ static const char *setupTmpFromSP (int stackOffset, reg_info *acc);
 static bool stackBasedOffset (operand * opOffset);
 static void updateiTempRegisterUse (operand * op);
 static bool sameRegs (asmop *aop1, asmop *aop2);
-static void genAssign1 (operand *result, operand *right);
+static void genAssign1 (operand *result, operand *right, const iCode *ic);
 static void genAssign2 (operand *result, operand *right, iCode *ic);
-static void genAssignMANY (operand *result, operand *right);
+static void genAssignMANY (operand *result, operand *right, const iCode *ic);
 #define IS_AOP_A(x) ((x)->regmask == MC6800MASK_A)
 #define IS_AOP_B(x) ((x)->regmask == MC6800MASK_B)
 #define IS_AOP_X(x) ((x)->regmask == MC6800MASK_X)
@@ -2364,18 +2364,18 @@ genNot (iCode * ic)
 /* genUminusFloat - unary minus for floating points                */
 /*-----------------------------------------------------------------*/
 static void
-genUminusFloat (operand * op, operand * result)
+genUminusFloat (operand * op, operand * result, const iCode *ic)
 {
+  int pushedaccs;
   int size = AOP_SIZE (op);
   int offset;
   reg_info *acc;
-  bool needpull;
   struct xbases xbases;
 
   D (emitcode (";     genUminusFloat", ""));
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfUsed (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, AOP (op), NULL, AOP (result));
 
   /* for this we just copy and then flip the bit */
@@ -2393,7 +2393,7 @@ genUminusFloat (operand * op, operand * result)
   storeRegToAop (acc, AOP (result), offset);
 
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 /*-----------------------------------------------------------------*/
@@ -2402,9 +2402,9 @@ genUminusFloat (operand * op, operand * result)
 static void
 genUminus (iCode * ic)
 {
+  int pushedaccs;
   int offset, size;
   reg_info *acc;
-  bool needpull, needpulla, needpullb;
   struct xbases xbases;
 
   sym_link *resulttype = operandType (IC_RESULT (ic));
@@ -2426,7 +2426,7 @@ genUminus (iCode * ic)
   /* if float then do float stuff */
   if (IS_FLOAT (operandType (IC_LEFT (ic))))
     {
-      genUminusFloat (IC_LEFT (ic), IC_RESULT (ic));
+      genUminusFloat (IC_LEFT (ic), IC_RESULT (ic), ic);
       goto release;
     }
 
@@ -2435,16 +2435,19 @@ genUminus (iCode * ic)
 
   if (size == 1)
     {
-      needpull = false;
       if (AOP_TYPE (IC_RESULT (ic)) == AOP_REG)
         acc = AOP (IC_RESULT (ic))->aopu.aop_reg[0];
       else if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG && regDead (AOP (IC_LEFT (ic))->aopu.aop_reg[0]->rIdx, ic))
         acc = AOP (IC_LEFT (ic))->aopu.aop_reg[0];
       else
         {
-          acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-          needpull = pushRegIfUsed (acc);
+          int candidates = MC6800MASK_D;
+
+          if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG)
+            candidates &= ~AOP (IC_LEFT (ic))->aopu.aop_reg[0]->mask;
+          acc = chooseAcc (ic, candidates);
         }
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXBases (&xbases, AOP (IC_LEFT (ic)), NULL, AOP (IC_RESULT (ic)));
       switchXToAop (&xbases, AOP (IC_LEFT (ic)));
       loadRegFromAop (acc, AOP (IC_LEFT (ic)), 0);
@@ -2454,14 +2457,13 @@ genUminus (iCode * ic)
       switchXToAop (&xbases, AOP (IC_RESULT (ic)));
       storeRegToAop (acc, AOP (IC_RESULT (ic)), 0);
       freeXBases (&xbases);
-      pullOrFreeReg (acc, needpull);
+      pullAccs (pushedaccs);
       goto release;
     }
 
   if (size == 2)
     {
-      needpullb = pushRegIfSurv (mc6800_reg_b);
-      needpulla = pushRegIfSurv (mc6800_reg_a);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
       setupXBases (&xbases, AOP (IC_LEFT (ic)), NULL, AOP (IC_RESULT (ic)));
       if (IS_AOP_D (AOP (IC_LEFT (ic))))
         {
@@ -2484,13 +2486,12 @@ genUminus (iCode * ic)
       switchXToAop (&xbases, AOP (IC_RESULT (ic)));
       storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
       freeXBases (&xbases);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-      pullOrFreeReg (mc6800_reg_b, needpullb);
+      pullAccs (pushedaccs);
       goto release;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfUsed (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, AOP (IC_LEFT (ic)), NULL, AOP (IC_RESULT (ic)));
   for (offset = 0; offset < size; offset++)
     {
@@ -2510,7 +2511,7 @@ genUminus (iCode * ic)
       storeRegToAop (acc, AOP (IC_RESULT (ic)), offset);
     }
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 
 release:
   /* release the aops */
@@ -3435,13 +3436,13 @@ genPlusIncr1 (iCode * ic)
 static bool
 genPlusIncr2 (iCode * ic)
 {
+  int pushedaccs = 0;
   operand *left = IC_LEFT (ic);
   operand *right = IC_RIGHT (ic);
   asmop *result;
   int icount;
   float cycles;
   symbol *tlbl;
-  bool needpula = false;
 
   if (IS_OP_LITERAL (left))
     {
@@ -3503,7 +3504,7 @@ genPlusIncr2 (iCode * ic)
     }
   else
     {
-      needpula = pushRegIfUsed (mc6800_reg_a);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
       loadRegFromAop (mc6800_reg_a, result, 0);
       accopWithAop ("add", mc6800_reg_a, AOP (right), 0);
       storeRegToAop (mc6800_reg_a, result, 0);
@@ -3514,7 +3515,7 @@ genPlusIncr2 (iCode * ic)
   regalloc_dry_run_cost_cycles = cycles;
   if (!regalloc_dry_run)
     emitLabel (tlbl);
-  pullOrFreeReg (mc6800_reg_a, needpula);
+  pullAccs (pushedaccs);
 
 release:
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
@@ -3526,6 +3527,7 @@ release:
 static bool
 genPlusIncrMANY (iCode * ic)
 {
+  int pushedaccs = 0;
   operand *left = IC_LEFT (ic);
   operand *right = IC_RIGHT (ic);
   asmop *result;
@@ -3534,7 +3536,6 @@ genPlusIncrMANY (iCode * ic)
   int offset;
   float cycles;
   symbol *tlbl;
-  bool needpula = false;
 
   if (IS_OP_LITERAL (left))
     {
@@ -3562,7 +3563,7 @@ genPlusIncrMANY (iCode * ic)
     }
   else
     {
-      needpula = pushRegIfUsed (mc6800_reg_a);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
       loadRegFromAop (mc6800_reg_a, result, 0);
       accopWithAop ("add", mc6800_reg_a, AOP (right), 0);
       storeRegToAop (mc6800_reg_a, result, 0);
@@ -3578,7 +3579,7 @@ genPlusIncrMANY (iCode * ic)
   regalloc_dry_run_cost_cycles = cycles;
   if (!regalloc_dry_run)
     emitLabel (tlbl);
-  pullOrFreeReg (mc6800_reg_a, needpula);
+  pullAccs (pushedaccs);
 
   freeAsmop (IC_RESULT (ic), NULL, ic, true);
   freeAsmop (right, NULL, ic, true);
@@ -3905,11 +3906,11 @@ genMinusDec1 (iCode * ic)
 static bool
 genMinusDec2 (iCode * ic)
 {
+  int pushedaccs;
   asmop *result;
   int icount;
   float cycles;
   symbol *tlbl;
-  bool needpula;
 
   icount = (int) ulFromVal (OP_VALUE (IC_RIGHT (ic)));
 
@@ -3974,7 +3975,7 @@ genMinusDec2 (iCode * ic)
 
   tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
   setupXForAop (result);
-  needpula = pushRegIfUsed (mc6800_reg_a);
+  pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
   loadRegFromAop (mc6800_reg_a, result, 0);
   accopWithAop ("sub", mc6800_reg_a, AOP (IC_RIGHT (ic)), 0);
   storeRegToAop (mc6800_reg_a, result, 0);
@@ -3984,7 +3985,7 @@ genMinusDec2 (iCode * ic)
   regalloc_dry_run_cost_cycles = cycles;
   if (!regalloc_dry_run)
     emitLabel (tlbl);
-  pullOrFreeReg (mc6800_reg_a, needpula);
+  pullAccs (pushedaccs);
 
 release:
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
@@ -3996,13 +3997,13 @@ release:
 static bool
 genMinusDecMANY (iCode * ic)
 {
+  int pushedaccs = 0;
   asmop *result;
   int size;
   int icount;
   int offset;
   float cycles;
   symbol *tlbl[8];
-  bool needpula = false;
 
   icount = (int) ulFromVal (OP_VALUE (IC_RIGHT (ic)));
   if (icount < 1 || icount > 255)
@@ -4026,7 +4027,7 @@ genMinusDecMANY (iCode * ic)
     }
   else
     {
-      needpula = pushRegIfUsed (mc6800_reg_a);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
       loadRegFromAop (mc6800_reg_a, result, 0);
       accopWithAop ("sub", mc6800_reg_a, AOP (IC_RIGHT (ic)), 0);
       storeRegToAop (mc6800_reg_a, result, 0);
@@ -4050,7 +4051,7 @@ genMinusDecMANY (iCode * ic)
     emitLabel (tlbl[0]);
   if (icount == 1)
     rmwWithAop ("dec", result, 0);
-  pullOrFreeReg (mc6800_reg_a, needpula);
+  pullAccs (pushedaccs);
 
   freeAsmop (IC_LEFT (ic), NULL, ic, true);
   freeAsmop (IC_RIGHT (ic), NULL, ic, true);
@@ -7065,11 +7066,11 @@ genLeftShiftLiteral (operand * left, operand * right, operand * result, iCode * 
   if (shCount == 0)
     {
       if (size == 1)
-        genAssign1 (result, left);
+        genAssign1 (result, left, ic);
       else if (size == 2)
         genAssign2 (result, left, ic);
       else
-        genAssignMANY (result, left);
+        genAssignMANY (result, left, ic);
     }
   else if (shCount >= (size * 8))
     {
@@ -7419,11 +7420,11 @@ genRightShiftLiteral (operand * left, operand * right, operand * result, iCode *
   if (shCount == 0)
     {
       if (size == 1)
-        genAssign1 (result, left);
+        genAssign1 (result, left, ic);
       else if (size == 2)
         genAssign2 (result, left, ic);
       else
-        genAssignMANY (result, left);
+        genAssignMANY (result, left, ic);
     }
   else if (shCount >= (size * 8))
     {
@@ -9351,14 +9352,14 @@ genIfx (iCode * ic)
           mc6800_emitOpw_o ("ldx", aop, 0);
           mc6800_dirtyReg (mc6800_reg_x, false);
         }
-      else if (aop->size == 1 && !mc6800_reg_a->isFree && !mc6800_reg_b->isFree)
+      else if (aop->size == 1 && !regDead (A_IDX, ic) && !regDead (B_IDX, ic))
         rmwWithAop ("tst", aop, 0);
       else
         {
-          bool needpull;
+          int pushedaccs;
 
-          reg = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-          needpull = pushRegIfUsed (reg);
+          reg = chooseAcc (ic, MC6800MASK_D);
+          pushedaccs = pushLiveAccs (ic, reg->mask);
           loadRegFromAop (reg, aop, offset--);
           if (IS_FLOAT (operandType (cond)))
             mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
@@ -9366,7 +9367,7 @@ genIfx (iCode * ic)
             accopWithAop ("ora", reg, aop, offset--);
           if (aop->size > 1)
             mc6800_dirtyReg (reg, false);
-          pullOrFreeReg (reg, needpull);
+          pullAccs (pushedaccs);
         }
     }
   /* the result is now in the z flag bit */
@@ -9582,10 +9583,10 @@ genAssignLit (operand * result, operand * right)
 
 
 static void
-genAssign1 (operand *result, operand *right)
+genAssign1 (operand *result, operand *right, const iCode *ic)
 {
+  int pushedaccs;
   reg_info *acc;
-  bool needpull;
   struct xbases xbases;
 
   if (AOP_TYPE (result) == AOP_REG)
@@ -9601,24 +9602,22 @@ genAssign1 (operand *result, operand *right)
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfUsed (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, AOP (right), NULL, AOP (result));
   switchXToAop (&xbases, AOP (right));
   loadRegFromAop (acc, AOP (right), 0);
   switchXToAop (&xbases, AOP (result));
   storeRegToAop (acc, AOP (result), 0);
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 static void
 genAssign2 (operand *result, operand *right, iCode *ic)
 {
+  int pushedaccs;
   reg_info *acc;
-  bool needpull;
-  bool needpullb;
-  bool needpulla;
   struct xbases xbases;
   int offset;
 
@@ -9631,12 +9630,12 @@ genAssign2 (operand *result, operand *right, iCode *ic)
     {
       const char *tmp = allocTemp ();
 
-      acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-      needpull = pushRegIfUsed (acc);
+      acc = chooseAcc (ic, MC6800MASK_D);
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXForAop (AOP (right));
       loadRegFromAop (acc, AOP (right), 0);
       mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
-      pullOrFreeReg (acc, needpull);
+      pullAccs (pushedaccs);
       mc6800_emitOp ("clr", MODE_EXT, "%s", tmp);
       mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
       freeTemp ();
@@ -9647,7 +9646,7 @@ genAssign2 (operand *result, operand *right, iCode *ic)
     {
       if (shouldLoadXFromStlViaD (ic, AOP (right)))
         {
-          int pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
+          pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
 
           loadRegFromAop (mc6800_reg_d, AOP (right), 0);
           transferRegReg (mc6800_reg_d, mc6800_reg_x, true);
@@ -9671,13 +9670,11 @@ genAssign2 (operand *result, operand *right, iCode *ic)
     }
   if (AOP_TYPE (right) == AOP_STL)
     {
-      needpullb = pushRegIfSurv (mc6800_reg_b);
-      needpulla = pushRegIfSurv (mc6800_reg_a);
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
       loadRegFromAop (mc6800_reg_d, AOP (right), 0);
       setupXForAop (AOP (result));
       storeRegToAop (mc6800_reg_d, AOP (result), 0);
-      pullOrFreeReg (mc6800_reg_a, needpulla);
-      pullOrFreeReg (mc6800_reg_b, needpullb);
+      pullAccs (pushedaccs);
       return;
     }
   if (AOP_SIZE (right) == 2 && AOP_TYPE (result) != AOP_SOF && mc6800_reg_x->isFree)
@@ -9689,8 +9686,8 @@ genAssign2 (operand *result, operand *right, iCode *ic)
       return;
     }
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfUsed (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, AOP (right), NULL, AOP (result));
   for (offset = 0; offset < 2; offset++)
     {
@@ -9700,19 +9697,19 @@ genAssign2 (operand *result, operand *right, iCode *ic)
       storeRegToAop (acc, AOP (result), offset);
     }
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 static void
-genAssignMANY (operand *result, operand *right)
+genAssignMANY (operand *result, operand *right, const iCode *ic)
 {
+  int pushedaccs;
   reg_info *acc;
-  bool needpull;
   struct xbases xbases;
   int offset;
 
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfUsed (acc);
+  acc = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, AOP (right), NULL, AOP (result));
   for (offset = 0; offset < AOP_SIZE (result); offset++)
     {
@@ -9722,7 +9719,7 @@ genAssignMANY (operand *result, operand *right)
       storeRegToAop (acc, AOP (result), offset);
     }
   freeXBases (&xbases);
-  pullOrFreeReg (acc, needpull);
+  pullAccs (pushedaccs);
 }
 
 /*-----------------------------------------------------------------*/
@@ -9731,6 +9728,7 @@ genAssignMANY (operand *result, operand *right)
 static void
 genAssign (iCode * ic)
 {
+  int pushedaccs;
   operand *result, *right;
 
   D (emitcode (";     genAssign", ""));
@@ -9778,7 +9776,7 @@ genAssign (iCode * ic)
         }
       else if (AOP_TYPE (right) == AOP_STL)
         {
-          int pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
+          pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
 
           loadRegFromAop (mc6800_reg_d, AOP (right), 0);
           setupXForAop (AOP (result));
@@ -9797,15 +9795,15 @@ genAssign (iCode * ic)
         }
       else
         {
-          reg_info *acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-          bool needpullacc = pushRegIfUsed (acc);
+          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+          pushedaccs = pushLiveAccs (ic, acc->mask);
 
           for (offset = AOP_SIZE (result) - 1; offset >= 0; offset--)
             {
               loadRegFromAop (acc, AOP (right), offset);
               storeRegToAop (acc, AOP (result), offset);
             }
-          pullOrFreeReg (acc, needpullacc);
+          pullAccs (pushedaccs);
         }
       goto release;
     }
@@ -9814,11 +9812,11 @@ genAssign (iCode * ic)
     goto release;
 
   if (AOP_SIZE (result) == 1)
-    genAssign1 (result, right);
+    genAssign1 (result, right, ic);
   else if (AOP_SIZE (result) == 2)
     genAssign2 (result, right, ic);
   else
-    genAssignMANY (result, right);
+    genAssignMANY (result, right, ic);
 
 release:
   freeAsmop (right, NULL, ic, true);
