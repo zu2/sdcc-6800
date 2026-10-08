@@ -1829,7 +1829,7 @@ operandFromSymbol (symbol *sym, bool convert_sym_to_ptr)
       !sym->reqv &&                     /* does not already have a reg equivalence */
       !IS_VOLATILE (sym->type) &&       /* not declared as volatile */
       !sym->islbl &&                    /* not a label */
-      !((TARGET_HC08_LIKE || TARGET_MC6800_LIKE || TARGET_MOS6502_LIKE) && (getSize (sym->type) > 2)) && /* will fit in regs */
+      !((TARGET_HC08_LIKE || TARGET_MOS6502_LIKE) && (getSize (sym->type) > 2)) && /* will fit in regs */
       ok                                /* farspace check */
     )
     {
