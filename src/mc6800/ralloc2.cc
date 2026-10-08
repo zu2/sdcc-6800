@@ -160,10 +160,6 @@ static float instruction_cost(const assignment &a, unsigned short int i, const G
 
   set_surviving_regs(a, i, G, I);
 
-  if(ic->op != '=' && operand_reg(IC_RESULT(ic), a, i, G) == A_IDX &&
-    (operand_reg(IC_LEFT(ic), a, i, G) == D_IDX || operand_reg(IC_RIGHT(ic), a, i, G) == D_IDX))
-    return(std::numeric_limits<float>::infinity());
-
   if((ic->op == CALL || ic->op == PCALL) && (survives_in(ic, X_IDX) || survives_in(ic, TEMP0_IDX) || survives_in(ic, TEMP1_IDX)))
     return(std::numeric_limits<float>::infinity());
 
