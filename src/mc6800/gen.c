@@ -5522,6 +5522,12 @@ genAnd (iCode * ic, iCode * ifx)
   aopOp ((right = IC_RIGHT (ic)), ic, false);
   aopOp ((result = IC_RESULT (ic)), ic, true);
 
+  if (IS_AOP_X (AOP (result)) && (AOP_TYPE (left) == AOP_SOF || AOP_TYPE (right) == AOP_SOF))
+    {
+      UNIMPLEMENTED;
+      goto release;
+    }
+
 #ifdef DEBUG_TYPE
   DD (emitcode ("", "; Type res[%d] = l[%d]&r[%d]", AOP_TYPE (result), AOP_TYPE (left), AOP_TYPE (right)));
   DD (emitcode ("", "; Size res[%d] = l[%d]&r[%d]", AOP_SIZE (result), AOP_SIZE (left), AOP_SIZE (right)));
@@ -5628,7 +5634,7 @@ genAnd (iCode * ic, iCode * ifx)
 
   if (AOP_TYPE (result) == AOP_CRY && AOP_TYPE (right) == AOP_LIT)
     {
-      if (bitpos >= 0 && (bitpos & 7) == 7)
+      if (bitpos >= 0 && (bitpos & 7) == 7 && !IS_AOP_X (AOP (left)))
         {
           setupXForAop (AOP (left));
           rmwWithAop ("tst", AOP (left), bitpos >> 3);
@@ -5671,7 +5677,7 @@ genAnd (iCode * ic, iCode * ifx)
             {
               /* do nothing */
             }
-          else if (AOP_TYPE (right) == AOP_LIT && bytemask == 0xff)
+          else if (AOP_TYPE (right) == AOP_LIT && bytemask == 0xff && !IS_AOP_X (AOP (left)))
             {
               switchXToAop (&xbases, AOP (left));
               rmwWithAop ("tst", AOP (left), offset);
@@ -5815,6 +5821,12 @@ genOr (iCode * ic, iCode * ifx)
   aopOp ((right = IC_RIGHT (ic)), ic, false);
   aopOp ((result = IC_RESULT (ic)), ic, true);
 
+  if (IS_AOP_X (AOP (result)) && (AOP_TYPE (left) == AOP_SOF || AOP_TYPE (right) == AOP_SOF))
+    {
+      UNIMPLEMENTED;
+      goto release;
+    }
+
 #ifdef DEBUG_TYPE
   DD (emitcode ("", "; Type res[%d] = l[%d]|r[%d]", AOP_TYPE (result), AOP_TYPE (left), AOP_TYPE (right)));
   DD (emitcode ("", "; Size res[%d] = l[%d]|r[%d]", AOP_SIZE (result), AOP_SIZE (left), AOP_SIZE (right)));
@@ -5924,7 +5936,7 @@ genOr (iCode * ic, iCode * ifx)
         {
           bytemask = (lit >> (offset * 8)) & 0xff;
 
-          if (AOP_TYPE (right) == AOP_LIT && bytemask == 0x00)
+          if (AOP_TYPE (right) == AOP_LIT && bytemask == 0x00 && !IS_AOP_X (AOP (left)))
             {
               switchXToAop (&xbases, AOP (left));
               rmwWithAop ("tst", AOP (left), offset);
@@ -6061,6 +6073,12 @@ genXor (iCode * ic, iCode * ifx)
   aopOp ((left = IC_LEFT (ic)), ic, false);
   aopOp ((right = IC_RIGHT (ic)), ic, false);
   aopOp ((result = IC_RESULT (ic)), ic, true);
+
+  if (IS_AOP_X (AOP (result)) && (AOP_TYPE (left) == AOP_SOF || AOP_TYPE (right) == AOP_SOF))
+    {
+      UNIMPLEMENTED;
+      goto release;
+    }
 
 #ifdef DEBUG_TYPE
   DD (emitcode ("", "; Type res[%d] = l[%d]^r[%d]", AOP_TYPE (result), AOP_TYPE (left), AOP_TYPE (right)));
