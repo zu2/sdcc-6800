@@ -920,6 +920,7 @@ mc6800_assignRegisters (ebbIndex * ebbi)
   iCode *ic;
 
   mc6800_far_frame = false;
+  mc6800_placeFixedStackVars ();
   mc6800_reg_a = mc6800_regWithIdx(A_IDX);
   mc6800_reg_b = mc6800_regWithIdx(B_IDX);
   mc6800_reg_xl = mc6800_regWithIdx(XL_IDX);

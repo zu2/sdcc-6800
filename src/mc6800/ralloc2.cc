@@ -30,7 +30,11 @@ extern "C"
   #include "gen.h"
   float drymc6800iCode (iCode *ic);
   bool mc6800_assignment_optimal;
+  int mc6800_stack_base;
 }
+
+static std::vector<symbol *> fixed_stack_vars;
+static int fixed_stack_size;
 
 static const short places[] = {A_IDX, B_IDX, D_IDX, X_IDX, TEMP0_IDX, TEMP1_IDX};
 
@@ -381,6 +385,35 @@ static void make_value_graph(cfg_t &G, con_t &I)
     }
 }
 
+void mc6800_placeFixedStackVars (void)
+{
+  fixed_stack_vars.clear ();
+  fixed_stack_size = 0;
+  mc6800_stack_base = 0;
+
+  if (!currFunc || !(options.stackAuto || IFFUNC_ISREENT (currFunc->type)))
+    return;
+
+  for (symbol *sym = static_cast<symbol *>(setFirstItem (istack->syms)); sym; sym = static_cast<symbol *>(setNextItem (istack->syms)))
+    {
+      if (sym->_isparm || sym->for_newralloc)
+        continue;
+      if (!(IS_AGGREGATE (sym->type) || (sym->allocreq && (sym->addrtaken || isVolatile (sym->type)))))
+        continue;
+
+      fixed_stack_vars.push_back (sym);
+      fixed_stack_size += getSize (sym->type);
+    }
+
+  int kpos = 0;
+  for (symbol *sym : fixed_stack_vars)
+    {
+      SPEC_STAK (sym->etype) = sym->stack = kpos - fixed_stack_size;
+      kpos += getSize (sym->type);
+    }
+  mc6800_stack_base = fixed_stack_size;
+}
+
 iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
 {
 #ifdef DEBUG_RALLOC_DEC
@@ -449,8 +482,26 @@ iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
           stack_conflict_graph[edge].alignment_conflict_only = false;
         }
 
+      std::set<var_t, std::greater<var_t> > fixed_vertices;
+      for(symbol *sym : fixed_stack_vars)
+        {
+          wassert(sindex.find(sym) != sindex.end());
+          fixed_vertices.insert(sindex[sym]);
+        }
+      for(var_t v : fixed_vertices)
+        {
+          clear_vertex(v, stack_conflict_graph);
+          remove_vertex(v, stack_conflict_graph);
+        }
+
       mergeSpiltParms(stack_conflict_graph);
       chaitin_salloc(stack_conflict_graph);
+
+      currFunc->stack += fixed_stack_size;
+      SPEC_STAK (currFunc->etype) += fixed_stack_size;
+      for(symbol *sym : fixed_stack_vars)
+        SPEC_STAK (sym->etype) = sym->stack += mc6800_stack_base - currFunc->stack;
+      mc6800_stack_base = currFunc->stack;
 
       if(options.dump_graphs)
         dump_scon(stack_conflict_graph);

@@ -85,6 +85,8 @@ void mc6800_freeReg (reg_info * reg);
 void mc6800_dirtyReg (reg_info * reg, bool freereg);
 
 iCode *mc6800_ralloc2_cc(ebbIndex *ebbi);
+void mc6800_placeFixedStackVars (void);
+extern int mc6800_stack_base;
 void mc6800SpillThis (symbol *sym);
 void mc6800RegFix (eBBlock **ebbs, int count);
 
