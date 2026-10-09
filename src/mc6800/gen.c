@@ -11023,6 +11023,7 @@ drymc6800iCode (iCode *ic)
   regalloc_dry_run_cost = 0;
   regalloc_dry_run_cost_cycles = 0;
   _G.stackOfs = mc6800_stack_base;
+  _G.stackPushes = 0;
 
   init_aop_pass();
 
