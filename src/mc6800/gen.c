@@ -3011,7 +3011,8 @@ resultRemat (iCode * ic)
 
   if (IC_RESULT (ic) && IS_ITEMP (IC_RESULT (ic)))
     {
-      if (OP_SYMBOL (IC_RESULT (ic))->remat && !POINTER_SET (ic))
+      if (OP_SYMBOL (IC_RESULT (ic))->remat && !POINTER_SET (ic)
+          && (OP_SYMBOL (IC_RESULT (ic))->isspilt || !OP_SYMBOL (IC_RESULT (ic))->nRegs))
         return 1;
     }
 

@@ -894,12 +894,6 @@ serialRegMark (eBBlock ** ebbs, int count)
               if (sym->usl.spillLoc && !sym->isreqv && !sym->stackSpil)
                 sym->usl.spillLoc = NULL;
 
-              if (sym->remat)
-                {
-                  mc6800SpillThis (sym);
-                  continue;
-                }
-
               if (max_alloc_bytes >= sym->nRegs)
                 {
                   sym->for_newralloc = 1;
