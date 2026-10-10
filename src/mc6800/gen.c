@@ -962,7 +962,7 @@ loadRegFromImm (reg_info * reg, char * c)
 /* storeConstToAop- Store constant c to logical offset loffset of asmop aop.*/
 /*--------------------------------------------------------------------------*/
 static void
-storeConstToAop (int c, asmop * aop, int loffset)
+storeConstToAop (int c, asmop * aop, int loffset, reg_info *acc)
 {
   switch (aop->type)
     {
@@ -971,11 +971,8 @@ storeConstToAop (int c, asmop * aop, int loffset)
         break;
       if (IS_AOP_X (aop))
         {
-          bool pula = pushRegIfUsed (mc6800_reg_a);
-
-          loadRegFromConst (mc6800_reg_a, c);
-          storeRegToAop (mc6800_reg_a, aop, loffset);
-          pullOrFreeReg (mc6800_reg_a, pula);
+          loadRegFromConst (acc, c);
+          storeRegToAop (acc, aop, loffset);
           break;
         }
       loadRegFromConst (aop->aopu.aop_reg[loffset], c);
@@ -987,33 +984,15 @@ storeConstToAop (int c, asmop * aop, int loffset)
     case AOP_SOF:
       /* clr operates with read-modify-write cycles, so don't use if the */
       /* destination is volatile to avoid the read side-effect. */
-      if (!c && !(aop->op && isOperandVolatile (aop->op, false))
-          && (aop->type != AOP_SOF || !mc6800_reg_a->isFree && !mc6800_reg_b->isFree))
+      if (!c && !(aop->op && isOperandVolatile (aop->op, false)))
         {
           emitOp_o ("clr", aop, loffset);
           break;
         }
       /* fall through */
     default:
-      if (mc6800_reg_a->isFree)
-        {
-          loadRegFromConst (mc6800_reg_a, c);
-          storeRegToAop (mc6800_reg_a, aop, loffset);
-          mc6800_freeReg (mc6800_reg_a);
-        }
-      else if (mc6800_reg_b->isFree)
-        {
-          loadRegFromConst (mc6800_reg_b, c);
-          storeRegToAop (mc6800_reg_b, aop, loffset);
-          mc6800_freeReg (mc6800_reg_b);
-        }
-      else
-        {
-          pushReg (mc6800_reg_a, true);
-          loadRegFromConst (mc6800_reg_a, c);
-          storeRegToAop (mc6800_reg_a, aop, loffset);
-          pullReg (mc6800_reg_a);
-        }
+      loadRegFromConst (acc, c);
+      storeRegToAop (acc, aop, loffset);
     }
 }
 
@@ -1080,7 +1059,7 @@ storeRegSignToUpperAop (reg_info * reg, asmop * aop, int loffset, bool isSigned)
     {
       /* Unsigned case */
       while (loffset < size)
-        storeConstToAop (0, aop, loffset++);
+        storeConstToAop (0, aop, loffset++, mc6800_reg_a);
     }
   else
     {
@@ -1257,43 +1236,21 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
 static void
 addConstToX (int n)
 {
-  const char *tmp;
-  reg_info *acc;
-  bool needpullacc;
+  wassertl (abs (n) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6), "Constant too large for inx and dex");
 
   if (n == 0)
     return;
 
-  if (abs (n) <= ((optimize.codeSize && !optimize.codeSpeed) ? 15 : 6))
+  while (n > 0)
     {
-      while (n > 0)
-        {
-          emitOp ("inx", MODE_INH, "");
-          n--;
-        }
-      while (n < 0)
-        {
-          emitOp ("dex", MODE_INH, "");
-          n++;
-        }
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      return;
+      emitOp ("inx", MODE_INH, "");
+      n--;
     }
-
-  tmp = allocTemp ();
-  acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpullacc = pushRegIfUsed (acc);
-  emitOp ("stx", MODE_DIR, "*%s", tmp);
-  emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
-  emitOpWithAcc ("add", acc, MODE_IMM, "#0x%02x", (unsigned int) n & 0xff);
-  emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
-  emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
-  emitOpWithAcc ("adc", acc, MODE_IMM, "#0x%02x", ((unsigned int) n >> 8) & 0xff);
-  emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", tmp);
-  emitOp ("ldx", MODE_DIR, "*%s", tmp);
-  freeTemp (tmp);
-  mc6800_dirtyReg (acc, false);
-  pullOrFreeReg (acc, needpullacc);
+  while (n < 0)
+    {
+      emitOp ("dex", MODE_INH, "");
+      n++;
+    }
   mc6800_dirtyReg (mc6800_reg_x, false);
 }
 
@@ -4063,7 +4020,7 @@ addSign (operand * result, int offset, int sign)
         }
       else
         while (size--)
-          storeConstToAop (0, AOP (result), offset++);
+          storeConstToAop (0, AOP (result), offset++, mc6800_reg_a);
     }
 }
 
@@ -4557,6 +4514,7 @@ genCmp1 (iCode * ic, iCode * ifx, int opcode, int sign)
   operand *left = IC_LEFT (ic);
   operand *right = IC_RIGHT (ic);
   reg_info *reg;
+  reg_info *acc;
   int pushedaccs;
   struct xbases xbases;
 
@@ -4574,15 +4532,13 @@ genCmp1 (iCode * ic, iCode * ifx, int opcode, int sign)
     }
 
   if (IS_AOP_A (AOP (left)) || IS_AOP_B (AOP (left)))
-    {
-      reg = AOP (left)->aopu.aop_reg[0];
-      pushedaccs = pushLiveAccs (ic, ifx ? 0 : MC6800MASK_B);
-    }
+    reg = AOP (left)->aopu.aop_reg[0];
   else
-    {
-      reg = chooseAcc (ic, MC6800MASK_D & ~AOP (right)->regmask);
-      pushedaccs = pushLiveAccs (ic, reg->mask | (ifx ? 0 : MC6800MASK_B));
-    }
+    reg = chooseAcc (ic, MC6800MASK_D & ~AOP (right)->regmask);
+  acc = reg;
+  if (IS_AOP_B (AOP (IC_RESULT (ic))))
+    acc = mc6800_reg_b;
+  pushedaccs = pushLiveAccs (ic, (reg->mask & ~AOP (left)->regmask) | (ifx ? 0 : acc->mask));
   setupXBases (&xbases, AOP (left), AOP (right), NULL);
   if (!IS_AOP_A (AOP (left)) && !IS_AOP_B (AOP (left)))
     {
@@ -4614,7 +4570,7 @@ genCmp1 (iCode * ic, iCode * ifx, int opcode, int sign)
       symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
       symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-      reg = mc6800_reg_b;
+      reg = acc;
       emitBranch (branchInstCmp (opcode, sign), tlbl1);
       loadRegFromConst (reg, 0);
       emitBranch ("bra", tlbl2);
@@ -4889,6 +4845,7 @@ genCmpMANY (iCode * ic, iCode * ifx, int opcode, int sign)
   operand *right = IC_RIGHT (ic);
   int size;
   reg_info *reg;
+  reg_info *acc;
   int pushedaccs;
   int offset = 0;
   char *sub;
@@ -4931,7 +4888,10 @@ genCmpMANY (iCode * ic, iCode * ifx, int opcode, int sign)
         }
     }
   reg = chooseAcc (ic, MC6800MASK_D);
-  pushedaccs = pushLiveAccs (ic, reg->mask | (ifx ? 0 : MC6800MASK_B));
+  acc = reg;
+  if (IS_AOP_B (AOP (IC_RESULT (ic))))
+    acc = mc6800_reg_b;
+  pushedaccs = pushLiveAccs (ic, reg->mask | (ifx ? 0 : acc->mask));
   setupXBases (&xbases, AOP (left), AOP (right), AOP (IC_RESULT (ic)));
   sub = "sub";
   while (size--)
@@ -4975,7 +4935,7 @@ genCmpMANY (iCode * ic, iCode * ifx, int opcode, int sign)
       symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
       symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-      reg = mc6800_reg_b;
+      reg = acc;
       emitBranch (branchInstCmp (opcode, sign), tlbl1);
       loadRegFromConst (reg, 0);
       emitBranch ("bra", tlbl2);
@@ -5041,6 +5001,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   symbol *tlbl_EQ = NULL;
   bool needpulla = false;
   bool loaded;
+  reg_info *acc = mc6800_reg_a;
   struct xbases xbases = {0};
 
   opcode = ic->op;
@@ -5054,6 +5015,8 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   aopOp (left, ic, false);
   aopOp (right, ic, false);
   aopOp (result, ic, true);
+  if (IS_AOP_B (AOP (result)))
+    acc = mc6800_reg_b;
 
   /* need register operand on left, prefer literal operand on right */
   if ((AOP_TYPE (right) == AOP_REG) || AOP_TYPE (left) == AOP_LIT)
@@ -5101,11 +5064,17 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
           ifx->generated = 1;
         }
       else
-        for (offset = 0; offset < AOP_SIZE (result); offset++)
-          {
-            setupXForAop (AOP (result));
-            storeConstToAop (offset == 0 && cond, AOP (result), offset);
-          }
+        {
+          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+          int pushedaccs = pushLiveAccs (ic, acc->mask);
+
+          for (offset = 0; offset < AOP_SIZE (result); offset++)
+            {
+              setupXForAop (AOP (result));
+              storeConstToAop (offset == 0 && cond, AOP (result), offset, acc);
+            }
+          pullAccs (pushedaccs);
+        }
       freeAsmop (right, NULL, ic, false);
       freeAsmop (left, NULL, ic, false);
       freeAsmop (result, NULL, ic, true);
@@ -5325,7 +5294,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
     {
       symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-      if (!needpulla)
+      if (acc == mc6800_reg_a && !needpulla)
         needpulla = pushRegIfSurv (mc6800_reg_a);
       if (opcode == EQ_OP)
         {
@@ -5334,33 +5303,33 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
           emitBranch ("beq", tlbl_EQ);
           if (tlbl_NE)
             emitLabel (tlbl_NE);
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          loadRegFromConst (mc6800_reg_a, 0);
+          mc6800_dirtyReg (acc, false);
+          loadRegFromConst (acc, 0);
           emitBranch ("bra", tlbl);
           if (!regalloc_dry_run)
             emitLabel (tlbl_EQ);
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          loadRegFromConst (mc6800_reg_a, 1);
+          mc6800_dirtyReg (acc, false);
+          loadRegFromConst (acc, 1);
         }
       else
         {
           if (!tlbl_NE && !regalloc_dry_run)
             tlbl_NE = newiTempLabel (NULL);
           emitBranch ("bne", tlbl_NE);
-          loadRegFromConst (mc6800_reg_a, 0);
+          loadRegFromConst (acc, 0);
           emitBranch ("bra", tlbl);
           if (!regalloc_dry_run)
             emitLabel (tlbl_NE);
-          mc6800_dirtyReg (mc6800_reg_a, false);
-          loadRegFromConst (mc6800_reg_a, 1);
+          mc6800_dirtyReg (acc, false);
+          loadRegFromConst (acc, 1);
         }
 
       if (!regalloc_dry_run)
         emitLabel (tlbl);
-      mc6800_dirtyReg (mc6800_reg_a, false);
+      mc6800_dirtyReg (acc, false);
       mc6800_reg_x->aop = NULL;
       switchXToAop (&xbases, AOP (result));
-      storeRegToFullAop (mc6800_reg_a, AOP (result), false);
+      storeRegToFullAop (acc, AOP (result), false);
       pullOrFreeReg (mc6800_reg_a, needpulla);
       freeAsmop (result, NULL, ic, true);
     }
@@ -5654,7 +5623,7 @@ genAnd (iCode * ic, iCode * ifx)
               mc6800_freeReg (acc);
             }
           switchXToAop (&xbases, AOP (result));
-          storeConstToAop (0, AOP (result), offset);
+          storeConstToAop (0, AOP (result), offset, acc);
         }
       else if (!aopIsLitVal (right->aop, offset, 1, 0xff) || !sameRegs (AOP (left), AOP (result)))
         {
@@ -5909,7 +5878,7 @@ genOr (iCode * ic, iCode * ifx)
               mc6800_freeReg (acc);
             }
           switchXToAop (&xbases, AOP (result));
-          storeConstToAop (0xff, AOP (result), offset);
+          storeConstToAop (0xff, AOP (result), offset, acc);
         }
       else if (!aopIsLitVal (right->aop, offset, 1, 0x00) || !sameRegs (AOP (left), AOP (result)))
         {
@@ -6279,11 +6248,15 @@ genRRC (iCode * ic)
 
   if (AOP_TYPE (left) == AOP_LIT)
     {
+      reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXForAop (AOP (result));
       for (offset = 0; offset < size; offset++)
         storeConstToAop ((byteOfVal (AOP (left)->aopu.aop_lit, offset) >> 1 |
                           byteOfVal (AOP (left)->aopu.aop_lit, (offset + 1) % size) << 7) & 0xff,
-                         AOP (result), offset);
+                         AOP (result), offset, acc);
+      pullAccs (pushedaccs);
     }
   else if (size == 2)
     {
@@ -6352,11 +6325,15 @@ genRLC (iCode * ic)
 
   if (AOP_TYPE (left) == AOP_LIT)
     {
+      reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+
+      pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXForAop (AOP (result));
       for (offset = 0; offset < size; offset++)
         storeConstToAop ((byteOfVal (AOP (left)->aopu.aop_lit, offset) << 1 |
                           byteOfVal (AOP (left)->aopu.aop_lit, (offset + size - 1) % size) >> 7) & 0xff,
-                         AOP (result), offset);
+                         AOP (result), offset, acc);
+      pullAccs (pushedaccs);
     }
   else if (size == 2)
     {
@@ -6809,7 +6786,7 @@ genlshTwo (operand *result, operand *left, int shCount)
             }
           storeRegToAop (mc6800_reg_a, AOP (result), 1);
         }
-      storeConstToAop (0, AOP (result), LSB);
+      storeConstToAop (0, AOP (result), LSB, mc6800_reg_a);
       pullOrFreeReg (mc6800_reg_a, needpulla);
     }
 
@@ -6854,7 +6831,7 @@ genlshFour (operand * result, operand * left, int shCount)
   if (AOP_TYPE (left) == AOP_LIT)
     {
       for (offset = size - 1; offset >= 0; offset--)
-        storeConstToAop (offset >= shCount / 8 ? byteOfVal (AOP (left)->aopu.aop_lit, offset - shCount / 8) : 0, AOP (result), offset);
+        storeConstToAop (offset >= shCount / 8 ? byteOfVal (AOP (left)->aopu.aop_lit, offset - shCount / 8) : 0, AOP (result), offset, mc6800_reg_a);
     }
   else
     {
@@ -6869,7 +6846,7 @@ genlshFour (operand * result, operand * left, int shCount)
               storeRegToAop (acc, AOP (result), offset);
             }
           else
-            storeConstToAop (0, AOP (result), offset);
+            storeConstToAop (0, AOP (result), offset, mc6800_reg_a);
         }
       pullOrFreeReg (acc, needpullacc);
     }
@@ -6914,10 +6891,14 @@ genRot1 (iCode *ic)
 
   if (AOP_TYPE (left) == AOP_LIT)
     {
+      reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+      int pushedaccs = pushLiveAccs (ic, acc->mask);
+
       setupXForAop (result->aop);
       storeConstToAop ((byteOfVal (left->aop->aopu.aop_lit, 0) << (operandLitValueUll (right) % 8) |
                         byteOfVal (left->aop->aopu.aop_lit, 0) >> (8 - operandLitValueUll (right) % 8)) & 0xff,
-                       result->aop, 0);
+                       result->aop, 0, acc);
+      pullAccs (pushedaccs);
     }
   else
     {
@@ -6997,7 +6978,7 @@ genLeftShiftLiteral (operand * left, operand * right, operand * result, iCode * 
   else if (shCount >= (size * 8))
     {
       while (size--)
-        storeConstToAop (0, AOP (result), size);
+        storeConstToAop (0, AOP (result), size, mc6800_reg_a);
     }
   else
     {
@@ -7316,7 +7297,7 @@ genrshFour (operand * result, operand * left, int shCount, int sign)
   if (AOP_TYPE (left) == AOP_LIT)
     {
       for (offset = 0; offset + shCount / 8 < size; offset++)
-        storeConstToAop (byteOfVal (AOP (left)->aopu.aop_lit, offset + shCount / 8), AOP (result), offset);
+        storeConstToAop (byteOfVal (AOP (left)->aopu.aop_lit, offset + shCount / 8), AOP (result), offset, mc6800_reg_a);
     }
   else
     {
@@ -7664,7 +7645,7 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
   unsigned bstr;                /* bitfield starting bit within byte */
   asmop *derefaop;
   reg_info *reg;
-  bool needpull = false;
+  int pushedaccs;
   asmop *xsave = NULL;
   asmop *resultaop;
   asmop *resulttmp = NULL;      /* result in X, assembled in a temporary */
@@ -7701,8 +7682,8 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
   else if (IS_AOP_D (AOP (result)) && blen > 8)
     reg = mc6800_reg_a;
   else
-    reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needpull = pushRegIfSurv (reg);
+    reg = chooseAcc (ic, MC6800MASK_D);
+  pushedaccs = pushLiveAccs (ic, reg->mask);
 
   resultaop = AOP (result);
   if (blen >= 8 && !ifx && IS_AOP_X (resultaop) && derefaop->type == AOP_XPTR)
@@ -7802,7 +7783,7 @@ finish:
     }
   freeAsmop (result, NULL, ic, true);
 
-  pullOrFreeReg (reg, needpull);
+  pullAccs (pushedaccs);
 
   if (xsave)
     restoreX (xsave);
@@ -8065,7 +8046,7 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
   unsigned long long int litval;/* source literal value (if AOP_LIT) */
   unsigned char mask;           /* bitmask within current byte */
   bool needreg;
-  bool needpull = false;
+  int pushedaccs = 0;
   asmop *xsave = NULL;
   int litOffset = 0;
   reg_info *reg;
@@ -8105,10 +8086,10 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
   if ((IS_AOP_A (rightaop) || IS_AOP_B (rightaop)) && regDead (rightaop->aopu.aop_reg[0]->rIdx, ic))
     reg = rightaop->aopu.aop_reg[0];
   else
-    reg = (!mc6800_reg_b->isFree && mc6800_reg_a->isFree) ? mc6800_reg_a : mc6800_reg_b;
-  needreg = blen < 8 || blen % 8 || (rightaop->type != AOP_LIT && (rightaop->type != AOP_REG || IS_AOP_X (rightaop)));
+    reg = chooseAcc (ic, MC6800MASK_D);
+  needreg = blen < 8 || blen % 8 || rightaop->type != AOP_REG || IS_AOP_X (rightaop);
   if (needreg)
-    needpull = pushRegIfSurv (reg);
+    pushedaccs = pushLiveAccs (ic, reg->mask);
 
   setupXBases (&xbases, derefaop, rightaop, NULL);
 
@@ -8177,7 +8158,7 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
       switchXToAop (&xbases, derefaop);
       for (rlen = blen; rlen >= 8; rlen -= 8)
         {
-          storeConstToAop (byteOfVal (rightaop->aopu.aop_lit, offset), derefaop, size - offset - 1);
+          storeConstToAop (byteOfVal (rightaop->aopu.aop_lit, offset), derefaop, size - offset - 1, reg);
           offset++;
         }
     }
@@ -8257,7 +8238,7 @@ release:
       freeTempAop (rightx);
     }
   if (needreg)
-    pullOrFreeReg (reg, needpull);
+    pullAccs (pushedaccs);
   if (xsave)
     restoreX (xsave);
   freeAsmop (right, NULL, ic, true);
@@ -8871,7 +8852,7 @@ genAssignLit (operand * result, operand * right)
     {
       if (assigned[offset])
         continue;
-      storeConstToAop (value[offset], AOP (result), offset);
+      storeConstToAop (value[offset], AOP (result), offset, mc6800_reg_a);
     }
 
   if (needpula)
@@ -9054,8 +9035,12 @@ genAssign (iCode * ic)
         setupXForAop (AOP (result));
       if (AOP_TYPE (right) == AOP_LIT)
         {
+          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
+
+          pushedaccs = pushLiveAccs (ic, acc->mask);
           for (offset = AOP_SIZE (result) - 1; offset >= 0; offset--)
-            storeConstToAop (byteOfVal (AOP (right)->aopu.aop_lit, offset), AOP (result), offset);
+            storeConstToAop (byteOfVal (AOP (right)->aopu.aop_lit, offset), AOP (result), offset, acc);
+          pullAccs (pushedaccs);
         }
       else if (IS_AOP_X (AOP (right)) && AOP_TYPE (result) == AOP_SOF)
         {
@@ -9138,18 +9123,21 @@ genJumpTab (iCode * ic)
   symbol *jtablbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   asmop *tmpaop;
   int pushedaccs;
+  reg_info *reg;
 
   D (emitcode (";     genJumpTab", ""));
 
   aopOp (IC_JTCOND (ic), ic, false);
 
-  if (elementsInSet (IC_JTLABELS (ic)) <= 4 && regDead (B_IDX, ic))
+  reg = (IS_AOP_A (AOP (IC_JTCOND (ic))) || IS_AOP_B (AOP (IC_JTCOND (ic)))) ?
+    AOP (IC_JTCOND (ic))->aopu.aop_reg[0] : chooseAcc (ic, MC6800MASK_D);
+  if (elementsInSet (IC_JTLABELS (ic)) <= 4 && regDead (reg->rIdx, ic))
     {
       int count = elementsInSet (IC_JTLABELS (ic));
 
-      loadRegFromAop (mc6800_reg_b, AOP (IC_JTCOND (ic)), 0);
+      loadRegFromAop (reg, AOP (IC_JTCOND (ic)), 0);
       freeAsmop (IC_JTCOND (ic), NULL, ic, true);
-      emitOp ("tstb", MODE_INH, "");
+      rmwWithReg ("tst", reg);
       for (jtab = setFirstItem (IC_JTLABELS (ic)); jtab; jtab = setNextItem (IC_JTLABELS (ic)))
         {
           symbol *tlbl;
@@ -9160,7 +9148,7 @@ genJumpTab (iCode * ic)
               break;
             }
           if (count + 1 < elementsInSet (IC_JTLABELS (ic)))
-            emitOp ("decb", MODE_INH, "");
+            rmwWithReg ("dec", reg);
           tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
           emitBranch ("bne", tlbl);
           emitBranch ("jmp", jtab);
