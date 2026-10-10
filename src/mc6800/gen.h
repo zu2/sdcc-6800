@@ -32,6 +32,7 @@ typedef enum
   AOP_EXT,       /* operand using extended addressing mode */
   AOP_SOF,       /* operand at an offset on the stack */
   AOP_STL,       /* operand is an address on the stack */
+  AOP_XPTR,      /* operand at an offset from a pointer value */
   AOP_DUMMY      /* Read undefined, discard writes */
   }
 AOP_TYPE;
@@ -61,6 +62,12 @@ typedef struct asmop
 	char *aop_dir;		/* if direct  */
         char *aop_immd;         /* if immediate */
 	int aop_stk;
+        struct
+          {
+            struct asmop *ptr;	/* asmop holding the pointer value */
+            int ofs;		/* offset from the pointer value */
+          }
+        aop_xptr;
       }
     aopu;
     struct valinfo valinfo;
