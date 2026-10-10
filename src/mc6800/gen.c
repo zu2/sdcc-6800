@@ -86,6 +86,7 @@ extern struct dbuf_s *codeOutBuf;
 static bool operandsEqu (operand * op1, operand * op2);
 static void loadRegFromConst (reg_info * reg, int c);
 static asmop *newAsmop (short type);
+static void accopWithAop (const char *op, reg_info *acc, asmop *aop, int loffset);
 
 static asmop *
 allocTempAop (int size)
@@ -710,6 +711,22 @@ aopName (asmop * aop)
 }
 #endif
 
+static void
+loadDFromStl (asmop *aop)
+{
+  asmop *tmpaop = allocTempAop (2);
+  int delta = 1 + _G.stackOfs + aop->aopu.aop_stk + _G.stackPushes;
+
+  mc6800_emitOpw_o ("sts", tmpaop, 0);
+  accopWithAop ("lda", mc6800_reg_b, tmpaop, 0);
+  mc6800_emitOpWithAcc ("add", mc6800_reg_b, MODE_IMM, "#%d", delta & 0xff);
+  accopWithAop ("lda", mc6800_reg_a, tmpaop, 1);
+  mc6800_emitOpWithAcc ("adc", mc6800_reg_a, MODE_IMM, "#%d", (delta >> 8) & 0xff);
+  freeTempAop (tmpaop);
+  mc6800_dirtyReg (mc6800_reg_d, false);
+  mc6800_useReg (mc6800_reg_d);
+}
+
 /*--------------------------------------------------------------------------*/
 /* loadRegFromAop - Load register reg from logical offset loffset of aop.   */
 /*                  For multi-byte registers, loffset is of the lsb reg.    */
@@ -721,41 +738,10 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
 
   if (aop->type == AOP_STL && regidx == D_IDX)
     {
-      const char *tmp = allocTemp ();
-      int delta = 1 + _G.stackOfs + aop->aopu.aop_stk + _G.stackPushes;
-
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("addb", MODE_IMM, "#%d", delta & 0xff);
-      mc6800_emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
-      freeTemp ();
-      mc6800_dirtyReg (mc6800_reg_d, false);
-      mc6800_useReg (reg);
+      loadDFromStl (aop);
       return;
     }
-  if (aop->type == AOP_STL
-      && (regidx == A_IDX || regidx == B_IDX))
-    {
-      const char *tmp;
-      int delta;
-
-      tmp = allocTemp ();
-      delta = 1 + _G.stackOfs + aop->aopu.aop_stk + _G.stackPushes;
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOpWithAcc ("lda", reg, MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOpWithAcc ("add", reg, MODE_IMM, "#%d", delta & 0xff);
-      if (loffset)
-        {
-          mc6800_emitOpWithAcc ("lda", reg, MODE_DIR, "*%s", tmp);
-          mc6800_emitOpWithAcc ("adc", reg, MODE_IMM, "#%d", (delta >> 8) & 0xff);
-        }
-      freeTemp ();
-      mc6800_dirtyReg (reg, false);
-      mc6800_useReg (reg);
-      return;
-    }
-  wassertl (aop->type != AOP_STL, "AOP_STL into X");
+  wassertl (aop->type != AOP_STL, "AOP_STL into a register other than D");
 
 
   DD (emitcode ("", ";     loadRegFromAop (%s, %s, %d)", reg->name, aopName (aop), loffset));
@@ -2667,10 +2653,26 @@ genIpush (iCode * ic)
       return;
     }
 
-  if (AOP_TYPE (IC_LEFT (ic)) == AOP_STL && size == 2 && regDead (D_IDX, ic))
+  if (AOP_TYPE (IC_LEFT (ic)) == AOP_STL)
     {
+      if (!regDead (B_IDX, ic))
+        mc6800_emitOpWithAcc ("sta", mc6800_reg_b, MODE_DIR, "*%s", allocTemp ());
+      if (!regDead (A_IDX, ic))
+        mc6800_emitOpWithAcc ("sta", mc6800_reg_a, MODE_DIR, "*%s", allocTemp ());
       loadRegFromAop (mc6800_reg_d, AOP (IC_LEFT (ic)), 0);
       pushReg (mc6800_reg_d, true);
+      if (!regDead (A_IDX, ic))
+        {
+          mc6800_emitOpWithAcc ("lda", mc6800_reg_a, MODE_DIR, "*%s", freeTemp ());
+          mc6800_dirtyReg (mc6800_reg_a, false);
+          mc6800_useReg (mc6800_reg_a);
+        }
+      if (!regDead (B_IDX, ic))
+        {
+          mc6800_emitOpWithAcc ("lda", mc6800_reg_b, MODE_DIR, "*%s", freeTemp ());
+          mc6800_dirtyReg (mc6800_reg_b, false);
+          mc6800_useReg (mc6800_reg_b);
+        }
       freeAsmop (IC_LEFT (ic), NULL, ic, true);
       return;
     }
@@ -10015,6 +10017,12 @@ genCast1 (operand *result, operand *right, bool fixtopbyte, const iCode *ic)
   reg_info *acc;
   int pushedaccs;
   struct xbases xbases;
+
+  if (AOP_TYPE (right) == AOP_STL)
+    {
+      UNIMPLEMENTED;
+      return;
+    }
 
   if (AOP_TYPE (result) == AOP_REG)
     {
