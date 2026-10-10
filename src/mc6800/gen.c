@@ -5063,6 +5063,14 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
             emitBranch ("jmp", jlbl);
           ifx->generated = 1;
         }
+      else if (!cond && !IS_AOP_X (AOP (result)))
+        {
+          for (offset = 0; offset < AOP_SIZE (result); offset++)
+            {
+              setupXForAop (AOP (result));
+              rmwWithAop ("clr", AOP (result), offset);
+            }
+        }
       else
         {
           reg_info *acc = chooseAcc (ic, MC6800MASK_D);
