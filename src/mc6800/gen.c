@@ -2957,7 +2957,7 @@ genPcall (iCode * ic)
 {
   sym_link *dtype;
   sym_link *etype;
-  const char *tmp = NULL;
+  asmop *derefaop;
 
   D (emitcode (";", "genPcall"));
 
@@ -2975,40 +2975,12 @@ genPcall (iCode * ic)
   if (!IS_LITERAL (etype))
     {
       aopOp (IC_LEFT (ic), ic, false);
-      if (IS_AOP_D (AOP (IC_LEFT (ic))))
-        {
-          tmp = allocTemp ();
-          mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
-          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
-          mc6800_freeReg (mc6800_reg_d);
-        }
-    }
-
-  /* make the call */
-  if (!IS_LITERAL (etype) && AOP_TYPE (IC_LEFT (ic)) == AOP_STL)
-    {
-      asmop *derefaop = aopDerefAop (AOP (IC_LEFT (ic)), 0);
-
+      derefaop = aopDerefAop (AOP (IC_LEFT (ic)), 0);
       derefaop->size = 1;
+      freeAsmop (IC_LEFT (ic), NULL, ic, true);
       setupXForAop (derefaop);
       mc6800_emitOp_o ("jsr", derefaop, 0);
-      freeAsmop (IC_LEFT (ic), NULL, ic, true);
-    }
-  else if (!IS_LITERAL (etype))
-    {
-      if (IS_AOP_D (AOP (IC_LEFT (ic))))
-        {
-          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
-          mc6800_dirtyReg (mc6800_reg_x, false);
-          freeTemp ();
-        }
-      else
-        {
-          setupXForAop (AOP (IC_LEFT (ic)));
-          loadRegFromAop (mc6800_reg_x, AOP (IC_LEFT (ic)), 0);
-        }
-      freeAsmop (IC_LEFT (ic), NULL, ic, true);
-      mc6800_emitOp ("jsr", MODE_IDX, "0,x");
+      freeAsmop (NULL, derefaop, ic, true);
     }
   else
     {
@@ -3226,11 +3198,16 @@ genFunction (iCode * ic)
       if (!accIsFree)
         {
           /* Function was passed parameters, so make sure A is preserved */
+          asmop *ccslot = newAsmop (AOP_SOF);
+
           pushReg (mc6800_reg_a, false);
           pushReg (mc6800_reg_a, false);
           mc6800_emitOp ("tpa", MODE_INH, "");
-          mc6800_emitOp ("tsx", MODE_INH, "");
-          mc6800_emitOp ("staa", MODE_IDX, "1,x");
+          ccslot->size = 1;
+          ccslot->aopu.aop_stk = -_G.stackOfs - 1;
+          setupXForAop (ccslot);
+          storeRegToAop (mc6800_reg_a, ccslot, 0);
+          freeAsmop (NULL, ccslot, ic, true);
           mc6800_emitOp ("sei", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
@@ -3267,9 +3244,14 @@ genEndFunction (iCode * ic)
       if (!IS_VOID (sym->type->next))
         {
           /* Function has return value, so make sure A is preserved */
+          asmop *ccslot = newAsmop (AOP_SOF);
+
           pushReg (mc6800_reg_a, false);
-          mc6800_emitOp ("tsx", MODE_INH, "");
-          mc6800_emitOp ("ldaa", MODE_IDX, "1,x");
+          ccslot->size = 1;
+          ccslot->aopu.aop_stk = -_G.stackOfs - 1;
+          setupXForAop (ccslot);
+          loadRegFromAop (mc6800_reg_a, ccslot, 0);
+          freeAsmop (NULL, ccslot, ic, true);
           mc6800_emitOp ("tap", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
@@ -3331,6 +3313,8 @@ genEndFunction (iCode * ic)
     }
 }
 
+static void genDataPointerStore (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic);
+
 /*-----------------------------------------------------------------*/
 /* genRet - generate code for return statement                     */
 /*-----------------------------------------------------------------*/
@@ -3356,56 +3340,24 @@ genRet (iCode * ic)
 
   if (IS_STRUCT (operandType (IC_LEFT (ic))))
     {
-      const char *dst = allocTemp ();
-
       asmop *retaop = newAsmop (AOP_SOF);
+      asmop *retptr = allocTempAop (2);
+      asmop *derefaop;
 
       retaop->size = 2;
       retaop->aopu.aop_stk = 2;
       setupXForAop (retaop);
-      mc6800_emitOpw_o ("ldx", retaop, 0);
-      mc6800_dirtyReg (mc6800_reg_x, false);
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", dst);
+      loadRegFromAop (mc6800_reg_x, retaop, 0);
+      freeAsmop (NULL, retaop, ic, true);
+      storeRegToAop (mc6800_reg_x, retptr, 0);
+      mc6800_freeReg (mc6800_reg_x);
 
-      if (size <= 2)
-        {
-          setupXForAop (AOP (IC_LEFT (ic)));
-          loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (ic)), 0);
-          if (size > 1)
-            loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (ic)), 1);
-          mc6800_emitOp ("ldx", MODE_DIR, "*%s", dst);
-          mc6800_dirtyReg (mc6800_reg_x, false);
-          mc6800_emitOp ("staa", MODE_IDX, "%d,x", size - 1);
-          if (size > 1)
-            mc6800_emitOp ("stab", MODE_IDX, "0,x");
-        }
-      else if (AOP_TYPE (IC_LEFT (ic)) == AOP_SOF || AOP_TYPE (IC_LEFT (ic)) == AOP_DIR || AOP_TYPE (IC_LEFT (ic)) == AOP_EXT)
-        {
-          for (offset = 0; offset < size; offset += 2)
-            {
-              if (size - 1 > 255)
-                {
-                  UNIMPLEMENTED;
-                  break;
-                }
-              setupXForAop (AOP (IC_LEFT (ic)));
-              loadRegFromAop (mc6800_reg_a, AOP (IC_LEFT (ic)), offset);
-              if (offset + 1 < size)
-                loadRegFromAop (mc6800_reg_b, AOP (IC_LEFT (ic)), offset + 1);
-              mc6800_emitOp ("ldx", MODE_DIR, "*%s", dst);
-              mc6800_dirtyReg (mc6800_reg_x, false);
-              mc6800_emitOp ("staa", MODE_IDX, "%d,x", size - 1 - offset);
-              if (offset + 1 < size)
-                mc6800_emitOp ("stab", MODE_IDX, "%d,x", size - 2 - offset);
-            }
-        }
-      else
-        UNIMPLEMENTED;
+      derefaop = aopDerefAop (retptr, 0);
+      derefaop->size = size;
+      genDataPointerStore (derefaop, AOP (IC_LEFT (ic)), false, ic);
 
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      mc6800_dirtyReg (mc6800_reg_b, false);
-      mc6800_dirtyReg (mc6800_reg_x, true);
-      freeTemp ();
+      freeAsmop (NULL, derefaop, ic, true);
+      freeTempAop (retptr);
       freeAsmop (IC_LEFT (ic), NULL, ic, true);
       goto jumpret;
     }
@@ -8609,6 +8561,20 @@ genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile, const 
 }
 
 /*-----------------------------------------------------------------*/
+/* genDataPointerStore - store right to derefaop, by size          */
+/*-----------------------------------------------------------------*/
+static void
+genDataPointerStore (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic)
+{
+  if (derefaop->size == 1)
+    genDataPointerSet1 (derefaop, right, derefvolatile, ic);
+  else if (derefaop->size == 2)
+    genDataPointerSet2 (derefaop, right, derefvolatile, ic);
+  else
+    genDataPointerSetMANY (derefaop, right, derefvolatile, ic);
+}
+
+/*-----------------------------------------------------------------*/
 /* genDataPointerSet - remat pointer to data space                 */
 /*-----------------------------------------------------------------*/
 static void
@@ -8642,12 +8608,7 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
       && !IS_AOP_X (AOP (right)))
     needrestorex = pushRegIfSurv (mc6800_reg_x);
 
-  if (size == 1)
-    genDataPointerSet1 (derefaop, AOP (right), derefvolatile, ic);
-  else if (size == 2)
-    genDataPointerSet2 (derefaop, AOP (right), derefvolatile, ic);
-  else
-    genDataPointerSetMANY (derefaop, AOP (right), derefvolatile, ic);
+  genDataPointerStore (derefaop, AOP (right), derefvolatile, ic);
 
   if (needrestorex)
     pullReg (mc6800_reg_x);
@@ -9216,7 +9177,6 @@ genJumpTab (iCode * ic)
 {
   symbol *jtab;
   symbol *jtablbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-  const char *tmp;
   int pushedaccs;
 
   D (emitcode (";     genJumpTab", ""));
@@ -9256,17 +9216,13 @@ genJumpTab (iCode * ic)
   pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
   loadRegFromAop (mc6800_reg_b, AOP (IC_JTCOND (ic)), 0);
   freeAsmop (IC_JTCOND (ic), NULL, ic, true);
-  tmp = allocTemp ();
   mc6800_emitOp ("clra", MODE_INH, "");
   mc6800_emitOp ("aslb", MODE_INH, "");
   mc6800_emitOp ("rola", MODE_INH, "");
   mc6800_emitOp ("addb", MODE_IMM, "#<%05d$", regalloc_dry_run ? 0 : labelKey2num (jtablbl->key));
   mc6800_emitOp ("adca", MODE_IMM, "#>%05d$", regalloc_dry_run ? 0 : labelKey2num (jtablbl->key));
-  mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
-  mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
-  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+  transferRegReg (mc6800_reg_d, mc6800_reg_x, false);
   mc6800_emitOp ("ldx", MODE_IDX, "0,x");
-  freeTemp ();
   pullAccs (pushedaccs);
   mc6800_emitOp ("jmp", MODE_IDX, "0,x");
 
