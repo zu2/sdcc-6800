@@ -156,7 +156,7 @@ codeCost (unsigned int bytes, float cycles, const iCode *ic)
 #define UNIMPLEMENTED do {if (!regalloc_dry_run) fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "Unimplemented"); regalloc_dry_run_cost += 1000; regalloc_dry_run_cost_cycles += 1000;} while(0)
 
 static void
-va_mc6800_emitOp (const char *inst, int mode, const char *fmt, va_list ap)
+va_emitOp (const char *inst, int mode, const char *fmt, va_list ap)
 {
   const mc6800opcodedata *opcode = mc6800_getOpcodeData (inst);
 
@@ -176,31 +176,31 @@ va_mc6800_emitOp (const char *inst, int mode, const char *fmt, va_list ap)
 }
 
 static void
-mc6800_emitOp (const char *inst, int mode, const char *fmt, ...)
+emitOp (const char *inst, int mode, const char *fmt, ...)
 {
   va_list ap;
 
   va_start (ap, fmt);
-  va_mc6800_emitOp (inst, mode, fmt, ap);
+  va_emitOp (inst, mode, fmt, ap);
   va_end (ap);
 }
 
 static void
-mc6800_emitOpWithAcc (const char *inst, reg_info *acc, int mode, const char *fmt, ...)
+emitOpWithAcc (const char *inst, reg_info *acc, int mode, const char *fmt, ...)
 {
   char buf[sizeof (((mc6800opcodedata *) 0)->name)];
   va_list ap;
 
-  wassertl (acc == mc6800_reg_a || acc == mc6800_reg_b, "mc6800_emitOpWithAcc: register must be A or B");
-  wassertl (strlen (inst) + 1 < sizeof (buf), "mc6800_emitOpWithAcc: instruction name too long");
+  wassertl (acc == mc6800_reg_a || acc == mc6800_reg_b, "emitOpWithAcc: register must be A or B");
+  wassertl (strlen (inst) + 1 < sizeof (buf), "emitOpWithAcc: instruction name too long");
   SNPRINTF (buf, sizeof (buf), "%s%c", inst, acc == mc6800_reg_a ? 'a' : 'b');
   va_start (ap, fmt);
-  va_mc6800_emitOp (buf, mode, fmt, ap);
+  va_emitOp (buf, mode, fmt, ap);
   va_end (ap);
 }
 
 static void
-mc6800_emitOp_o (const char *inst, asmop *aop, int loffset)
+emitOp_o (const char *inst, asmop *aop, int loffset)
 {
   int mode;
   const mc6800opcodedata *opcode = mc6800_getOpcodeData (inst);
@@ -241,7 +241,7 @@ mc6800_emitOp_o (const char *inst, asmop *aop, int loffset)
 }
 
 static void
-mc6800_emitOpw_o (const char *inst, asmop *aop, int loffset)
+emitOpw_o (const char *inst, asmop *aop, int loffset)
 {
   int mode;
   const mc6800opcodedata *opcode = mc6800_getOpcodeData (inst);
@@ -348,7 +348,7 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
       switch (srcidx)
         {
         case B_IDX:            /* B to A */
-          mc6800_emitOp ("tba", MODE_INH, "");
+          emitOp ("tba", MODE_INH, "");
           break;
         default:
           error = 1;
@@ -358,7 +358,7 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
       switch (srcidx)
         {
         case A_IDX:            /* A to B */
-          mc6800_emitOp ("tab", MODE_INH, "");
+          emitOp ("tab", MODE_INH, "");
           break;
         default:
           error = 1;
@@ -370,9 +370,9 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
         case D_IDX:            /* D to X */
           {
             const char *tmp = allocTemp ();
-            mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
-            mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
-            mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+            emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+            emitOp ("staa", MODE_DIR, "*%s", tmp);
+            emitOp ("ldx", MODE_DIR, "*%s", tmp);
             freeTemp ();
           }
           break;
@@ -386,9 +386,9 @@ transferRegReg (reg_info *sreg, reg_info *dreg, bool freesrc)
         case X_IDX:
           {
             const char *tmp = allocTemp ();
-            mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-            mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
-            mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+            emitOp ("stx", MODE_DIR, "*%s", tmp);
+            emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
+            emitOp ("ldaa", MODE_DIR, "*%s", tmp);
             freeTemp ();
           }
           break;
@@ -471,24 +471,24 @@ pushReg (reg_info * reg, bool freereg)
   switch (reg->rIdx)
     {
     case A_IDX:
-      mc6800_emitOp ("psha", MODE_INH, "");
+      emitOp ("psha", MODE_INH, "");
       _G.stackPushes++;
       updateCFA ();
       break;
     case B_IDX:
-      mc6800_emitOp ("pshb", MODE_INH, "");
+      emitOp ("pshb", MODE_INH, "");
       _G.stackPushes++;
       updateCFA ();
       break;
     case X_IDX:
       tmp = allocTemp ();
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+      emitOp ("stx", MODE_DIR, "*%s", tmp);
       break;
     case D_IDX:
-      mc6800_emitOp ("pshb", MODE_INH, "");
+      emitOp ("pshb", MODE_INH, "");
       updateCFA ();
       _G.stackPushes++;
-      mc6800_emitOp ("psha", MODE_INH, "");
+      emitOp ("psha", MODE_INH, "");
       updateCFA ();
       _G.stackPushes++;
       break;
@@ -511,24 +511,24 @@ pullReg (reg_info * reg)
   switch (reg->rIdx)
     {
     case A_IDX:
-      mc6800_emitOp ("pula", MODE_INH, "");
+      emitOp ("pula", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
       break;
     case B_IDX:
-      mc6800_emitOp ("pulb", MODE_INH, "");
+      emitOp ("pulb", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
       break;
     case X_IDX:
       tmp = freeTemp ();
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+      emitOp ("ldx", MODE_DIR, "*%s", tmp);
       break;
     case D_IDX:
-      mc6800_emitOp ("pula", MODE_INH, "");
+      emitOp ("pula", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
-      mc6800_emitOp ("pulb", MODE_INH, "");
+      emitOp ("pulb", MODE_INH, "");
       _G.stackPushes--;
       updateCFA ();
       break;
@@ -652,7 +652,7 @@ adjustStack (int n)
   if (n>0)
     {
       for (int i=0; i<n; i++ ){
-        mc6800_emitOp ("ins", MODE_INH, "");
+        emitOp ("ins", MODE_INH, "");
       }
       _G.stackPushes -= n;
       updateCFA ();
@@ -660,7 +660,7 @@ adjustStack (int n)
   else if (n<0)
     {
       for (int i=0; i>n; i-- ){
-        mc6800_emitOp ("des", MODE_INH, "");
+        emitOp ("des", MODE_INH, "");
       }
       _G.stackPushes -= n;
       updateCFA ();
@@ -719,11 +719,11 @@ loadDFromStl (asmop *aop)
   asmop *tmpaop = allocTempAop (2);
   int delta = 1 + _G.stackOfs + aop->aopu.aop_stk + _G.stackPushes;
 
-  mc6800_emitOpw_o ("sts", tmpaop, 0);
+  emitOpw_o ("sts", tmpaop, 0);
   accopWithAop ("lda", mc6800_reg_b, tmpaop, 0);
-  mc6800_emitOpWithAcc ("add", mc6800_reg_b, MODE_IMM, "#%d", delta & 0xff);
+  emitOpWithAcc ("add", mc6800_reg_b, MODE_IMM, "#%d", delta & 0xff);
   accopWithAop ("lda", mc6800_reg_a, tmpaop, 1);
-  mc6800_emitOpWithAcc ("adc", mc6800_reg_a, MODE_IMM, "#%d", (delta >> 8) & 0xff);
+  emitOpWithAcc ("adc", mc6800_reg_a, MODE_IMM, "#%d", (delta >> 8) & 0xff);
   freeTempAop (tmpaop);
   mc6800_dirtyReg (mc6800_reg_d, false);
   mc6800_useReg (mc6800_reg_d);
@@ -755,8 +755,8 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("ldaa", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
+          emitOp ("stx", MODE_DIR, "*%s", tmp);
+          emitOp ("ldaa", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
           freeTemp ();
           mc6800_dirtyReg (reg, false);
           break;
@@ -772,7 +772,7 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         loadRegFromConst (reg, byteOfVal (aop->aopu.aop_lit, loffset));
       else
         {
-          mc6800_emitOp_o ("ldaa", aop, loffset);
+          emitOp_o ("ldaa", aop, loffset);
           mc6800_dirtyReg (reg, false);
         }
       break;
@@ -781,8 +781,8 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("ldab", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
+          emitOp ("stx", MODE_DIR, "*%s", tmp);
+          emitOp ("ldab", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
           freeTemp ();
           mc6800_dirtyReg (reg, false);
           break;
@@ -798,7 +798,7 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
         loadRegFromConst (reg, byteOfVal (aop->aopu.aop_lit, loffset));
       else
         {
-          mc6800_emitOp_o ("ldab", aop, loffset);
+          emitOp_o ("ldab", aop, loffset);
           mc6800_dirtyReg (reg, false);
         }
       break;
@@ -817,7 +817,7 @@ loadRegFromAop (reg_info * reg, asmop * aop, int loffset)
           break;
         }
       wassertl (aop->type != AOP_REG, "cannot load x from a register");
-      mc6800_emitOpw_o ("ldx", aop, loffset);
+      emitOpw_o ("ldx", aop, loffset);
       mc6800_dirtyReg (reg, false);
       break;
     case D_IDX:
@@ -862,9 +862,9 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("staa", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
-          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+          emitOp ("stx", MODE_DIR, "*%s", tmp);
+          emitOp ("staa", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
+          emitOp ("ldx", MODE_DIR, "*%s", tmp);
           freeTemp ();
           mc6800_dirtyReg (mc6800_reg_x, false);
           break;
@@ -873,7 +873,7 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
         {
-          mc6800_emitOp_o ("staa", aop, loffset);
+          emitOp_o ("staa", aop, loffset);
         }
       break;
     case B_IDX:
@@ -881,9 +881,9 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("stab", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
-          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+          emitOp ("stx", MODE_DIR, "*%s", tmp);
+          emitOp ("stab", MODE_DIR, loffset ? "*%s" : "*%s+1", tmp);
+          emitOp ("ldx", MODE_DIR, "*%s", tmp);
           freeTemp ();
           mc6800_dirtyReg (mc6800_reg_x, false);
           break;
@@ -892,7 +892,7 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         transferRegReg (reg, aop->aopu.aop_reg[loffset], false);
       else
         {
-          mc6800_emitOp_o ("stab", aop, loffset);
+          emitOp_o ("stab", aop, loffset);
         }
       break;
     case X_IDX:
@@ -911,14 +911,14 @@ storeRegToAop (reg_info *reg, asmop * aop, int loffset)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          mc6800_emitOpWithAcc ("lda", aop->aopu.aop_reg[loffset], MODE_DIR, "*%s+1", tmp);
+          emitOp ("stx", MODE_DIR, "*%s", tmp);
+          emitOpWithAcc ("lda", aop->aopu.aop_reg[loffset], MODE_DIR, "*%s+1", tmp);
           freeTemp ();
           mc6800_dirtyReg (aop->aopu.aop_reg[loffset], false);
           break;
         }
       wassertl (aop->type != AOP_SOF && (aop->type != AOP_XPTR || IS_AOP_XPTR_IN_X (aop)), "X to AOP_SOF needs storeXToSof");
-      mc6800_emitOpw_o ("stx", aop, loffset);
+      emitOpw_o ("stx", aop, loffset);
       break;
     case D_IDX:
       if ((aop->type == AOP_REG) && IS_AOP_D (aop))
@@ -949,27 +949,27 @@ loadRegFromConst (reg_info * reg, int c)
       c &= 0xff;
       if (!c)
         {
-          mc6800_emitOp ("clra", MODE_INH, "");
+          emitOp ("clra", MODE_INH, "");
         }
       else
         {
-          mc6800_emitOp ("ldaa", MODE_IMM, "#0x%02x", c);
+          emitOp ("ldaa", MODE_IMM, "#0x%02x", c);
         }
       break;
     case B_IDX:
       c &= 0xff;
       if (!c)
         {
-          mc6800_emitOp ("clrb", MODE_INH, "");
+          emitOp ("clrb", MODE_INH, "");
         }
       else
         {
-          mc6800_emitOp ("ldab", MODE_IMM, "#0x%02x", c);
+          emitOp ("ldab", MODE_IMM, "#0x%02x", c);
         }
       break;
     case X_IDX:
       c &= 0xffff;
-      mc6800_emitOp ("ldx", MODE_IMM, "#0x%04x", c);
+      emitOp ("ldx", MODE_IMM, "#0x%04x", c);
       break;
     case D_IDX:
       c &= 0xffff;
@@ -996,17 +996,17 @@ loadRegFromImm (reg_info * reg, char * c)
   switch (reg->rIdx)
     {
     case A_IDX:
-      mc6800_emitOp ("ldaa", MODE_IMM, "#%s", c);
+      emitOp ("ldaa", MODE_IMM, "#%s", c);
       break;
     case B_IDX:
-      mc6800_emitOp ("ldab", MODE_IMM, "#%s", c);
+      emitOp ("ldab", MODE_IMM, "#%s", c);
       break;
     case X_IDX:
-      mc6800_emitOp ("ldx", MODE_IMM, "#%s", c);
+      emitOp ("ldx", MODE_IMM, "#%s", c);
       break;
     case D_IDX:
-      mc6800_emitOp ("ldab", MODE_IMM, "#%s", c);
-      mc6800_emitOp ("ldaa", MODE_IMM, "#%s >> 8", c);
+      emitOp ("ldab", MODE_IMM, "#%s", c);
+      emitOp ("ldaa", MODE_IMM, "#%s >> 8", c);
       break;
     default:
       werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "Bad rIdx in loadRegFromConst");
@@ -1048,7 +1048,7 @@ storeConstToAop (int c, asmop * aop, int loffset)
       if (!c && !(aop->op && isOperandVolatile (aop->op, false))
           && (aop->type != AOP_SOF || !mc6800_reg_a->isFree && !mc6800_reg_b->isFree))
         {
-          mc6800_emitOp_o ("clr", aop, loffset);
+          emitOp_o ("clr", aop, loffset);
           break;
         }
       /* fall through */
@@ -1102,17 +1102,17 @@ storeXToSof (asmop *aop, int loffset, reg_info *acc)
   bool xfree = mc6800_reg_x->isFree;
 
   wassert (IS_AOP_INDEXED (aop));
-  mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+  emitOp ("stx", MODE_DIR, "*%s", tmp);
   mc6800_freeReg (mc6800_reg_x);
   setupXForAop (aop);
-  mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
+  emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
   storeRegToAop (acc, aop, loffset);
   if (loffset + 1 < aop->size)
     {
-      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
+      emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
       storeRegToAop (acc, aop, loffset + 1);
     }
-  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+  emitOp ("ldx", MODE_DIR, "*%s", tmp);
   mc6800_dirtyReg (mc6800_reg_x, false);
   mc6800_reg_x->isFree = xfree;
   freeTemp ();
@@ -1144,9 +1144,9 @@ storeRegSignToUpperAop (reg_info * reg, asmop * aop, int loffset, bool isSigned)
     {
       /* Signed case */
       transferRegReg (reg, mc6800_reg_a, false);
-      mc6800_emitOp ("rola", MODE_INH, "");
-      mc6800_emitOp ("ldaa", MODE_IMM, "#0");
-      mc6800_emitOp ("sbca", MODE_IMM, "#0");
+      emitOp ("rola", MODE_INH, "");
+      emitOp ("ldaa", MODE_IMM, "#0");
+      emitOp ("sbca", MODE_IMM, "#0");
       mc6800_useReg (mc6800_reg_a);
       while (loffset < size)
         storeRegToAop (mc6800_reg_a, aop, loffset++);
@@ -1204,20 +1204,20 @@ accopWithAop (const char *op, reg_info *acc, asmop *aop, int loffset)
           if ((reg->rIdx == XL_IDX || reg->rIdx == XH_IDX) && _G.tempOfs + 1 <= NUM_TEMP_REGS)
             {
               const char *tmp = allocTemp ();
-              mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-              mc6800_emitOp (accop, MODE_DIR, (reg->rIdx == XL_IDX) ? "*%s+1" : "*%s", tmp);
+              emitOp ("stx", MODE_DIR, "*%s", tmp);
+              emitOp (accop, MODE_DIR, (reg->rIdx == XL_IDX) ? "*%s+1" : "*%s", tmp);
               freeTemp ();
             }
           else if (reg->rIdx == B_IDX && aop->size == 1
                    && (!strcmp (accop, "adda") || !strcmp (accop, "suba") || !strcmp (accop, "cmpa")))
             {
-              mc6800_emitOp (!strcmp (accop, "adda") ? "aba" : !strcmp (accop, "suba") ? "sba" : "cba", MODE_INH, "");
+              emitOp (!strcmp (accop, "adda") ? "aba" : !strcmp (accop, "suba") ? "sba" : "cba", MODE_INH, "");
             }
           else if ((reg->rIdx == A_IDX || reg->rIdx == B_IDX) && _G.tempOfs < NUM_TEMP_REGS)
             {
               const char *tmp = allocTemp ();
-              mc6800_emitOpWithAcc ("sta", reg, MODE_DIR, "*%s", tmp);
-              mc6800_emitOp (accop, MODE_DIR, "*%s", tmp);
+              emitOpWithAcc ("sta", reg, MODE_DIR, "*%s", tmp);
+              emitOp (accop, MODE_DIR, "*%s", tmp);
               freeTemp ();
             }
           else
@@ -1225,12 +1225,12 @@ accopWithAop (const char *op, reg_info *acc, asmop *aop, int loffset)
         }
       else
         {
-          mc6800_emitOp (accop, MODE_IMM, "#0");
+          emitOp (accop, MODE_IMM, "#0");
         }
     }
   else
     {
-      mc6800_emitOp_o (accop, aop, loffset);
+      emitOp_o (accop, aop, loffset);
     }
 }
 
@@ -1247,15 +1247,15 @@ accopwWithAop (const char *opb, const char *opa, asmop *aop)
   if (IS_AOP_X (aop))
     {
       const char *tmp = allocTemp ();
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp (accopb, MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp (accopa, MODE_DIR, "*%s", tmp);
+      emitOp ("stx", MODE_DIR, "*%s", tmp);
+      emitOp (accopb, MODE_DIR, "*%s+1", tmp);
+      emitOp (accopa, MODE_DIR, "*%s", tmp);
       freeTemp ();
       return;
     }
   wassertl (aop->type != AOP_REG, "accopwWithAop: register operand must be X");
-  mc6800_emitOp_o (accopb, aop, 0);
-  mc6800_emitOp_o (accopa, aop, 1);
+  emitOp_o (accopb, aop, 0);
+  emitOp_o (accopa, aop, 1);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -1272,13 +1272,13 @@ rmwWithReg (char *rmwop, reg_info * reg)
   if (reg->rIdx == A_IDX)
     {
       sprintf (rmwaop, "%sa", rmwop);
-      mc6800_emitOp (rmwaop, MODE_INH, "");
+      emitOp (rmwaop, MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
     }
   else if (reg->rIdx == B_IDX)
     {
       sprintf (rmwaop, "%sb", rmwop);
-      mc6800_emitOp (rmwaop, MODE_INH, "");
+      emitOp (rmwaop, MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_b, false);
     }
   else
@@ -1302,7 +1302,7 @@ rmwWithAop (char *rmwop, asmop * aop, int loffset)
     case AOP_DUMMY:
       break;
     default:
-      mc6800_emitOp_o (rmwop, aop, loffset);
+      emitOp_o (rmwop, aop, loffset);
     }
 
 }
@@ -1324,12 +1324,12 @@ addConstToX (int n)
     {
       while (n > 0)
         {
-          mc6800_emitOp ("inx", MODE_INH, "");
+          emitOp ("inx", MODE_INH, "");
           n--;
         }
       while (n < 0)
         {
-          mc6800_emitOp ("dex", MODE_INH, "");
+          emitOp ("dex", MODE_INH, "");
           n++;
         }
       mc6800_dirtyReg (mc6800_reg_x, false);
@@ -1339,14 +1339,14 @@ addConstToX (int n)
   tmp = allocTemp ();
   acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
   needpullacc = pushRegIfUsed (acc);
-  mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-  mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
-  mc6800_emitOpWithAcc ("add", acc, MODE_IMM, "#0x%02x", (unsigned int) n & 0xff);
-  mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
-  mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
-  mc6800_emitOpWithAcc ("adc", acc, MODE_IMM, "#0x%02x", ((unsigned int) n >> 8) & 0xff);
-  mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", tmp);
-  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+  emitOp ("stx", MODE_DIR, "*%s", tmp);
+  emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
+  emitOpWithAcc ("add", acc, MODE_IMM, "#0x%02x", (unsigned int) n & 0xff);
+  emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
+  emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
+  emitOpWithAcc ("adc", acc, MODE_IMM, "#0x%02x", ((unsigned int) n >> 8) & 0xff);
+  emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", tmp);
+  emitOp ("ldx", MODE_DIR, "*%s", tmp);
   freeTemp ();
   mc6800_dirtyReg (acc, false);
   pullOrFreeReg (acc, needpullacc);
@@ -1376,13 +1376,13 @@ setupTmpFromSP (int stackOffset, reg_info *acc)
   const char *tmp = allocTemp ();
   int delta = 1 + stackOffset + _G.stackPushes;
 
-  mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-  mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
-  mc6800_emitOpWithAcc ("add", acc, MODE_IMM, "#%d", delta & 0xff);
-  mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
-  mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
-  mc6800_emitOpWithAcc ("adc", acc, MODE_IMM, "#%d", (delta >> 8) & 0xff);
-  mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", tmp);
+  emitOp ("sts", MODE_DIR, "*%s", tmp);
+  emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
+  emitOpWithAcc ("add", acc, MODE_IMM, "#%d", delta & 0xff);
+  emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
+  emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
+  emitOpWithAcc ("adc", acc, MODE_IMM, "#%d", (delta >> 8) & 0xff);
+  emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", tmp);
   mc6800_dirtyReg (acc, false);
   return tmp;
 }
@@ -1419,9 +1419,9 @@ loadXFromStlWithInx (asmop *aop)
   k = stackOffset + _G.stackPushes;
   wassertl (k >= 0 && k <= 255, "loadXFromStlWithInx out of range");
 
-  mc6800_emitOp ("tsx", MODE_INH, "");
+  emitOp ("tsx", MODE_INH, "");
   while (k--)
-    mc6800_emitOp ("inx", MODE_INH, "");
+    emitOp ("inx", MODE_INH, "");
   mc6800_useReg (mc6800_reg_x);
   mc6800_dirtyReg (mc6800_reg_x, false);
   mc6800_reg_x->aop = &tsxaop;
@@ -1458,9 +1458,9 @@ setupTmpForAop (asmop *aop, const char *tmp)
   int base = sp - 1 + 256 * pages;
   int i;
 
-  mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
+  emitOp ("sts", MODE_DIR, "*%s", tmp);
   for (i = 0; i < pages; i++)
-    mc6800_emitOp ("inc", MODE_EXT, "%s", tmp);
+    emitOp ("inc", MODE_EXT, "%s", tmp);
   if (last - base <= 255)
     return base;
   if (!mc6800_reg_x->isFree)
@@ -1468,10 +1468,10 @@ setupTmpForAop (asmop *aop, const char *tmp)
       UNIMPLEMENTED;
       return base;
     }
-  mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+  emitOp ("ldx", MODE_DIR, "*%s", tmp);
   for (; base < last - 255; base++)
-    mc6800_emitOp ("inx", MODE_INH, "");
-  mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+    emitOp ("inx", MODE_INH, "");
+  emitOp ("stx", MODE_DIR, "*%s", tmp);
   mc6800_dirtyReg (mc6800_reg_x, false);
   mc6800_reg_x->aop = &tsxaop;
   mc6800_reg_x->stackOffset = base;
@@ -1517,7 +1517,7 @@ setupXForAop (asmop * aop)
           UNIMPLEMENTED;
           return;
         }
-      mc6800_emitOp ("tsx", MODE_INH, "");
+      emitOp ("tsx", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = &tsxaop;
       mc6800_reg_x->stackOffset = sp;
@@ -1538,7 +1538,7 @@ setupXForAop (asmop * aop)
 
   if (last - sp <= 255)
     {
-      mc6800_emitOp ("tsx", MODE_INH, "");
+      emitOp ("tsx", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = &tsxaop;
       mc6800_reg_x->stackOffset = sp;
@@ -1549,7 +1549,7 @@ setupXForAop (asmop * aop)
   base = setupTmpForAop (aop, tmp);
   if (mc6800_reg_x->aop != &tsxaop || mc6800_reg_x->stackOffset != base)
     {
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+      emitOp ("ldx", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = &tsxaop;
       mc6800_reg_x->stackOffset = base;
@@ -1601,7 +1601,7 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
         }
       setupXForAop (aop);
       xbases->xptrtmp = allocTemp ();
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", xbases->xptrtmp);
+      emitOp ("stx", MODE_DIR, "*%s", xbases->xptrtmp);
       mc6800_freeReg (mc6800_reg_x);
     }
   for (i = 0; i < 3; i++)
@@ -1627,7 +1627,7 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
           && first - mc6800_reg_x->stackOffset >= 0
           && last - mc6800_reg_x->stackOffset <= 255)
         {
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", xbases->regtemp[xbases->count]);
+          emitOp ("stx", MODE_DIR, "*%s", xbases->regtemp[xbases->count]);
           xbases->base[xbases->count] = mc6800_reg_x->stackOffset;
         }
       else
@@ -1660,7 +1660,7 @@ switchXToAop (struct xbases *xbases, asmop *aop)
           UNIMPLEMENTED;
           return;
         }
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", xbases->xptrtmp);
+      emitOp ("ldx", MODE_DIR, "*%s", xbases->xptrtmp);
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = aop;
       return;
@@ -1687,7 +1687,7 @@ switchXToAop (struct xbases *xbases, asmop *aop)
             UNIMPLEMENTED;
             return;
           }
-        mc6800_emitOp ("ldx", MODE_DIR, "*%s", xbases->regtemp[i]);
+        emitOp ("ldx", MODE_DIR, "*%s", xbases->regtemp[i]);
         mc6800_dirtyReg (mc6800_reg_x, false);
         mc6800_reg_x->aop = &tsxaop;
         mc6800_reg_x->stackOffset = xbases->base[i];
@@ -2337,7 +2337,7 @@ genNot (iCode * ic)
   if (IS_BOOL (operandType (IC_LEFT (ic))))
     {
       loadRegFromAop (reg, aop, 0);
-      mc6800_emitOpWithAcc ("eor", reg, MODE_IMM, "#0x01");
+      emitOpWithAcc ("eor", reg, MODE_IMM, "#0x01");
     }
   else if (aop->type == AOP_LIT)
     loadRegFromConst (reg, !ullFromVal (aop->aopu.aop_lit));
@@ -2345,31 +2345,31 @@ genNot (iCode * ic)
     loadRegFromConst (reg, 0);
   else if (aop->type == AOP_REG && aop->size == 1)
     {
-      mc6800_emitOpWithAcc ("cmp", aop->aopu.aop_reg[0], MODE_IMM, "#0x01");
-      mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+      emitOpWithAcc ("cmp", aop->aopu.aop_reg[0], MODE_IMM, "#0x01");
+      emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
       rmwWithReg ("rol", reg);
     }
   else if (aop->type != AOP_REG && aop->size == 1)
     {
       loadRegFromConst (reg, 0);
       accopWithAop ("cmp", reg, aop, 0);
-      mc6800_emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
+      emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
     }
   else
     {
       if (IS_AOP_D (aop))
         {
-          mc6800_emitOp ("aba", MODE_INH, "");
-          mc6800_emitOp ("adca", MODE_IMM, "#0xff");
+          emitOp ("aba", MODE_INH, "");
+          emitOp ("adca", MODE_IMM, "#0xff");
         }
       else if (IS_AOP_X (aop))
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-          mc6800_emitOpWithAcc ("lda", reg, MODE_DIR, "*%s", tmp);
-          mc6800_emitOpWithAcc ("add", reg, MODE_DIR, "*%s+1", tmp);
-          mc6800_emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
+          emitOp ("stx", MODE_DIR, "*%s", tmp);
+          emitOpWithAcc ("lda", reg, MODE_DIR, "*%s", tmp);
+          emitOpWithAcc ("add", reg, MODE_DIR, "*%s+1", tmp);
+          emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
           freeTemp ();
         }
       else if (aop->type == AOP_REG)
@@ -2378,14 +2378,14 @@ genNot (iCode * ic)
         {
           loadRegFromAop (reg, aop, offset--);
           if (IS_FLOAT (operandType (IC_LEFT (ic))))
-            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
+            emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
           accopWithAop ("add", reg, aop, offset--);
           while (offset >= 0)
             accopWithAop ("adc", reg, aop, offset--);
-          mc6800_emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
+          emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
         }
-      mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
-      mc6800_emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
+      emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+      emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
     }
   mc6800_dirtyReg (reg, false);
   if (IS_AOP_X (aop) && regDead (X_IDX, ic))
@@ -2428,7 +2428,7 @@ genUminusFloat (operand * op, operand * result, const iCode *ic)
     }
   switchXToAop (&xbases, AOP (op));
   loadRegFromAop (acc, AOP (op), offset);
-  mc6800_emitOpWithAcc ("eor", acc, MODE_IMM, "#0x80");
+  emitOpWithAcc ("eor", acc, MODE_IMM, "#0x80");
   switchXToAop (&xbases, AOP (result));
   storeRegToAop (acc, AOP (result), offset);
 
@@ -2493,7 +2493,7 @@ genUminus (iCode * ic)
       loadRegFromAop (acc, AOP (IC_LEFT (ic)), 0);
       rmwWithReg ("neg", acc);
       if (maskedtopbyte)
-        mc6800_emitOpWithAcc ("and", acc, MODE_IMM, "#0x%02x", topbytemask);
+        emitOpWithAcc ("and", acc, MODE_IMM, "#0x%02x", topbytemask);
       switchXToAop (&xbases, AOP (IC_RESULT (ic)));
       storeRegToAop (acc, AOP (IC_RESULT (ic)), 0);
       freeXBases (&xbases);
@@ -2509,19 +2509,19 @@ genUminus (iCode * ic)
         {
           rmwWithReg ("neg", mc6800_reg_a);
           rmwWithReg ("neg", mc6800_reg_b);
-          mc6800_emitOp ("sbca", MODE_IMM, "#0x00");
+          emitOp ("sbca", MODE_IMM, "#0x00");
         }
       else
         {
           switchXToAop (&xbases, AOP (IC_LEFT (ic)));
           loadRegFromConst (mc6800_reg_a, 0);
           loadRegFromConst (mc6800_reg_b, 0);
-          mc6800_emitOp_o ("subb", AOP (IC_LEFT (ic)), 0);
-          mc6800_emitOp_o ("sbca", AOP (IC_LEFT (ic)), 1);
+          emitOp_o ("subb", AOP (IC_LEFT (ic)), 0);
+          emitOp_o ("sbca", AOP (IC_LEFT (ic)), 1);
           mc6800_dirtyReg (mc6800_reg_b, false);
         }
       if (maskedtopbyte)
-        mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
+        emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
       mc6800_dirtyReg (mc6800_reg_a, false);
       switchXToAop (&xbases, AOP (IC_RESULT (ic)));
       storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
@@ -2538,7 +2538,7 @@ genUminus (iCode * ic)
       /* clra clears the carry, so the borrow would be lost */
       if (offset)
         {
-          mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
+          emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
           mc6800_dirtyReg (acc, false);
         }
       else
@@ -2546,7 +2546,7 @@ genUminus (iCode * ic)
       switchXToAop (&xbases, AOP (IC_LEFT (ic)));
       accopWithAop (offset ? "sbc" : "sub", acc, AOP (IC_LEFT (ic)), offset);
       if (maskedtopbyte && offset == size - 1)
-        mc6800_emitOpWithAcc ("and", acc, MODE_IMM, "#0x%02x", topbytemask);
+        emitOpWithAcc ("and", acc, MODE_IMM, "#0x%02x", topbytemask);
       switchXToAop (&xbases, AOP (IC_RESULT (ic)));
       storeRegToAop (acc, AOP (IC_RESULT (ic)), offset);
     }
@@ -2679,20 +2679,20 @@ genIpush (iCode * ic)
   if (AOP_TYPE (IC_LEFT (ic)) == AOP_STL)
     {
       if (!regDead (B_IDX, ic))
-        mc6800_emitOpWithAcc ("sta", mc6800_reg_b, MODE_DIR, "*%s", allocTemp ());
+        emitOpWithAcc ("sta", mc6800_reg_b, MODE_DIR, "*%s", allocTemp ());
       if (!regDead (A_IDX, ic))
-        mc6800_emitOpWithAcc ("sta", mc6800_reg_a, MODE_DIR, "*%s", allocTemp ());
+        emitOpWithAcc ("sta", mc6800_reg_a, MODE_DIR, "*%s", allocTemp ());
       loadRegFromAop (mc6800_reg_d, AOP (IC_LEFT (ic)), 0);
       pushReg (mc6800_reg_d, true);
       if (!regDead (A_IDX, ic))
         {
-          mc6800_emitOpWithAcc ("lda", mc6800_reg_a, MODE_DIR, "*%s", freeTemp ());
+          emitOpWithAcc ("lda", mc6800_reg_a, MODE_DIR, "*%s", freeTemp ());
           mc6800_dirtyReg (mc6800_reg_a, false);
           mc6800_useReg (mc6800_reg_a);
         }
       if (!regDead (B_IDX, ic))
         {
-          mc6800_emitOpWithAcc ("lda", mc6800_reg_b, MODE_DIR, "*%s", freeTemp ());
+          emitOpWithAcc ("lda", mc6800_reg_b, MODE_DIR, "*%s", freeTemp ());
           mc6800_dirtyReg (mc6800_reg_b, false);
           mc6800_useReg (mc6800_reg_b);
         }
@@ -2702,17 +2702,17 @@ genIpush (iCode * ic)
 
   acc = chooseAcc (ic, MC6800MASK_D);
   if (!regDead (acc->rIdx, ic))
-    mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", allocTemp ());
+    emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", allocTemp ());
 
   if (IS_AOP_X (AOP (IC_LEFT (ic))))
     {
       const char *tmp = allocTemp ();
-      mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
+      emitOp ("stx", MODE_DIR, "*%s", tmp);
+      emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
       mc6800_dirtyReg (acc, false);
       mc6800_useReg (acc);
       pushReg (acc, true);
-      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
+      emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (acc, false);
       mc6800_useReg (acc);
       pushReg (acc, true);
@@ -2729,7 +2729,7 @@ genIpush (iCode * ic)
 
   if (!regDead (acc->rIdx, ic))
     {
-      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", freeTemp ());
+      emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", freeTemp ());
       mc6800_dirtyReg (acc, false);
       mc6800_useReg (acc);
     }
@@ -2757,7 +2757,7 @@ genPointerPush (iCode *ic)
 
   reg_info *acc = chooseAcc (ic, MC6800MASK_D);
   if (!regDead (acc->rIdx, ic))
-    mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", allocTemp ());
+    emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", allocTemp ());
   bool needpullx = pushRegIfSurv (mc6800_reg_x);
 
   int size = getSize (operandType (IC_LEFT (ic))->next);
@@ -2774,7 +2774,7 @@ genPointerPush (iCode *ic)
   pullOrFreeReg (mc6800_reg_x, needpullx);
   if (!regDead (acc->rIdx, ic))
     {
-      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", freeTemp ());
+      emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", freeTemp ());
       mc6800_dirtyReg (acc, false);
       mc6800_useReg (acc);
     }
@@ -2850,7 +2850,7 @@ pushbigreturn (iCode *ic, bool regssaved)
   if ((acc->mask & keep) || !regssaved && !regDead (acc->rIdx, ic))
     {
       save = allocTemp ();
-      mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", save);
+      emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", save);
     }
 
   if (sym->onStack)
@@ -2858,26 +2858,26 @@ pushbigreturn (iCode *ic, bool regssaved)
       const char *tmp = allocTemp ();
       int delta = 1 + _G.stackOfs + sym->stack + (sym->stack > 0 ? _G.param_offset : 0) + _G.stackPushes;
 
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOpWithAcc ("add", acc, MODE_IMM, "#%d", delta & 0xff);
+      emitOp ("sts", MODE_DIR, "*%s", tmp);
+      emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", tmp);
+      emitOpWithAcc ("add", acc, MODE_IMM, "#%d", delta & 0xff);
       pushReg (acc, false);
-      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
-      mc6800_emitOpWithAcc ("adc", acc, MODE_IMM, "#%d", (delta >> 8) & 0xff);
+      emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", tmp);
+      emitOpWithAcc ("adc", acc, MODE_IMM, "#%d", (delta >> 8) & 0xff);
       pushReg (acc, false);
       freeTemp ();
     }
   else
     {
-      mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#%s", sym->rname);
+      emitOpWithAcc ("lda", acc, MODE_IMM, "#%s", sym->rname);
       pushReg (acc, false);
-      mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#>%s", sym->rname);
+      emitOpWithAcc ("lda", acc, MODE_IMM, "#>%s", sym->rname);
       pushReg (acc, false);
     }
 
   if (save)
     {
-      mc6800_emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", save);
+      emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", save);
       freeTemp ();
     }
 }
@@ -2903,11 +2903,11 @@ genCall (iCode * ic)
 
   if (IS_LITERAL (getSpec (dtype)))
     {
-      mc6800_emitOp ("jsr", MODE_EXT, "0x%04X", (unsigned int) ulFromVal (OP_VALUE (IC_LEFT (ic))));
+      emitOp ("jsr", MODE_EXT, "0x%04X", (unsigned int) ulFromVal (OP_VALUE (IC_LEFT (ic))));
     }
   else
     {
-      mc6800_emitOp ("jsr", MODE_EXT, "%s", (OP_SYMBOL (IC_LEFT (ic))->rname[0] ?
+      emitOp ("jsr", MODE_EXT, "%s", (OP_SYMBOL (IC_LEFT (ic))->rname[0] ?
                               OP_SYMBOL (IC_LEFT (ic))->rname : OP_SYMBOL (IC_LEFT (ic))->name));
     }
 
@@ -2979,12 +2979,12 @@ genPcall (iCode * ic)
       derefaop->size = 1;
       freeAsmop (IC_LEFT (ic), NULL, ic, true);
       setupXForAop (derefaop);
-      mc6800_emitOp_o ("jsr", derefaop, 0);
+      emitOp_o ("jsr", derefaop, 0);
       freeAsmop (NULL, derefaop, ic, true);
     }
   else
     {
-      mc6800_emitOp ("jsr", MODE_EXT, "0x%04X", ulFromVal (OP_VALUE (IC_LEFT (ic))));
+      emitOp ("jsr", MODE_EXT, "0x%04X", ulFromVal (OP_VALUE (IC_LEFT (ic))));
     }
 
   mc6800_dirtyReg (mc6800_reg_a, true);
@@ -3111,12 +3111,12 @@ genFunction (iCode * ic)
     {
       symbol *tlbl = newiTempLabel (NULL);
 
-      mc6800_emitOp ("ldx", MODE_IMM, "#___SDCC_mc6800_ret0");
+      emitOp ("ldx", MODE_IMM, "#___SDCC_mc6800_ret0");
       emitLabel (tlbl);
-      mc6800_emitOp ("ldaa", MODE_IDX, "0,x");
-      mc6800_emitOp ("psha", MODE_INH, "");
-      mc6800_emitOp ("inx", MODE_INH, "");
-      mc6800_emitOp ("cpx", MODE_IMM, "#___SDCC_mc6800_ret0+24");
+      emitOp ("ldaa", MODE_IDX, "0,x");
+      emitOp ("psha", MODE_INH, "");
+      emitOp ("inx", MODE_INH, "");
+      emitOp ("cpx", MODE_IMM, "#___SDCC_mc6800_ret0+24");
       emitBranch ("bne", tlbl);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_dirtyReg (mc6800_reg_x, false);
@@ -3202,22 +3202,22 @@ genFunction (iCode * ic)
 
           pushReg (mc6800_reg_a, false);
           pushReg (mc6800_reg_a, false);
-          mc6800_emitOp ("tpa", MODE_INH, "");
+          emitOp ("tpa", MODE_INH, "");
           ccslot->size = 1;
           ccslot->aopu.aop_stk = -_G.stackOfs - 1;
           setupXForAop (ccslot);
           storeRegToAop (mc6800_reg_a, ccslot, 0);
           freeAsmop (NULL, ccslot, ic, true);
-          mc6800_emitOp ("sei", MODE_INH, "");
+          emitOp ("sei", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
         }
       else
         {
           /* No passed parameters, so A can be freely modified */
-          mc6800_emitOp ("tpa", MODE_INH, "");
+          emitOp ("tpa", MODE_INH, "");
           pushReg (mc6800_reg_a, true);
-          mc6800_emitOp ("sei", MODE_INH, "");
+          emitOp ("sei", MODE_INH, "");
         }
     }
 }
@@ -3252,7 +3252,7 @@ genEndFunction (iCode * ic)
           setupXForAop (ccslot);
           loadRegFromAop (mc6800_reg_a, ccslot, 0);
           freeAsmop (NULL, ccslot, ic, true);
-          mc6800_emitOp ("tap", MODE_INH, "");
+          emitOp ("tap", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_x, false);
           pullReg (mc6800_reg_a);
           pullNull (1);
@@ -3261,7 +3261,7 @@ genEndFunction (iCode * ic)
         {
           /* Function returns void, so A can be freely modified */
           pullReg (mc6800_reg_a);
-          mc6800_emitOp ("tap", MODE_INH, "");
+          emitOp ("tap", MODE_INH, "");
         }
     }
 
@@ -3284,12 +3284,12 @@ genEndFunction (iCode * ic)
     {
       symbol *tlbl = newiTempLabel (NULL);
 
-      mc6800_emitOp ("ldx", MODE_IMM, "#___SDCC_mc6800_ret0+24");
+      emitOp ("ldx", MODE_IMM, "#___SDCC_mc6800_ret0+24");
       emitLabel (tlbl);
-      mc6800_emitOp ("dex", MODE_INH, "");
-      mc6800_emitOp ("pula", MODE_INH, "");
-      mc6800_emitOp ("staa", MODE_IDX, "0,x");
-      mc6800_emitOp ("cpx", MODE_IMM, "#___SDCC_mc6800_ret0");
+      emitOp ("dex", MODE_INH, "");
+      emitOp ("pula", MODE_INH, "");
+      emitOp ("staa", MODE_IDX, "0,x");
+      emitOp ("cpx", MODE_IMM, "#___SDCC_mc6800_ret0");
       emitBranch ("bne", tlbl);
       _G.stackPushes -= 24;
 
@@ -3299,7 +3299,7 @@ genEndFunction (iCode * ic)
           debugFile->writeEndFunction (currFunc, ic, 1);
         }
 
-      mc6800_emitOp ("rti", MODE_INH, "");
+      emitOp ("rti", MODE_INH, "");
     }
   else
     {
@@ -3309,7 +3309,7 @@ genEndFunction (iCode * ic)
           debugFile->writeEndFunction (currFunc, ic, 1);
         }
 
-      mc6800_emitOp ("rts", MODE_INH, "");
+      emitOp ("rts", MODE_INH, "");
     }
 }
 
@@ -3387,7 +3387,7 @@ jumpret:
      if the next is not the return statement */
   if (!(ic->next && ic->next->op == LABEL && IC_LABEL (ic->next) == returnLabel))
     {
-      mc6800_emitOp ("jmp", MODE_EXT, "%05d$", labelKey2num (returnLabel->key));
+      emitOp ("jmp", MODE_EXT, "%05d$", labelKey2num (returnLabel->key));
     }
 }
 
@@ -3416,7 +3416,7 @@ genLabel (iCode * ic)
 static void
 genGoto (iCode * ic)
 {
-  mc6800_emitOp ("jmp", MODE_EXT, "%05d$", labelKey2num (IC_LABEL (ic)->key));
+  emitOp ("jmp", MODE_EXT, "%05d$", labelKey2num (IC_LABEL (ic)->key));
 }
 
 
@@ -3689,7 +3689,7 @@ genPlus1 (iCode *ic)
         accopWithAop ("add", reg, rightOp, 0);
       if (topbytemask != 0xff)
         {
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
         }
     }
   switchXToAop (&xbases, result);
@@ -3746,23 +3746,23 @@ genPlus2 (iCode *ic)
       else
         {
           loadRegFromAop (mc6800_reg_b, other, 0);
-          mc6800_emitOp ("clra", MODE_INH, "");
+          emitOp ("clra", MODE_INH, "");
           mc6800_useReg (mc6800_reg_a);
         }
       tmp = allocTemp ();
       delta = 1 + _G.stackOfs + stl->aopu.aop_stk + _G.stackPushes;
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("addb", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("adca", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("addb", MODE_IMM, "#%d", delta & 0xff);
-      mc6800_emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+      emitOp ("sts", MODE_DIR, "*%s", tmp);
+      emitOp ("addb", MODE_DIR, "*%s+1", tmp);
+      emitOp ("adca", MODE_DIR, "*%s", tmp);
+      emitOp ("addb", MODE_IMM, "#%d", delta & 0xff);
+      emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_dirtyReg (mc6800_reg_b, false);
       if (IS_AOP_X (result))
         {
-          mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
-          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+          emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+          emitOp ("staa", MODE_DIR, "*%s", tmp);
+          emitOp ("ldx", MODE_DIR, "*%s", tmp);
           mc6800_dirtyReg (mc6800_reg_x, false);
           freeTemp ();
         }
@@ -3787,7 +3787,7 @@ genPlus2 (iCode *ic)
       accopwWithAop ("add", "adc", rightOp);
     }
   if (topbytemask != 0xff)
-    mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
+    emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
   switchXToAop (&xbases, result);
   storeRegToAop (mc6800_reg_d, result, 0);
   freeXBases (&xbases);
@@ -3843,7 +3843,7 @@ genPlusMANY (iCode *ic)
     {
       if (!mayskip && aopIsLitVal (leftOp, offset, 1, 0x00))
         {
-          mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+          emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
           mc6800_dirtyReg (reg, false);
         }
       else
@@ -3856,7 +3856,7 @@ genPlusMANY (iCode *ic)
           switchXToAop (&xbases, rightOp);
           accopWithAop (mayskip ? "add" : "adc", reg, rightOp, offset);
           if (offset == size - 1 && topbytemask != 0xff)
-            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
+            emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
           mayskip = false;
         }
       switchXToAop (&xbases, result);
@@ -4111,9 +4111,9 @@ addSign (operand * result, int offset, int sign)
     {
       if (sign)
         {
-          mc6800_emitOp ("rola", MODE_INH, "");
-          mc6800_emitOp ("ldaa", MODE_IMM, "%s", zero);
-          mc6800_emitOp ("sbca", MODE_IMM, "%s", zero);
+          emitOp ("rola", MODE_INH, "");
+          emitOp ("ldaa", MODE_IMM, "%s", zero);
+          emitOp ("sbca", MODE_IMM, "%s", zero);
           mc6800_dirtyReg (mc6800_reg_a, false);
           while (size--)
             storeRegToAop (mc6800_reg_a, AOP (result), offset++);
@@ -4154,12 +4154,12 @@ genMinus1 (iCode *ic)
       pushedaccs = pushLiveAccs (ic, MC6800MASK_A | (IS_AOP_A (rightOp) && !IS_AOP_B (leftOp) ? MC6800MASK_B : 0));
       if (IS_AOP_A (rightOp) && IS_AOP_B (leftOp))
         {
-          mc6800_emitOp ("nega", MODE_INH, "");
-          mc6800_emitOp ("aba", MODE_INH, "");
+          emitOp ("nega", MODE_INH, "");
+          emitOp ("aba", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_a, false);
           if (maskedtopbyte)
             {
-              mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
+              emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
             }
           setupXForAop (result);
           storeRegToAop (mc6800_reg_a, result, 0);
@@ -4171,11 +4171,11 @@ genMinus1 (iCode *ic)
       setupXBases (&xbases, leftOp, NULL, result);
       switchXToAop (&xbases, leftOp);
       loadRegFromAop (mc6800_reg_a, leftOp, 0);
-      mc6800_emitOp ("sba", MODE_INH, "");
+      emitOp ("sba", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
       if (maskedtopbyte)
         {
-          mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
+          emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
         }
       switchXToAop (&xbases, result);
       storeRegToAop (mc6800_reg_a, result, 0);
@@ -4212,7 +4212,7 @@ genMinus1 (iCode *ic)
         }
       if (maskedtopbyte)
         {
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
         }
     }
   switchXToAop (&xbases, result);
@@ -4264,11 +4264,11 @@ genMinus2 (iCode *ic)
       loadRegFromAop (mc6800_reg_d, leftOp, 0);
       tmp = allocTemp ();
       delta = 1 + _G.stackOfs + rightOp->aopu.aop_stk + _G.stackPushes;
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
-      mc6800_emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+      emitOp ("sts", MODE_DIR, "*%s", tmp);
+      emitOp ("subb", MODE_DIR, "*%s+1", tmp);
+      emitOp ("sbca", MODE_DIR, "*%s", tmp);
+      emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
+      emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
       freeTemp ();
     }
   else if (leftOp->type == AOP_STL && IS_AOP_D (rightOp))
@@ -4278,13 +4278,13 @@ genMinus2 (iCode *ic)
 
       tmp = allocTemp ();
       delta = 1 + _G.stackOfs + leftOp->aopu.aop_stk + _G.stackPushes;
-      mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("coma", MODE_INH, "");
-      mc6800_emitOp ("comb", MODE_INH, "");
-      mc6800_emitOp ("adcb", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("adca", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("addb", MODE_IMM, "#%d", delta & 0xff);
-      mc6800_emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+      emitOp ("sts", MODE_DIR, "*%s", tmp);
+      emitOp ("coma", MODE_INH, "");
+      emitOp ("comb", MODE_INH, "");
+      emitOp ("adcb", MODE_DIR, "*%s+1", tmp);
+      emitOp ("adca", MODE_DIR, "*%s", tmp);
+      emitOp ("addb", MODE_IMM, "#%d", delta & 0xff);
+      emitOp ("adca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
       freeTemp ();
     }
   else if (leftOp->type == AOP_STL)
@@ -4296,8 +4296,8 @@ genMinus2 (iCode *ic)
   else if (IS_AOP_D (rightOp))
     {
       switchXToAop (&xbases, leftOp);
-      mc6800_emitOp ("coma", MODE_INH, "");
-      mc6800_emitOp ("comb", MODE_INH, "");
+      emitOp ("coma", MODE_INH, "");
+      emitOp ("comb", MODE_INH, "");
       accopwWithAop ("adc", "adc", leftOp);
     }
   else
@@ -4313,7 +4313,7 @@ genMinus2 (iCode *ic)
         }
     }
   if (topbytemask != 0xff)
-    mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
+    emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
   switchXToAop (&xbases, AOP (IC_RESULT (ic)));
   storeRegToAop (mc6800_reg_d, AOP (IC_RESULT (ic)), 0);
   freeXBases (&xbases);
@@ -4358,7 +4358,7 @@ genMinusMANY (iCode *ic)
     {
       if (!mayskip && aopIsLitVal (AOP (IC_LEFT (ic)), offset, 1, 0x00))
         {
-          mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+          emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
           mc6800_dirtyReg (reg, false);
         }
       else
@@ -4371,7 +4371,7 @@ genMinusMANY (iCode *ic)
           switchXToAop (&xbases, AOP (IC_RIGHT (ic)));
           accopWithAop (mayskip ? "sub" : "sbc", reg, AOP (IC_RIGHT (ic)), offset);
           if (offset == size - 1 && topbytemask != 0xff)
-            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
+            emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
           mayskip = false;
         }
       switchXToAop (&xbases, result);
@@ -4729,12 +4729,12 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
-          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+          emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+          emitOp ("staa", MODE_DIR, "*%s", tmp);
           setupXForAop (AOP (left));
           loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-          mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
-          mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
+          emitOp ("subb", MODE_DIR, "*%s+1", tmp);
+          emitOp ("sbca", MODE_DIR, "*%s", tmp);
           freeTemp ();
         }
       else if (AOP_TYPE (right) == AOP_STL)
@@ -4748,13 +4748,13 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
           // D < SP + delta ?
           //   D < SP : yes
           //   else   : D - SP < delta ?
-          mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
-          mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
+          emitOp ("sts", MODE_DIR, "*%s", tmp);
+          emitOp ("subb", MODE_DIR, "*%s+1", tmp);
+          emitOp ("sbca", MODE_DIR, "*%s", tmp);
           if (!sign)
             emitBranch ("bcs", tlbl);
-          mc6800_emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
-          mc6800_emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+          emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
+          emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
           if (tlbl)
             emitLabel (tlbl);
           freeTemp ();
@@ -4822,7 +4822,7 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
           setupXForAop (AOP (left));
           loadRegFromAop (mc6800_reg_a, AOP (left), 1);
         }
-      mc6800_emitOp ("tsta", MODE_INH, "");
+      emitOp ("tsta", MODE_INH, "");
     }
   else
     {
@@ -4833,9 +4833,9 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
             {
               const char *tmp = allocTemp ();
 
-              mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
-              mc6800_emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
-              mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+              emitOp ("stx", MODE_DIR, "*%s", tmp);
+              emitOp ("ldab", MODE_DIR, "*%s+1", tmp);
+              emitOp ("ldaa", MODE_DIR, "*%s", tmp);
               freeTemp ();
             }
           else
@@ -4849,8 +4849,8 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
         {
           unsigned int lim = (unsigned int) ((ullFromVal (AOP (right)->aopu.aop_lit) & 0xffffull) + 1);
 
-          mc6800_emitOp ("subb", MODE_IMM, "#0x%02x", lim & 0xff);
-          mc6800_emitOp ("sbca", MODE_IMM, "#0x%02x", (lim >> 8) & 0xff);
+          emitOp ("subb", MODE_IMM, "#0x%02x", lim & 0xff);
+          emitOp ("sbca", MODE_IMM, "#0x%02x", (lim >> 8) & 0xff);
           opcode = (opcode == '>') ? GE_OP : '<';
         }
       else if (AOP_TYPE (right) == AOP_STL)
@@ -4862,13 +4862,13 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
           // D < SP + delta ?
           //   D < SP : yes
           //   else   : D - SP < delta ?
-          mc6800_emitOp ("sts", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("subb", MODE_DIR, "*%s+1", tmp);
-          mc6800_emitOp ("sbca", MODE_DIR, "*%s", tmp);
+          emitOp ("sts", MODE_DIR, "*%s", tmp);
+          emitOp ("subb", MODE_DIR, "*%s+1", tmp);
+          emitOp ("sbca", MODE_DIR, "*%s", tmp);
           if (!sign)
             emitBranch ("bcs", tlbl);
-          mc6800_emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
-          mc6800_emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+          emitOp ("subb", MODE_IMM, "#%d", delta & 0xff);
+          emitOp ("sbca", MODE_IMM, "#%d", (delta >> 8) & 0xff);
           if (tlbl)
             emitLabel (tlbl);
           freeTemp ();
@@ -4897,7 +4897,7 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
 
           emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl2 : tlbl);
           emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl : tlbl2);
-          mc6800_emitOp ("tstb", MODE_INH, "");
+          emitOp ("tstb", MODE_INH, "");
           emitBranch ((opcode == '>') ? "bne" : "beq", tlbl);
           if (!regalloc_dry_run)
             emitLabel (tlbl2);
@@ -4921,7 +4921,7 @@ genCmp2 (iCode * ic, iCode * ifx, int opcode, int sign)
 
           emitBranch (branchInstCmp ('<', sign), (opcode == '>') ? tlbl3 : tlbl1);
           emitBranch (branchInstCmp ('>', sign), (opcode == '>') ? tlbl1 : tlbl3);
-          mc6800_emitOp ("tstb", MODE_INH, "");
+          emitOp ("tstb", MODE_INH, "");
           emitBranch ((opcode == '>') ? "bne" : "beq", tlbl1);
           if (!regalloc_dry_run)
             emitLabel (tlbl3);
@@ -5001,7 +5001,7 @@ genCmpMANY (iCode * ic, iCode * ifx, int opcode, int sign)
       if (AOP_TYPE (left) == AOP_LIT)
         {
           lit = ullFromVal (AOP (left)->aopu.aop_lit);
-          mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x%02x",
+          emitOpWithAcc ("lda", reg, MODE_IMM, "#0x%02x",
                          (unsigned int) ((lit >> (8 * offset)) & 0xff));
         }
       else
@@ -5193,7 +5193,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
     {
       setupXForAop (AOP (left));
       loadRegFromAop (mc6800_reg_x, AOP (left), 0);
-      mc6800_emitOpw_o ("cpx", AOP (right), 0);
+      emitOpw_o ("cpx", AOP (right), 0);
       mc6800_freeReg (mc6800_reg_x);
     }
   else if (AOP_TYPE (left) == AOP_STL)
@@ -5210,11 +5210,11 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
           int delta = 1 + _G.stackOfs + AOP (left)->aopu.aop_stk + _G.stackPushes;
           asmop *tmpaop = allocTempAop (2);
 
-          mc6800_emitOpw_o ("sts", tmpaop, 0);
+          emitOpw_o ("sts", tmpaop, 0);
           accopwWithAop ("sub", "sbc", tmpaop);
-          mc6800_emitOp ("cmpb", MODE_IMM, "#%d", delta & 0xff);
+          emitOp ("cmpb", MODE_IMM, "#%d", delta & 0xff);
           emitBranch ("bne", tlbl);
-          mc6800_emitOp ("cmpa", MODE_IMM, "#%d", (delta >> 8) & 0xff);
+          emitOp ("cmpa", MODE_IMM, "#%d", (delta >> 8) & 0xff);
           if (!regalloc_dry_run)
             emitLabel (tlbl);
           freeTempAop (tmpaop);
@@ -5241,7 +5241,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
                 }
             }
           loadXFromStl (ic, AOP (left));
-          mc6800_emitOpw_o ("cpx", cmpaop, 0);
+          emitOpw_o ("cpx", cmpaop, 0);
           if (cmpaop != AOP (right))
             freeTempAop (cmpaop);
           mc6800_freeReg (mc6800_reg_x);
@@ -5256,7 +5256,7 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
               asmop *tmpaop = allocTempAop (2);
 
               storeRegToAop (mc6800_reg_d, tmpaop, 0);
-              mc6800_emitOpw_o ("cpx", tmpaop, 0);
+              emitOpw_o ("cpx", tmpaop, 0);
               freeTempAop (tmpaop);
             }
           else
@@ -5277,9 +5277,9 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
   else if (IS_AOP_D (AOP (left)) && IS_AOP_X (AOP (right)))
     {
       const char *tmp = allocTemp ();
-      mc6800_emitOp ("stab", MODE_DIR, "*%s+1", tmp);
-      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
-      mc6800_emitOp ("cpx", MODE_DIR, "*%s", tmp);
+      emitOp ("stab", MODE_DIR, "*%s+1", tmp);
+      emitOp ("staa", MODE_DIR, "*%s", tmp);
+      emitOp ("cpx", MODE_DIR, "*%s", tmp);
       freeTemp ();
     }
   else
@@ -5300,11 +5300,11 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
             {
               if (aopIsLitVal (right->aop, offset, 1, 0x00))
                 {
-                  mc6800_emitOp ("tstb", MODE_INH, "");
+                  emitOp ("tstb", MODE_INH, "");
                 }
               else if (AOP_TYPE (right) == AOP_REG)
                 {
-                  mc6800_emitOp ("cba", MODE_INH, "");
+                  emitOp ("cba", MODE_INH, "");
                 }
               else
                 {
@@ -5324,11 +5324,11 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
               if (aopIsLitVal (right->aop, offset, 1, 0x00))
                 {
                   if (!loaded)
-                    mc6800_emitOp ("tsta", MODE_INH, "");
+                    emitOp ("tsta", MODE_INH, "");
                 }
               else if (AOP_TYPE (right) == AOP_REG)
                 {
-                  mc6800_emitOp ("cba", MODE_INH, "");
+                  emitOp ("cba", MODE_INH, "");
                 }
               else
                 {
@@ -5526,12 +5526,12 @@ genAnd (iCode * ic, iCode * ifx)
           ltmp = allocTemp ();
           if (IS_AOP_X (AOP (left)))
             {
-              mc6800_emitOp ("stx", MODE_DIR, "*%s", ltmp);
+              emitOp ("stx", MODE_DIR, "*%s", ltmp);
             }
           else
             {
-              mc6800_emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
-              mc6800_emitOp ("staa", MODE_DIR, "*%s", ltmp);
+              emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
+              emitOp ("staa", MODE_DIR, "*%s", ltmp);
             }
         }
 
@@ -5542,14 +5542,14 @@ genAnd (iCode * ic, iCode * ifx)
       /* this generates ugly code, but meets volatility requirements */
       setupXBases (&xbases, AOP (left), AOP (right), NULL);
       loadRegFromConst (mc6800_reg_a, 0);
-      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+      emitOp ("staa", MODE_DIR, "*%s", tmp);
 
       offset = 0;
       while (size--)
         {
           if (ltmp)
             {
-              mc6800_emitOp ("ldaa", MODE_DIR, offset ? "*%s" : "*%s+1", ltmp);
+              emitOp ("ldaa", MODE_DIR, offset ? "*%s" : "*%s+1", ltmp);
               mc6800_dirtyReg (mc6800_reg_a, false);
               mc6800_useReg (mc6800_reg_a);
             }
@@ -5560,13 +5560,13 @@ genAnd (iCode * ic, iCode * ifx)
             }
           switchXToAop (&xbases, AOP (right));
           accopWithAop ("and", mc6800_reg_a, AOP (right), offset);
-          mc6800_emitOp ("oraa", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+          emitOp ("oraa", MODE_DIR, "*%s", tmp);
+          emitOp ("staa", MODE_DIR, "*%s", tmp);
           offset++;
         }
 
       freeXBases (&xbases);
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+      emitOp ("ldaa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
       freeTemp ();
@@ -5574,7 +5574,7 @@ genAnd (iCode * ic, iCode * ifx)
         {
           freeTemp ();
         }
-      mc6800_emitOp ("tsta", MODE_INH, "");
+      emitOp ("tsta", MODE_INH, "");
 
       pullAccs (pushedaccs);
 
@@ -5814,12 +5814,12 @@ genOr (iCode * ic, iCode * ifx)
           ltmp = allocTemp ();
           if (IS_AOP_X (AOP (left)))
             {
-              mc6800_emitOp ("stx", MODE_DIR, "*%s", ltmp);
+              emitOp ("stx", MODE_DIR, "*%s", ltmp);
             }
           else
             {
-              mc6800_emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
-              mc6800_emitOp ("staa", MODE_DIR, "*%s", ltmp);
+              emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
+              emitOp ("staa", MODE_DIR, "*%s", ltmp);
             }
         }
 
@@ -5830,14 +5830,14 @@ genOr (iCode * ic, iCode * ifx)
       /* this generates ugly code, but meets volatility requirements */
       setupXBases (&xbases, AOP (left), AOP (right), NULL);
       loadRegFromConst (mc6800_reg_a, 0);
-      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+      emitOp ("staa", MODE_DIR, "*%s", tmp);
 
       offset = 0;
       while (size--)
         {
           if (ltmp)
             {
-              mc6800_emitOp ("ldaa", MODE_DIR, offset ? "*%s" : "*%s+1", ltmp);
+              emitOp ("ldaa", MODE_DIR, offset ? "*%s" : "*%s+1", ltmp);
               mc6800_dirtyReg (mc6800_reg_a, false);
               mc6800_useReg (mc6800_reg_a);
             }
@@ -5848,13 +5848,13 @@ genOr (iCode * ic, iCode * ifx)
             }
           switchXToAop (&xbases, AOP (right));
           accopWithAop ("ora", mc6800_reg_a, AOP (right), offset);
-          mc6800_emitOp ("oraa", MODE_DIR, "*%s", tmp);
-          mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+          emitOp ("oraa", MODE_DIR, "*%s", tmp);
+          emitOp ("staa", MODE_DIR, "*%s", tmp);
           offset++;
         }
 
       freeXBases (&xbases);
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+      emitOp ("ldaa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
       freeTemp ();
@@ -5862,7 +5862,7 @@ genOr (iCode * ic, iCode * ifx)
         {
           freeTemp ();
         }
-      mc6800_emitOp ("tsta", MODE_INH, "");
+      emitOp ("tsta", MODE_INH, "");
 
       pullAccs (pushedaccs);
 
@@ -6072,7 +6072,7 @@ genXor (iCode * ic, iCode * ifx)
             {
               if (AOP_TYPE (right) == AOP_LIT && ((ullFromVal (AOP (right)->aopu.aop_lit) >> (offset * 8)) & 0xff) == 0)
                 {
-                  mc6800_emitOp ("tstb", MODE_INH, "");
+                  emitOp ("tstb", MODE_INH, "");
                 }
               else
                 {
@@ -6087,7 +6087,7 @@ genXor (iCode * ic, iCode * ifx)
               loadRegFromAop (mc6800_reg_a, AOP (left), offset);
               if (AOP_TYPE (right) == AOP_LIT && ((ullFromVal (AOP (right)->aopu.aop_lit) >> (offset * 8)) & 0xff) == 0)
                 {
-                  mc6800_emitOp ("tsta", MODE_INH, "");
+                  emitOp ("tsta", MODE_INH, "");
                 }
               else
                 {
@@ -6354,10 +6354,10 @@ genRRC (iCode * ic)
       setupXBases (&xbases, AOP (left), NULL, AOP (result));
       switchXToAop (&xbases, AOP (left));
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-      mc6800_emitOp ("lsra", MODE_INH, "");
-      mc6800_emitOp ("rorb", MODE_INH, "");
+      emitOp ("lsra", MODE_INH, "");
+      emitOp ("rorb", MODE_INH, "");
       emitBranch ("bcc", tlbl);
-      mc6800_emitOp ("oraa", MODE_IMM, "#0x80");
+      emitOp ("oraa", MODE_IMM, "#0x80");
       if (!regalloc_dry_run)
         emitLabel (tlbl);
       mc6800_dirtyReg (mc6800_reg_d, false);
@@ -6372,13 +6372,13 @@ genRRC (iCode * ic)
       setupXBases (&xbases, AOP (left), NULL, AOP (result));
       switchXToAop (&xbases, AOP (left));
       loadRegFromAop (mc6800_reg_a, AOP (left), 0);
-      mc6800_emitOp ("lsra", MODE_INH, "");
+      emitOp ("lsra", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
       for (offset = size - 1; offset >= 0; offset--)
         {
           switchXToAop (&xbases, AOP (left));
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          mc6800_emitOp ("rora", MODE_INH, "");
+          emitOp ("rora", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_a, false);
           switchXToAop (&xbases, AOP (result));
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
@@ -6425,9 +6425,9 @@ genRLC (iCode * ic)
       setupXBases (&xbases, AOP (left), NULL, AOP (result));
       switchXToAop (&xbases, AOP (left));
       loadRegFromAop (mc6800_reg_d, AOP (left), 0);
-      mc6800_emitOp ("aslb", MODE_INH, "");
-      mc6800_emitOp ("rola", MODE_INH, "");
-      mc6800_emitOp ("adcb", MODE_IMM, "#0x00");
+      emitOp ("aslb", MODE_INH, "");
+      emitOp ("rola", MODE_INH, "");
+      emitOp ("adcb", MODE_IMM, "#0x00");
       mc6800_dirtyReg (mc6800_reg_d, false);
       switchXToAop (&xbases, AOP (result));
       storeRegToAop (mc6800_reg_d, AOP (result), 0);
@@ -6440,13 +6440,13 @@ genRLC (iCode * ic)
       setupXBases (&xbases, AOP (left), NULL, AOP (result));
       switchXToAop (&xbases, AOP (left));
       loadRegFromAop (mc6800_reg_a, AOP (left), size - 1);
-      mc6800_emitOp ("asla", MODE_INH, "");
+      emitOp ("asla", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_a, false);
       for (offset = 0; offset < size; offset++)
         {
           switchXToAop (&xbases, AOP (left));
           loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-          mc6800_emitOp ("rola", MODE_INH, "");
+          emitOp ("rola", MODE_INH, "");
           mc6800_dirtyReg (mc6800_reg_a, false);
           switchXToAop (&xbases, AOP (result));
           storeRegToAop (mc6800_reg_a, AOP (result), offset);
@@ -6493,12 +6493,12 @@ genGetAbit (iCode * ic)
   loadRegFromAop (reg, AOP (left), shCount / 8);
   shCount %= 8;
   if (AOP_TYPE (result) == AOP_CRY)
-    mc6800_emitOpWithAcc ("bit", reg, MODE_IMM, "#0x%02x", 1 << shCount);
+    emitOpWithAcc ("bit", reg, MODE_IMM, "#0x%02x", 1 << shCount);
   else
     {
       while (shCount--)
-        mc6800_emitOpWithAcc ("lsr", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x01");
+        emitOpWithAcc ("lsr", reg, MODE_INH, "");
+      emitOpWithAcc ("and", reg, MODE_IMM, "#0x01");
       mc6800_dirtyReg (reg, false);
       storeRegToFullAop (reg, AOP (result), false);
     }
@@ -6639,9 +6639,9 @@ genSwap (iCode * ic)
   switchXToAop (&xbases, AOP (left));
   if (IS_AOP_D (AOP (left)))
     {
-      mc6800_emitOp ("psha", MODE_INH, "");
-      mc6800_emitOp ("tba", MODE_INH, "");
-      mc6800_emitOp ("pulb", MODE_INH, "");
+      emitOp ("psha", MODE_INH, "");
+      emitOp ("tba", MODE_INH, "");
+      emitOp ("pulb", MODE_INH, "");
     }
   else
     {
@@ -6670,8 +6670,8 @@ AccRol (reg_info *reg, int shCount)
     {
       while (shCount--)
         {
-          mc6800_emitOpWithAcc ("asl", reg, MODE_INH, "");
-          mc6800_emitOpWithAcc ("adc", reg, MODE_IMM, "#0x00");
+          emitOpWithAcc ("asl", reg, MODE_INH, "");
+          emitOpWithAcc ("adc", reg, MODE_IMM, "#0x00");
         }
     }
   else
@@ -6680,18 +6680,18 @@ AccRol (reg_info *reg, int shCount)
         {
           if (optimize.codeSize && !optimize.codeSpeed)
             {
-              mc6800_emitOpWithAcc ("psh", reg, MODE_INH, "");
-              mc6800_emitOpWithAcc ("lsr", reg, MODE_INH, "");
-              mc6800_emitOpWithAcc ("pul", reg, MODE_INH, "");
-              mc6800_emitOpWithAcc ("ror", reg, MODE_INH, "");
+              emitOpWithAcc ("psh", reg, MODE_INH, "");
+              emitOpWithAcc ("lsr", reg, MODE_INH, "");
+              emitOpWithAcc ("pul", reg, MODE_INH, "");
+              emitOpWithAcc ("ror", reg, MODE_INH, "");
             }
           else
             {
               symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (NULL);
 
-              mc6800_emitOpWithAcc ("lsr", reg, MODE_INH, "");
+              emitOpWithAcc ("lsr", reg, MODE_INH, "");
               emitBranch ("bcc", tlbl);
-              mc6800_emitOpWithAcc ("ora", reg, MODE_IMM, "#0x80");
+              emitOpWithAcc ("ora", reg, MODE_IMM, "#0x80");
               if (!regalloc_dry_run)
                 emitLabel (tlbl);
             }
@@ -6714,17 +6714,17 @@ AccLsh (reg_info *reg, int shCount)
   switch (shCount)
     {
     case 6:
-      mc6800_emitOpWithAcc ("ror", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("ror", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("ror", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0xc0");
+      emitOpWithAcc ("ror", reg, MODE_INH, "");
+      emitOpWithAcc ("ror", reg, MODE_INH, "");
+      emitOpWithAcc ("ror", reg, MODE_INH, "");
+      emitOpWithAcc ("and", reg, MODE_IMM, "#0xc0");
       /* total: 8 cycles, 5 bytes */
       mc6800_dirtyReg (reg, false);
       return;
     case 7:
-      mc6800_emitOpWithAcc ("ror", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0");
-      mc6800_emitOpWithAcc ("ror", reg, MODE_INH, "");
+      emitOpWithAcc ("ror", reg, MODE_INH, "");
+      emitOpWithAcc ("lda", reg, MODE_IMM, "#0");
+      emitOpWithAcc ("ror", reg, MODE_INH, "");
       /* total: 6 cycles, 4 bytes */
       mc6800_dirtyReg (reg, false);
       return;
@@ -6733,7 +6733,7 @@ AccLsh (reg_info *reg, int shCount)
   /* asla and aslb are 2 cycles and 1 byte each, so an unrolled   */
   /* loop is used for the shift counts below 6.                   */
   for (i = 0; i < shCount; i++)
-    mc6800_emitOpWithAcc ("asl", reg, MODE_INH, "");
+    emitOpWithAcc ("asl", reg, MODE_INH, "");
   mc6800_dirtyReg (reg, false);
 }
 
@@ -6750,16 +6750,16 @@ AccSRsh (reg_info *reg, int shCount)
 
   if (shCount == 7)
     {
-      mc6800_emitOpWithAcc ("rol", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
-      mc6800_emitOpWithAcc ("sbc", reg, MODE_IMM, "#0x00");
+      emitOpWithAcc ("rol", reg, MODE_INH, "");
+      emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+      emitOpWithAcc ("sbc", reg, MODE_IMM, "#0x00");
       /* total: 6 cycles, 5 bytes */
       mc6800_dirtyReg (reg, false);
       return;
     }
 
   for (i = 0; i < shCount; i++)
-    mc6800_emitOpWithAcc ("asr", reg, MODE_INH, "");
+    emitOpWithAcc ("asr", reg, MODE_INH, "");
   mc6800_dirtyReg (reg, false);
 }
 
@@ -6783,17 +6783,17 @@ AccRsh (reg_info *reg, int shCount, bool sign)
   switch (shCount)
     {
     case 6:
-      mc6800_emitOpWithAcc ("rol", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("rol", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("rol", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x03");
+      emitOpWithAcc ("rol", reg, MODE_INH, "");
+      emitOpWithAcc ("rol", reg, MODE_INH, "");
+      emitOpWithAcc ("rol", reg, MODE_INH, "");
+      emitOpWithAcc ("and", reg, MODE_IMM, "#0x03");
       /* total: 8 cycles, 5 bytes */
       mc6800_dirtyReg (reg, false);
       return;
     case 7:
-      mc6800_emitOpWithAcc ("rol", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("rol", reg, MODE_INH, "");
-      mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x01");
+      emitOpWithAcc ("rol", reg, MODE_INH, "");
+      emitOpWithAcc ("rol", reg, MODE_INH, "");
+      emitOpWithAcc ("and", reg, MODE_IMM, "#0x01");
       /* total: 6 cycles, 4 bytes */
       mc6800_dirtyReg (reg, false);
       return;
@@ -6802,7 +6802,7 @@ AccRsh (reg_info *reg, int shCount, bool sign)
   /* lsra and lsrb are 2 cycles and 1 byte each, so an unrolled   */
   /* loop is used for the shift counts below 6.                   */ /* TODO */
   for (i = 0; i < shCount; i++)
-    mc6800_emitOpWithAcc ("lsr", reg, MODE_INH, "");
+    emitOpWithAcc ("lsr", reg, MODE_INH, "");
   mc6800_dirtyReg (reg, false);
 }
 
@@ -6832,7 +6832,7 @@ genlshOne (operand * result, operand * left, int shCount)
   loadRegFromAop (reg, AOP (left), LSB);
   AccLsh (reg, shCount); // Shift left accumulator.
   if (bytemask != 0xff)
-    mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", bytemask);
+    emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", bytemask);
   storeRegToAop (reg, AOP (result), LSB);
   pullOrFreeReg (reg, needpull);
 }
@@ -6866,7 +6866,7 @@ genlshTwo (operand *result, operand *left, int shCount)
           AccLsh (mc6800_reg_a, shCount);
           if (maskedtopbyte)
             {
-              mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
+              emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
             }
           storeRegToAop (mc6800_reg_a, AOP (result), 1);
         }
@@ -6887,7 +6887,7 @@ genlshTwo (operand *result, operand *left, int shCount)
         }
       if (maskedtopbyte)
         {
-          mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
+          emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
         }
       storeRegToFullAop (mc6800_reg_d, AOP (result), 0);
       pullOrFreeReg (mc6800_reg_b, needpullb);
@@ -6950,7 +6950,7 @@ genlshFour (operand * result, operand * left, int shCount)
       bool needpulla = pushRegIfUsed (mc6800_reg_a);
 
       loadRegFromAop (mc6800_reg_a, AOP (result), size - 1);
-      mc6800_emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
+      emitOp ("anda", MODE_IMM, "#0x%02x", topbytemask);
       storeRegToAop (mc6800_reg_a, AOP (result), size - 1);
       pullOrFreeReg (mc6800_reg_a, needpulla);
     }
@@ -7167,9 +7167,9 @@ genLeftShift (iCode *ic)
   if (tmp && !valueind)
     {
       if (IS_AOP_X (AOP (right)))
-        mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+        emitOp ("stx", MODE_DIR, "*%s", tmp);
       else
-        mc6800_emitOpWithAcc ("sta", AOP (right)->aopu.aop_reg[0], MODE_DIR, "*%s", tmp);
+        emitOpWithAcc ("sta", AOP (right)->aopu.aop_reg[0], MODE_DIR, "*%s", tmp);
     }
 
   setupXBases (&xbases, AOP (left), AOP (right), AOP (result));
@@ -7216,19 +7216,19 @@ genLeftShift (iCode *ic)
     }
   else if (valueind)
     {
-      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+      emitOp ("staa", MODE_DIR, "*%s", tmp);
       switchXToAop (&xbases, AOP (right));
       loadRegFromAop (mc6800_reg_a, AOP (right), 0);
     }
   else if (tmp)
-    mc6800_emitOp ("tst", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
+    emitOp ("tst", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
   else if (AOP_TYPE (right) != AOP_REG && AOP_TYPE (result) == AOP_REG)
     {
       switchXToAop (&xbases, AOP (right));
       loadRegFromAop (countreg, AOP (right), 0);
     }
   else
-    mc6800_emitOpWithAcc ("tst", countreg, MODE_INH, "");
+    emitOpWithAcc ("tst", countreg, MODE_INH, "");
 
   tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
@@ -7239,8 +7239,8 @@ genLeftShift (iCode *ic)
     emitLabel (tlbl);
   if (valueind && tmp)
     {
-      mc6800_emitOp ("aslb", MODE_INH, "");
-      mc6800_emitOp ("rol", MODE_EXT, "%s", tmp);
+      emitOp ("aslb", MODE_INH, "");
+      emitOp ("rol", MODE_EXT, "%s", tmp);
       mc6800_dirtyReg (mc6800_reg_b, false);
     }
   else
@@ -7253,11 +7253,11 @@ genLeftShift (iCode *ic)
         }
     }
   if (countinx)
-    mc6800_emitOp ("dex", MODE_INH, "");
+    emitOp ("dex", MODE_INH, "");
   else if (countreg)
     rmwWithReg ("dec", countreg);
   else
-    mc6800_emitOp ("dec", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
+    emitOp ("dec", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
   emitBranch ("bne", tlbl);
   if (!skipzero && !regalloc_dry_run)
     emitLabel (tlbl1);
@@ -7266,19 +7266,19 @@ genLeftShift (iCode *ic)
     mc6800_dirtyReg (mc6800_reg_x, true);
   else if (valueind)
     {
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+      emitOp ("ldaa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
     }
 
   if (topbytemask != 0xff)
     {
       if (valueind || AOP_TYPE (result) == AOP_REG)
-        mc6800_emitOpWithAcc ("and", valueaop->aopu.aop_reg[size - 1], MODE_IMM, "#0x%02x", topbytemask);
+        emitOpWithAcc ("and", valueaop->aopu.aop_reg[size - 1], MODE_IMM, "#0x%02x", topbytemask);
       else
         {
           switchXToAop (&xbases, AOP (result));
           loadRegFromAop (copyacc, AOP (result), size - 1);
-          mc6800_emitOpWithAcc ("and", copyacc, MODE_IMM, "#0x%02x", topbytemask);
+          emitOpWithAcc ("and", copyacc, MODE_IMM, "#0x%02x", topbytemask);
           storeRegToAop (copyacc, AOP (result), size - 1);
         }
     }
@@ -7564,9 +7564,9 @@ genRightShift (iCode *ic)
   if (tmp && !valueind)
     {
       if (IS_AOP_X (AOP (right)))
-        mc6800_emitOp ("stx", MODE_DIR, "*%s", tmp);
+        emitOp ("stx", MODE_DIR, "*%s", tmp);
       else
-        mc6800_emitOpWithAcc ("sta", AOP (right)->aopu.aop_reg[0], MODE_DIR, "*%s", tmp);
+        emitOpWithAcc ("sta", AOP (right)->aopu.aop_reg[0], MODE_DIR, "*%s", tmp);
     }
 
   setupXBases (&xbases, AOP (left), AOP (right), AOP (result));
@@ -7613,19 +7613,19 @@ genRightShift (iCode *ic)
     }
   else if (valueind)
     {
-      mc6800_emitOp ("staa", MODE_DIR, "*%s", tmp);
+      emitOp ("staa", MODE_DIR, "*%s", tmp);
       switchXToAop (&xbases, AOP (right));
       loadRegFromAop (mc6800_reg_a, AOP (right), 0);
     }
   else if (tmp)
-    mc6800_emitOp ("tst", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
+    emitOp ("tst", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
   else if (AOP_TYPE (right) != AOP_REG && AOP_TYPE (result) == AOP_REG)
     {
       switchXToAop (&xbases, AOP (right));
       loadRegFromAop (countreg, AOP (right), 0);
     }
   else
-    mc6800_emitOpWithAcc ("tst", countreg, MODE_INH, "");
+    emitOpWithAcc ("tst", countreg, MODE_INH, "");
 
   tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
   tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
@@ -7636,8 +7636,8 @@ genRightShift (iCode *ic)
     emitLabel (tlbl);
   if (valueind && tmp)
     {
-      mc6800_emitOp (sign ? "asr" : "lsr", MODE_EXT, "%s", tmp);
-      mc6800_emitOp ("rorb", MODE_INH, "");
+      emitOp (sign ? "asr" : "lsr", MODE_EXT, "%s", tmp);
+      emitOp ("rorb", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_b, false);
     }
   else
@@ -7650,11 +7650,11 @@ genRightShift (iCode *ic)
         }
     }
   if (countinx)
-    mc6800_emitOp ("dex", MODE_INH, "");
+    emitOp ("dex", MODE_INH, "");
   else if (countreg)
     rmwWithReg ("dec", countreg);
   else
-    mc6800_emitOp ("dec", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
+    emitOp ("dec", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
   emitBranch ("bne", tlbl);
   if (!skipzero && !regalloc_dry_run)
     emitLabel (tlbl1);
@@ -7663,7 +7663,7 @@ genRightShift (iCode *ic)
     mc6800_dirtyReg (mc6800_reg_x, true);
   else if (valueind)
     {
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", tmp);
+      emitOp ("ldaa", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_a, false);
     }
 
@@ -7781,16 +7781,16 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
       if (!ifx)
         {
           AccRsh (reg, bstr, false);
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen));
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen));
           mc6800_dirtyReg (reg, false);
           if (!SPEC_USIGN (etype) && !IS_BOOLEAN (etype))
             {
               /* signed bitfield */
               symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-              mc6800_emitOpWithAcc ("bit", reg, MODE_IMM, "#0x%02x", 1 << (blen - 1));
+              emitOpWithAcc ("bit", reg, MODE_IMM, "#0x%02x", 1 << (blen - 1));
               emitBranch ("beq", tlbl);
-              mc6800_emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02x", (unsigned char) (0xff << blen));
+              emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02x", (unsigned char) (0xff << blen));
               if (!regalloc_dry_run)
                 emitLabel (tlbl);
             }
@@ -7799,7 +7799,7 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
         }
       else
         {
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (((unsigned char) - 1) >> (8 - blen)) << bstr);
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (((unsigned char) - 1) >> (8 - blen)) << bstr);
           mc6800_dirtyReg (reg, false);
         }
       goto finish;
@@ -7811,7 +7811,7 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
       switchXToAop (&xbases, derefaop);
       loadRegFromAop (reg, derefaop, size - offset - 1);
       if (blen % 8)
-        mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen % 8));
+        emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - blen % 8));
       while (offset--)
         {
           switchXToAop (&xbases, derefaop);
@@ -7837,15 +7837,15 @@ genUnpackBitsImmed (operand * left, operand *right, operand * result, iCode * ic
     {
       switchXToAop (&xbases, derefaop);
       loadRegFromAop (reg, derefaop, size - offset - 1);
-      mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - rlen));
+      emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", ((unsigned char) - 1) >> (8 - rlen));
       if (!SPEC_USIGN (etype) && !IS_BOOLEAN (etype))
         {
           /* signed bitfield */
           symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-          mc6800_emitOpWithAcc ("bit", reg, MODE_IMM, "#0x%02x", 1 << (rlen - 1));
+          emitOpWithAcc ("bit", reg, MODE_IMM, "#0x%02x", 1 << (rlen - 1));
           emitBranch ("beq", tlbl);
-          mc6800_emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02x", (unsigned char) (0xff << rlen));
+          emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02x", (unsigned char) (0xff << rlen));
           if (!regalloc_dry_run)
             emitLabel (tlbl);
         }
@@ -8058,7 +8058,7 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
       if (needrestorex)
         {
           pullReg (mc6800_reg_x);
-          mc6800_emitOpWithAcc ("tst", acc, MODE_INH, "");
+          emitOpWithAcc ("tst", acc, MODE_INH, "");
         }
       if (acc)
         pullAccs (pushedaccs);
@@ -8199,9 +8199,9 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
           switchXToAop (&xbases, derefaop);
           loadRegFromAop (reg, derefaop, 0);
           if ((mask | litval) != 0xff)
-            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", mask);
+            emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", mask);
           if (litval)
-            mc6800_emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02llx", litval);
+            emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02llx", litval);
           mc6800_dirtyReg (reg, false);
           storeRegToAop (reg, derefaop, 0);
           goto release;
@@ -8215,17 +8215,17 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
-          mc6800_emitOpWithAcc ("sta", reg, MODE_DIR, "*%s", tmp);
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          emitOpWithAcc ("sta", reg, MODE_DIR, "*%s", tmp);
           loadRegFromAop (reg, derefaop, 0);
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", mask);
-          mc6800_emitOpWithAcc ("ora", reg, MODE_DIR, "*%s", tmp);
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", mask);
+          emitOpWithAcc ("ora", reg, MODE_DIR, "*%s", tmp);
           freeTemp ();
         }
       else
         {
           accopWithAop ("eor", reg, derefaop, 0);
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
           accopWithAop ("eor", reg, derefaop, 0);
         }
       mc6800_dirtyReg (reg, false);
@@ -8275,9 +8275,9 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
           switchXToAop (&xbases, derefaop);
           loadRegFromAop (reg, derefaop, size - offset - 1);
           if ((mask | litval) != 0xff)
-            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", mask);
+            emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", mask);
           if (litval)
-            mc6800_emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02llx", litval);
+            emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02llx", litval);
           mc6800_dirtyReg (reg, false);
           storeRegToAop (reg, derefaop, size - offset - 1);
           goto release;
@@ -8290,17 +8290,17 @@ genPackBitsImmed (operand * result, operand * left, sym_link * etype, operand * 
         {
           const char *tmp = allocTemp ();
 
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
-          mc6800_emitOpWithAcc ("sta", reg, MODE_DIR, "*%s", tmp);
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          emitOpWithAcc ("sta", reg, MODE_DIR, "*%s", tmp);
           loadRegFromAop (reg, derefaop, size - offset - 1);
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", mask);
-          mc6800_emitOpWithAcc ("ora", reg, MODE_DIR, "*%s", tmp);
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", mask);
+          emitOpWithAcc ("ora", reg, MODE_DIR, "*%s", tmp);
           freeTemp ();
         }
       else
         {
           accopWithAop ("eor", reg, derefaop, size - offset - 1);
-          mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
+          emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", (~mask) & 0xff);
           accopWithAop ("eor", reg, derefaop, size - offset - 1);
         }
       mc6800_dirtyReg (reg, false);
@@ -8342,7 +8342,7 @@ genDataPointerSet1 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
   if (right->type == AOP_LIT && !derefvolatile && !ullFromVal (right->aopu.aop_lit))
     {
       setupXForAop (derefaop);
-      mc6800_emitOp_o ("clr", derefaop, 0);
+      emitOp_o ("clr", derefaop, 0);
       return;
     }
 
@@ -8438,7 +8438,7 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
     {
       setupXForAop (derefaop);
       for (offset = 1; offset >= 0; offset--)
-        mc6800_emitOp_o ("clr", derefaop, offset);
+        emitOp_o ("clr", derefaop, offset);
       return;
     }
 
@@ -8452,7 +8452,7 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
           int c = byteOfVal (right->aopu.aop_lit, offset);
 
           if (!c && !derefvolatile)
-            mc6800_emitOp_o ("clr", derefaop, offset);
+            emitOp_o ("clr", derefaop, offset);
           else
             {
               loadRegFromConst (acc, c);
@@ -8503,7 +8503,7 @@ genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile, const 
     {
       setupXForAop (derefaop);
       for (offset = derefaop->size - 1; offset >= 0; offset--)
-        mc6800_emitOp_o ("clr", derefaop, offset);
+        emitOp_o ("clr", derefaop, offset);
       return;
     }
 
@@ -8517,7 +8517,7 @@ genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile, const 
           int c = byteOfVal (right->aopu.aop_lit, offset);
 
           if (!c && !derefvolatile)
-            mc6800_emitOp_o ("clr", derefaop, offset);
+            emitOp_o ("clr", derefaop, offset);
           else
             {
               loadRegFromConst (acc, c);
@@ -8681,16 +8681,16 @@ genIfx (iCode * ic)
       reg_info *reg = aop->type == AOP_REG ? aop->aopu.aop_reg[0] : NULL;
 
       if (aop->size == 1 && (reg == mc6800_reg_a || reg == mc6800_reg_b))
-        mc6800_emitOpWithAcc ("tst", reg, MODE_INH, "");
+        emitOpWithAcc ("tst", reg, MODE_INH, "");
       else if (IS_AOP_X (aop))
-        mc6800_emitOp ("cpx", MODE_IMM, "#0");
+        emitOp ("cpx", MODE_IMM, "#0");
       else if (IS_AOP_D (aop))
         {
           symbol *tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
 
-          mc6800_emitOp ("tstb", MODE_INH, "");
+          emitOp ("tstb", MODE_INH, "");
           emitBranch ("bne", tlbl);
-          mc6800_emitOp ("tsta", MODE_INH, "");
+          emitOp ("tsta", MODE_INH, "");
           if (!regalloc_dry_run)
             emitLabel (tlbl);
         }
@@ -8699,7 +8699,7 @@ genIfx (iCode * ic)
       else if (aop->size == 2 && !IS_FLOAT (operandType (cond)) && mc6800_reg_x->isFree &&
         (aop->type == AOP_DIR || aop->type == AOP_EXT || aop->type == AOP_IMMD))
         {
-          mc6800_emitOpw_o ("ldx", aop, 0);
+          emitOpw_o ("ldx", aop, 0);
           mc6800_dirtyReg (mc6800_reg_x, false);
         }
       else if (aop->size == 1 && !regDead (A_IDX, ic) && !regDead (B_IDX, ic))
@@ -8712,7 +8712,7 @@ genIfx (iCode * ic)
           pushedaccs = pushLiveAccs (ic, reg->mask);
           loadRegFromAop (reg, aop, offset--);
           if (IS_FLOAT (operandType (cond)))
-            mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
+            emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
           while (offset >= 0)
             accopWithAop ("ora", reg, aop, offset--);
           if (aop->size > 1)
@@ -8980,10 +8980,10 @@ genAssign2 (operand *result, operand *right, iCode *ic)
       pushedaccs = pushLiveAccs (ic, acc->mask);
       setupXForAop (AOP (right));
       loadRegFromAop (acc, AOP (right), 0);
-      mc6800_emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
+      emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", tmp);
       pullAccs (pushedaccs);
-      mc6800_emitOp ("clr", MODE_EXT, "%s", tmp);
-      mc6800_emitOp ("ldx", MODE_DIR, "*%s", tmp);
+      emitOp ("clr", MODE_EXT, "%s", tmp);
+      emitOp ("ldx", MODE_DIR, "*%s", tmp);
       freeTemp ();
       mc6800_dirtyReg (mc6800_reg_x, false);
       return;
@@ -9189,7 +9189,7 @@ genJumpTab (iCode * ic)
 
       loadRegFromAop (mc6800_reg_b, AOP (IC_JTCOND (ic)), 0);
       freeAsmop (IC_JTCOND (ic), NULL, ic, true);
-      mc6800_emitOp ("tstb", MODE_INH, "");
+      emitOp ("tstb", MODE_INH, "");
       for (jtab = setFirstItem (IC_JTLABELS (ic)); jtab; jtab = setNextItem (IC_JTLABELS (ic)))
         {
           symbol *tlbl;
@@ -9200,7 +9200,7 @@ genJumpTab (iCode * ic)
               break;
             }
           if (count + 1 < elementsInSet (IC_JTLABELS (ic)))
-            mc6800_emitOp ("decb", MODE_INH, "");
+            emitOp ("decb", MODE_INH, "");
           tlbl = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
           emitBranch ("bne", tlbl);
           emitBranch ("jmp", jtab);
@@ -9216,15 +9216,15 @@ genJumpTab (iCode * ic)
   pushedaccs = pushLiveAccs (ic, MC6800MASK_D);
   loadRegFromAop (mc6800_reg_b, AOP (IC_JTCOND (ic)), 0);
   freeAsmop (IC_JTCOND (ic), NULL, ic, true);
-  mc6800_emitOp ("clra", MODE_INH, "");
-  mc6800_emitOp ("aslb", MODE_INH, "");
-  mc6800_emitOp ("rola", MODE_INH, "");
-  mc6800_emitOp ("addb", MODE_IMM, "#<%05d$", regalloc_dry_run ? 0 : labelKey2num (jtablbl->key));
-  mc6800_emitOp ("adca", MODE_IMM, "#>%05d$", regalloc_dry_run ? 0 : labelKey2num (jtablbl->key));
+  emitOp ("clra", MODE_INH, "");
+  emitOp ("aslb", MODE_INH, "");
+  emitOp ("rola", MODE_INH, "");
+  emitOp ("addb", MODE_IMM, "#<%05d$", regalloc_dry_run ? 0 : labelKey2num (jtablbl->key));
+  emitOp ("adca", MODE_IMM, "#>%05d$", regalloc_dry_run ? 0 : labelKey2num (jtablbl->key));
   transferRegReg (mc6800_reg_d, mc6800_reg_x, false);
-  mc6800_emitOp ("ldx", MODE_IDX, "0,x");
+  emitOp ("ldx", MODE_IDX, "0,x");
   pullAccs (pushedaccs);
-  mc6800_emitOp ("jmp", MODE_IDX, "0,x");
+  emitOp ("jmp", MODE_IDX, "0,x");
 
   if (!regalloc_dry_run)
     emitLabel (jtablbl);
@@ -9242,13 +9242,13 @@ fixTopByte (reg_info *reg, sym_link *resulttype)
   int topbits = SPEC_BITINTWIDTH (resulttype) % 8;
   unsigned topbytemask = 0xff >> (8 - topbits);
 
-  mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
+  emitOpWithAcc ("and", reg, MODE_IMM, "#0x%02x", topbytemask);
   if (!SPEC_USIGN (resulttype))
     {
       symbol *tlbl = regalloc_dry_run ? 0 : newiTempLabel (0);
-      mc6800_emitOpWithAcc ("bit", reg, MODE_IMM, "#0x%02x", 1u << (topbits - 1));
+      emitOpWithAcc ("bit", reg, MODE_IMM, "#0x%02x", 1u << (topbits - 1));
       emitBranch ("beq", tlbl);
-      mc6800_emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02x", ~topbytemask & 0xff);
+      emitOpWithAcc ("ora", reg, MODE_IMM, "#0x%02x", ~topbytemask & 0xff);
       emitLabel (tlbl);
     }
 }
@@ -9352,10 +9352,10 @@ genCast2 (operand *result, operand *right, bool fixtopbyte, iCode *ic)
           loadRegFromAop (mc6800_reg_b, AOP (right), 0);
           if (signExtend)
             {
-              mc6800_emitOp ("tba", MODE_INH, "");
-              mc6800_emitOp ("rola", MODE_INH, "");
-              mc6800_emitOp ("ldaa", MODE_IMM, "#0x00");
-              mc6800_emitOp ("sbca", MODE_IMM, "#0x00");
+              emitOp ("tba", MODE_INH, "");
+              emitOp ("rola", MODE_INH, "");
+              emitOp ("ldaa", MODE_IMM, "#0x00");
+              emitOp ("sbca", MODE_IMM, "#0x00");
               mc6800_dirtyReg (mc6800_reg_a, false);
               mc6800_useReg (mc6800_reg_a);
             }
@@ -9408,8 +9408,8 @@ genCast2 (operand *result, operand *right, bool fixtopbyte, iCode *ic)
       if (signExtend)
         {
           rmwWithReg ("rol", acc);
-          mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
-          mc6800_emitOpWithAcc ("sbc", acc, MODE_IMM, "#0x00");
+          emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
+          emitOpWithAcc ("sbc", acc, MODE_IMM, "#0x00");
           mc6800_dirtyReg (acc, false);
           if (fixtopbyte)
             fixTopByte (acc, resulttype);
@@ -9433,8 +9433,8 @@ genCast2 (operand *result, operand *right, bool fixtopbyte, iCode *ic)
       if (signExtend)
         {
           rmwWithReg ("rol", acc);
-          mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
-          mc6800_emitOpWithAcc ("sbc", acc, MODE_IMM, "#0x00");
+          emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
+          emitOpWithAcc ("sbc", acc, MODE_IMM, "#0x00");
           mc6800_dirtyReg (acc, false);
           if (fixtopbyte)
             fixTopByte (acc, resulttype);
@@ -9542,8 +9542,8 @@ genCastMANY (operand *result, operand *right, bool fixtopbyte, const iCode *ic)
       if (signExtend)
         {
           rmwWithReg ("rol", acc);
-          mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
-          mc6800_emitOpWithAcc ("sbc", acc, MODE_IMM, "#0x00");
+          emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
+          emitOpWithAcc ("sbc", acc, MODE_IMM, "#0x00");
           mc6800_dirtyReg (acc, false);
           for (offset = AOP_SIZE (right); offset <= top; offset++)
             {
@@ -9583,8 +9583,8 @@ genCastMANY (operand *result, operand *right, bool fixtopbyte, const iCode *ic)
   if (signExtend)
     {
       rmwWithReg ("rol", acc);
-      mc6800_emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
-      mc6800_emitOpWithAcc ("sbc", acc, MODE_IMM, "#0x00");
+      emitOpWithAcc ("lda", acc, MODE_IMM, "#0x00");
+      emitOpWithAcc ("sbc", acc, MODE_IMM, "#0x00");
       mc6800_dirtyReg (acc, false);
       for (offset = AOP_SIZE (right); offset <= top; offset++)
         {
@@ -9670,9 +9670,9 @@ genCast (iCode * ic)
         loadRegFromConst (reg, 1);
       else if (aop->type == AOP_REG && aop->size == 1)
         {
-          mc6800_emitOpWithAcc ("cmp", aop->aopu.aop_reg[0], MODE_IMM, "#0x01");
-          mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
-          mc6800_emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
+          emitOpWithAcc ("cmp", aop->aopu.aop_reg[0], MODE_IMM, "#0x01");
+          emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+          emitOpWithAcc ("sbc", reg, MODE_IMM, "#0xff");
         }
       else if (aop->type != AOP_REG && aop->size == 1)
         {
@@ -9684,8 +9684,8 @@ genCast (iCode * ic)
         {
           if (IS_AOP_D (aop))
             {
-              mc6800_emitOp ("aba", MODE_INH, "");
-              mc6800_emitOp ("adca", MODE_IMM, "#0xff");
+              emitOp ("aba", MODE_INH, "");
+              emitOp ("adca", MODE_IMM, "#0xff");
             }
           else if (aop->type == AOP_REG)
             werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "Bad rIdx in genCast");
@@ -9693,13 +9693,13 @@ genCast (iCode * ic)
             {
               loadRegFromAop (reg, aop, offset--);
               if (IS_FLOAT (operandType (right)))
-                mc6800_emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
+                emitOpWithAcc ("and", reg, MODE_IMM, "#0x7F");
               accopWithAop ("add", reg, aop, offset--);
               while (offset >= 0)
                 accopWithAop ("adc", reg, aop, offset--);
-              mc6800_emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
+              emitOpWithAcc ("adc", reg, MODE_IMM, "#0xff");
             }
-          mc6800_emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+          emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
           rmwWithReg ("rol", reg);
         }
       mc6800_dirtyReg (reg, false);
@@ -9828,11 +9828,11 @@ genCritical (iCode * ic)
     aopOp (IC_RESULT (ic), ic, true);
 
   if (!regDead (A_IDX, ic))
-    mc6800_emitOp ("staa", MODE_DIR, "*%s", allocTemp ());
+    emitOp ("staa", MODE_DIR, "*%s", allocTemp ());
 
-  mc6800_emitOp ("tpa", MODE_INH, "");
+  emitOp ("tpa", MODE_INH, "");
   mc6800_dirtyReg (mc6800_reg_a, false);
-  mc6800_emitOp ("sei", MODE_INH, "");
+  emitOp ("sei", MODE_INH, "");
 
   if (IC_RESULT (ic))
     storeRegToAop (mc6800_reg_a, AOP (IC_RESULT (ic)), 0);
@@ -9842,7 +9842,7 @@ genCritical (iCode * ic)
   mc6800_freeReg (mc6800_reg_a);
   if (!regDead (A_IDX, ic))
     {
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", freeTemp ());
+      emitOp ("ldaa", MODE_DIR, "*%s", freeTemp ());
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
     }
@@ -9859,25 +9859,25 @@ genEndCritical (iCode * ic)
   D (emitcode (";     genEndCritical", ""));
 
   if (!regDead (A_IDX, ic))
-    mc6800_emitOp ("staa", MODE_DIR, "*%s", allocTemp ());
+    emitOp ("staa", MODE_DIR, "*%s", allocTemp ());
 
   if (IC_RIGHT (ic))
     {
       aopOp (IC_RIGHT (ic), ic, false);
       loadRegFromAop (mc6800_reg_a, AOP (IC_RIGHT (ic)), 0);
-      mc6800_emitOp ("tap", MODE_INH, "");
+      emitOp ("tap", MODE_INH, "");
       mc6800_freeReg (mc6800_reg_a);
       freeAsmop (IC_RIGHT (ic), NULL, ic, true);
     }
   else
     {
       pullReg (mc6800_reg_a);
-      mc6800_emitOp ("tap", MODE_INH, "");
+      emitOp ("tap", MODE_INH, "");
     }
 
   if (!regDead (A_IDX, ic))
     {
-      mc6800_emitOp ("ldaa", MODE_DIR, "*%s", freeTemp ());
+      emitOp ("ldaa", MODE_DIR, "*%s", freeTemp ());
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_useReg (mc6800_reg_a);
     }
