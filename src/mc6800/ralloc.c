@@ -571,12 +571,75 @@ moveSendToCall (iCode *sic, eBBlock *ebp)
 
 
 /*---------------------------------------------------------------------*/
+/* removePointerCopy - make the get and set iCodes that use the offset */
+/*                     pointer use the base pointer, and delete dic    */
+/* All uses of pointer must follow dic in its basic block.             */
+/*---------------------------------------------------------------------*/
+static bool
+removePointerCopy (iCode * dic, operand * pointer, operand * nonOffsetOp, eBBlock * ebp)
+{
+  int nuses = bitVectnBitsOn (OP_USES (pointer));
+  int found = 0;
+  iCode *w;
+  iCode *last = NULL;
+
+  if (!IS_ITEMP (nonOffsetOp) || !IS_PTR (operandType (nonOffsetOp)) ||
+      DCL_TYPE (operandType (nonOffsetOp)) != DCL_TYPE (operandType (pointer)))
+    return false;
+
+  if (dic->seq < ebp->fSeq || dic->seq > ebp->lSeq || dic == ebp->ech)
+    return false;
+
+  for (w = dic->next; found < nuses; w = w->next)
+    {
+      bool defsBase = IC_RESULT (w) && IS_SYMOP (IC_RESULT (w)) && !POINTER_SET (w) &&
+        OP_SYMBOL (IC_RESULT (w))->key == OP_SYMBOL (nonOffsetOp)->key;
+
+      if (bitVectBitValue (OP_USES (pointer), w->key))
+        {
+          if (POINTER_SET (w) && IC_RIGHT (w) && IS_SYMOP (IC_RIGHT (w)) &&
+              OP_SYMBOL (IC_RIGHT (w))->key == OP_SYMBOL (pointer)->key)
+            return false;
+          found++;
+          last = w;
+        }
+      if (found < nuses && (defsBase || w == ebp->ech))
+        return false;
+    }
+
+  for (w = dic->next; ; w = w->next)
+    {
+      w->rlive = bitVectSetBit (w->rlive, OP_SYMBOL (nonOffsetOp)->key);
+      bitVectUnSetBit (w->rlive, OP_SYMBOL (pointer)->key);
+      if (bitVectBitValue (OP_USES (pointer), w->key))
+        {
+          operand **ptr = POINTER_GET (w) ? &IC_LEFT (w) : &IC_RESULT (w);
+          operand *newop = operandFromOperand (nonOffsetOp);
+
+          newop->isaddr = (*ptr)->isaddr;
+          *ptr = newop;
+          OP_USES (nonOffsetOp) = bitVectSetBit (OP_USES (nonOffsetOp), w->key);
+        }
+      if (w == last)
+        break;
+    }
+  if (OP_SYMBOL (nonOffsetOp)->liveTo < last->seq)
+    OP_SYMBOL (nonOffsetOp)->liveTo = last->seq;
+
+  bitVectUnSetBit (OP_USES (nonOffsetOp), dic->key);
+  bitVectUnSetBit (OP_DEFS (pointer), dic->key);
+  remiCodeFromeBBlock (ebp, dic);
+  hTabDeleteItem (&iCodehTab, dic->key, dic, DELETE_ITEM, NULL);
+  return true;
+}
+
+/*---------------------------------------------------------------------*/
 /* packPointerOp - see if we can move an offset from addition iCode    */
 /*                 to the pointer iCode to used indexed addr mode      */
 /* The z80-related ports do this in SDCCopt.c, offsetFoldUse()         */
 /*---------------------------------------------------------------------*/
 static void
-packPointerOp (iCode * ic)
+packPointerOp (iCode * ic, eBBlock * ebp)
 {
   operand * pointer;
   operand * offsetOp;
@@ -669,6 +732,9 @@ packPointerOp (iCode * ic)
             IC_LEFT (uic) = offsetOp;
         }
     }
+
+  if (removePointerCopy (dic, pointer, nonOffsetOp, ebp))
+    return;
 
   /* Put the remaining operand on the right and convert to assignment     */
   IC_RIGHT (dic) = nonOffsetOp;
@@ -795,7 +861,7 @@ packRegisters (eBBlock ** ebpp, int count)
             packRegsForOneuse (ic, &(IC_RIGHT (ic)), ebp);
 
           if (POINTER_SET (ic) || POINTER_GET (ic))
-            packPointerOp (ic);
+            packPointerOp (ic, ebp);
         }
     }
 }
