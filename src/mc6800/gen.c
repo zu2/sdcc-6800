@@ -5102,7 +5102,8 @@ genCmpEQorNE (iCode * ic, iCode * ifx)
       setupXForAop (AOP (left));
       loadRegFromAop (mc6800_reg_x, AOP (left), 0);
       emitOpw_o ("cpx", AOP (right), 0);
-      mc6800_freeReg (mc6800_reg_x);
+      if (regDead (X_IDX, ic))
+        mc6800_freeReg (mc6800_reg_x);
     }
   else if (AOP_TYPE (left) == AOP_STL)
     {
