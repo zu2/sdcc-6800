@@ -234,10 +234,7 @@ emitOp_o (const char *inst, asmop *aop, int loffset)
 
   if (regalloc_dry_run)
     return;
-  if (aop->type == AOP_DIR && mode == MODE_EXT)
-    emitcode (inst, "%s", aopGet (aop, loffset) + 1);
-  else
-    emitcode (inst, "%s", aopGet (aop, loffset));
+  emitcode (inst, "%s%s", mode == MODE_DIR ? "*" : "", aopGet (aop, loffset));
 }
 
 static void
@@ -280,7 +277,7 @@ emitOpw_o (const char *inst, asmop *aop, int loffset)
   else if (mode == MODE_IMM)
     emitcode (inst, "%s", aopGet (aop, loffset));
   else
-    emitcode (inst, "%s", aopGet (aop, loffset + 1));
+    emitcode (inst, "%s%s", mode == MODE_DIR ? "*" : "", aopGet (aop, loffset + 1));
 }
 
 static void
@@ -2140,14 +2137,6 @@ aopGet (asmop * aop, int loffset)
       return rs;
 
     case AOP_DIR:
-      if (offset)
-        sprintf (s, "*(%s + %d)", aop->aopu.aop_dir, offset);
-      else
-        sprintf (s, "*%s", aop->aopu.aop_dir);
-      rs = Safe_calloc (1, strlen (s) + 1);
-      strcpy (rs, s);
-      return rs;
-
     case AOP_EXT:
       if (offset)
         sprintf (s, "(%s + %d)", aop->aopu.aop_dir, offset);
@@ -6141,6 +6130,8 @@ expand_symbols (iCode * ic, const char *inlin)
                               "  Add 'volatile' to the variable declaration so that it\n"
                               "  can be referenced within inline assembly");
                     }
+                  if (aop->type == AOP_DIR)
+                    dbuf_append_str (&dbuf, "*");
                   dbuf_append_str (&dbuf, l);
                 }
               Safe_free (symname);
