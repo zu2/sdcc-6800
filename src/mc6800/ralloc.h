@@ -67,7 +67,7 @@ typedef struct reg_info
     struct asmop *aop;
     unsigned isFree:1;		/* is currently unassigned */
     unsigned isDead:1;      /* does not need to survive current instruction */
-    int stackOffset;
+    int xStackBase;
   }
 reg_info;
 extern reg_info regsmc6800[];

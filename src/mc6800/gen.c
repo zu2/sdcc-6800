@@ -1320,7 +1320,7 @@ loadXFromStlWithInx (asmop *aop)
   mc6800_useReg (mc6800_reg_x);
   mc6800_dirtyReg (mc6800_reg_x, false);
   mc6800_reg_x->aop = &tsxaop;
-  mc6800_reg_x->stackOffset = stackOffset;
+  mc6800_reg_x->xStackBase = stackOffset;
 }
 
 static void
@@ -1368,7 +1368,7 @@ setupTmpForAop (asmop *aop, const char *tmp)
   emitOp ("stx", MODE_DIR, "*%s", tmp);
   mc6800_dirtyReg (mc6800_reg_x, false);
   mc6800_reg_x->aop = &tsxaop;
-  mc6800_reg_x->stackOffset = base;
+  mc6800_reg_x->xStackBase = base;
   return base;
 }
 
@@ -1414,15 +1414,15 @@ setupXForAop (asmop * aop)
       emitOp ("tsx", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = &tsxaop;
-      mc6800_reg_x->stackOffset = sp;
+      mc6800_reg_x->xStackBase = sp;
       return;
     }
 
   first = _G.stackOfs + aop->aopu.aop_stk;
   last = first + aop->size - 1;
   if (mc6800_reg_x->aop == &tsxaop
-      && first - mc6800_reg_x->stackOffset >= 0
-      && last - mc6800_reg_x->stackOffset <= 255)
+      && first - mc6800_reg_x->xStackBase >= 0
+      && last - mc6800_reg_x->xStackBase <= 255)
     return;
   if (!mc6800_reg_x->isFree)
     {
@@ -1435,18 +1435,18 @@ setupXForAop (asmop * aop)
       emitOp ("tsx", MODE_INH, "");
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = &tsxaop;
-      mc6800_reg_x->stackOffset = sp;
+      mc6800_reg_x->xStackBase = sp;
       return;
     }
 
   tmp = allocTemp ();
   base = setupTmpForAop (aop, tmp);
-  if (mc6800_reg_x->aop != &tsxaop || mc6800_reg_x->stackOffset != base)
+  if (mc6800_reg_x->aop != &tsxaop || mc6800_reg_x->xStackBase != base)
     {
       emitOp ("ldx", MODE_DIR, "*%s", tmp);
       mc6800_dirtyReg (mc6800_reg_x, false);
       mc6800_reg_x->aop = &tsxaop;
-      mc6800_reg_x->stackOffset = base;
+      mc6800_reg_x->xStackBase = base;
     }
   freeTemp (tmp);
 }
@@ -1518,11 +1518,11 @@ setupXBases (struct xbases *xbases, asmop *left, asmop *right, asmop *result)
         continue;
       xbases->regtemp[xbases->count] = allocTemp ();
       if (mc6800_reg_x->aop == &tsxaop
-          && first - mc6800_reg_x->stackOffset >= 0
-          && last - mc6800_reg_x->stackOffset <= 255)
+          && first - mc6800_reg_x->xStackBase >= 0
+          && last - mc6800_reg_x->xStackBase <= 255)
         {
           emitOp ("stx", MODE_DIR, "*%s", xbases->regtemp[xbases->count]);
-          xbases->base[xbases->count] = mc6800_reg_x->stackOffset;
+          xbases->base[xbases->count] = mc6800_reg_x->xStackBase;
         }
       else
         xbases->base[xbases->count] = setupTmpForAop (aop, xbases->regtemp[xbases->count]);
@@ -1569,8 +1569,8 @@ switchXToAop (struct xbases *xbases, asmop *aop)
   first = _G.stackOfs + aop->aopu.aop_stk;
   last = first + aop->size - 1;
   if (mc6800_reg_x->aop == &tsxaop
-      && first - mc6800_reg_x->stackOffset >= 0
-      && last - mc6800_reg_x->stackOffset <= 255)
+      && first - mc6800_reg_x->xStackBase >= 0
+      && last - mc6800_reg_x->xStackBase <= 255)
     return;
   for (i = 0; i < xbases->count; i++)
     if (first - xbases->base[i] >= 0
@@ -1584,7 +1584,7 @@ switchXToAop (struct xbases *xbases, asmop *aop)
         emitOp ("ldx", MODE_DIR, "*%s", xbases->regtemp[i]);
         mc6800_dirtyReg (mc6800_reg_x, false);
         mc6800_reg_x->aop = &tsxaop;
-        mc6800_reg_x->stackOffset = xbases->base[i];
+        mc6800_reg_x->xStackBase = xbases->base[i];
         return;
       }
   setupXForAop (aop);
@@ -2155,7 +2155,7 @@ aopGet (asmop * aop, int loffset)
     case AOP_SOF:
       if (mc6800_reg_x->aop != &tsxaop)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "AOP_SOF without tsx");
-      xofs = _G.stackOfs - mc6800_reg_x->stackOffset + aop->aopu.aop_stk + offset;
+      xofs = _G.stackOfs - mc6800_reg_x->xStackBase + aop->aopu.aop_stk + offset;
       if (xofs < 0 || xofs > 255)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "stack offset out of range");
       sprintf (s, "%d,x", xofs);
