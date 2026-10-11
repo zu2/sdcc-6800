@@ -584,6 +584,7 @@ removePointerCopy (iCode * dic, operand * pointer, operand * nonOffsetOp, eBBloc
   iCode *last = NULL;
 
   if (!IS_ITEMP (nonOffsetOp) || !IS_PTR (operandType (nonOffsetOp)) ||
+      IS_BITVAR (operandType (pointer)->next) ||
       DCL_TYPE (operandType (nonOffsetOp)) != DCL_TYPE (operandType (pointer)))
     return false;
 
