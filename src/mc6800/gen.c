@@ -6514,7 +6514,7 @@ genGetWord (iCode * ic)
       setupXForAop (AOP (left));
       loadRegFromAop (IS_AOP_X (AOP (result)) ? mc6800_reg_x : mc6800_reg_d, AOP (left), offset);
     }
-  else if ((AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) && mc6800_reg_x->isFree)
+  else if ((AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) && regDead (X_IDX, ic))
     {
       setupXForAop (AOP (left));
       loadRegFromAop (mc6800_reg_x, AOP (left), offset);
@@ -7850,7 +7850,7 @@ genDataPointerGet2 (asmop *result, asmop *derefaop, const iCode *ic)
       return;
     }
 
-  if ((result->type == AOP_DIR || result->type == AOP_EXT) && mc6800_reg_x->isFree)
+  if ((result->type == AOP_DIR || result->type == AOP_EXT) && regDead (X_IDX, ic))
     {
       setupXForAop (derefaop);
       loadRegFromAop (mc6800_reg_x, derefaop, 0);
@@ -7968,8 +7968,7 @@ genDataPointerGet (operand * left, operand * right, operand * result, iCode * ic
       reg_info *acc = NULL;
       int pushedaccs;
 
-      if (size == 2 && (mc6800_reg_x->isFree || (IS_AOP_XPTR_IN_X (derefaop) && regDead (X_IDX, ic)))
-          && !xsave)
+      if (size == 2 && regDead (X_IDX, ic))
         {
           setupXForAop (derefaop);
           loadRegFromAop (mc6800_reg_x, derefaop, 0);
@@ -8366,7 +8365,7 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
       return;
     }
 
-  if ((derefaop->type == AOP_DIR || derefaop->type == AOP_EXT) && mc6800_reg_x->isFree)
+  if ((derefaop->type == AOP_DIR || derefaop->type == AOP_EXT) && regDead (X_IDX, ic))
     {
       setupXForAop (right);
       loadRegFromAop (mc6800_reg_x, right, 0);
@@ -8637,7 +8636,7 @@ genIfx (iCode * ic)
         }
       else if (aop->type == AOP_REG)
         werror (E_INTERNAL_ERROR, __FILE__, __LINE__, "Bad rIdx in genIfx");
-      else if (aop->size == 2 && !IS_FLOAT (operandType (cond)) && mc6800_reg_x->isFree &&
+      else if (aop->size == 2 && !IS_FLOAT (operandType (cond)) && regDead (X_IDX, ic) &&
         (aop->type == AOP_DIR || aop->type == AOP_EXT || aop->type == AOP_IMMD))
         {
           emitOpw_o ("ldx", aop, 0);
@@ -8957,7 +8956,7 @@ genAssign2 (operand *result, operand *right, iCode *ic)
       pullAccs (pushedaccs);
       return;
     }
-  if (AOP_SIZE (right) == 2 && AOP_TYPE (result) != AOP_SOF && mc6800_reg_x->isFree)
+  if (AOP_SIZE (right) == 2 && AOP_TYPE (result) != AOP_SOF && regDead (X_IDX, ic))
     {
       setupXForAop (AOP (right));
       loadRegFromAop (mc6800_reg_x, AOP (right), 0);
@@ -9082,7 +9081,7 @@ genAssign (iCode * ic)
           freeTempAop (tmpaop);
           pullAccs (pushedaccs);
         }
-      else if (AOP_SIZE (result) % 2 == 0 && AOP_TYPE (result) != AOP_SOF && mc6800_reg_x->isFree)
+      else if (AOP_SIZE (result) % 2 == 0 && AOP_TYPE (result) != AOP_SOF && regDead (X_IDX, ic))
         {
           for (offset = AOP_SIZE (result) - 2; offset >= 0; offset -= 2)
             {
@@ -9414,7 +9413,7 @@ genCast2 (operand *result, operand *right, bool fixtopbyte, iCode *ic)
       return;
     }
 
-  if (!fixtopbyte && (AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) && mc6800_reg_x->isFree)
+  if (!fixtopbyte && (AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) && regDead (X_IDX, ic))
     {
       setupXForAop (AOP (right));
       loadRegFromAop (mc6800_reg_x, AOP (right), 0);
@@ -9514,7 +9513,7 @@ genCastMANY (operand *result, operand *right, bool fixtopbyte, const iCode *ic)
       return;
     }
 
-  if (!signExtend && AOP_SIZE (right) == 2 && (AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) && mc6800_reg_x->isFree)
+  if (!signExtend && AOP_SIZE (right) == 2 && (AOP_TYPE (result) == AOP_DIR || AOP_TYPE (result) == AOP_EXT) && regDead (X_IDX, ic))
     {
       setupXForAop (AOP (right));
       loadRegFromAop (mc6800_reg_x, AOP (right), 0);
