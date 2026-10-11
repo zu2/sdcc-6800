@@ -6385,6 +6385,7 @@ genGetAbit (iCode * ic)
   int shCount;
   int pushedaccs;
   reg_info *reg;
+  struct xbases xbases;
 
   D (emitcode (";     genGetAbit", ""));
 
@@ -6394,8 +6395,6 @@ genGetAbit (iCode * ic)
   aopOp (left, ic, false);
   aopOp (right, ic, false);
   aopOp (result, ic, false);
-  setupXForAop (AOP (result));
-  setupXForAop (AOP (left));
 
   shCount = (int) ulFromVal (AOP (IC_RIGHT (ic))->aopu.aop_lit);
 
@@ -6404,8 +6403,10 @@ genGetAbit (iCode * ic)
   else
     reg = chooseAcc (ic, MC6800MASK_D);
   pushedaccs = pushLiveAccs (ic, reg->mask);
+  setupXBases (&xbases, AOP (left), NULL, AOP (result));
 
   /* get the needed byte into Acc */
+  switchXToAop (&xbases, AOP (left));
   loadRegFromAop (reg, AOP (left), shCount / 8);
   shCount %= 8;
   if (AOP_TYPE (result) == AOP_CRY)
@@ -6416,8 +6417,10 @@ genGetAbit (iCode * ic)
         emitOpWithAcc ("lsr", reg, MODE_INH, "");
       emitOpWithAcc ("and", reg, MODE_IMM, "#0x01");
       mc6800_dirtyReg (reg, false);
+      switchXToAop (&xbases, AOP (result));
       storeRegToFullAop (reg, AOP (result), false);
     }
+  freeXBases (&xbases);
   pullAccs (pushedaccs);
 
   freeAsmop (result, NULL, ic, true);
