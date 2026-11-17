@@ -9771,13 +9771,13 @@ genmc6800iCode (iCode *ic)
   operand *vop[2] = { IC_LEFT (ic), IC_RIGHT (ic) };
   asmop *tmpaop[2] = { NULL, NULL };
 
-  if (ic->op == ADDRESS_OF || ic->op == SEND || ic->op == GET_VALUE_AT_ADDRESS)
+  if (ic->op == ADDRESS_OF || ic->op == SEND || ic->op == GET_VALUE_AT_ADDRESS || ic->op == DUMMY_READ_VOLATILE)
     vop[0] = vop[1] = NULL;
   for (int i = 0; i < 2; i++)
     {
       asmop *aop;
 
-      if (!vop[i] || !IS_SYMOP (vop[i]) || !isOperandVolatile (vop[i], false) || getSize (operandType (vop[i])) < 2)
+      if (!vop[i] || !IS_SYMOP (vop[i]) || !isOperandVolatile (vop[i], false))
         {
           vop[i] = NULL;
           continue;
