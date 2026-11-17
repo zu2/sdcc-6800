@@ -3034,7 +3034,8 @@ genFunction (iCode * ic)
 
       /* If the RECEIVE operand immediately spills to the first entry on the  */
       /* stack, we can push it directly rather than use an sp relative store. */
-      if (rsym && rsym->onStack && rsym->stack == -_G.stackPushes - rsymSize)
+      if (rsym && rsym->onStack && rsym->stack == -_G.stackPushes - rsymSize &&
+          !isOperandVolatile (IC_RESULT (ric), false))
         {
           int ofs;
 
@@ -3065,7 +3066,7 @@ genFunction (iCode * ic)
           dsym = dsym->usl.spillLoc;
         if (IS_SYMOP (IC_RIGHT (aic)) && dsym == OP_SYMBOL (IC_RIGHT (aic)))
           continue;
-        if (!isOperandEqual (IC_RESULT (ic->next), IC_RIGHT (aic)) || !dsym->onStack || dsym->stack != -_G.stackPushes - size
+        if (!isOperandEqual (IC_RESULT (ic->next), IC_RIGHT (aic)) || isOperandVolatile (IC_RESULT (aic), false) || !dsym->onStack || dsym->stack != -_G.stackPushes - size
             || size != getSize (operandType (IC_RIGHT (aic))))
           break;
         for (int ofs = 0; ofs < size; ofs++, stackAdjust--)
@@ -9935,7 +9936,16 @@ genmc6800iCode (iCode *ic)
       break;
 
     case RECEIVE:
-      genReceive (ic);
+      if (ic->argreg && isOperandVolatile (IC_RESULT (ic), false))
+        {
+          aopOp (IC_RESULT (ic), ic, true);
+          setupXForAop (AOP (IC_RESULT (ic)));
+          for (int offset = AOP_SIZE (IC_RESULT (ic)) - 1; offset >= 0; offset--)
+            storeRegToAop (mc6800_aop_pass[offset + ic->argreg - 1]->aopu.aop_reg[0], AOP (IC_RESULT (ic)), offset);
+          freeAsmop (IC_RESULT (ic), NULL, ic, true);
+        }
+      else
+        genReceive (ic);
       break;
 
   _G.param_offset = (currFunc && IS_STRUCT (currFunc->type->next)) ? 2 : 0;
