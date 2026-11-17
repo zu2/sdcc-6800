@@ -9703,7 +9703,14 @@ genmc6800iCode (iCode *ic)
       aop = allocTempAop (AOP_SIZE (vop[i]));
       aop->op = vop[i];
       tmpaop[i] = aop;
-      if (AOP_TYPE (vop[i]) != AOP_STL && aop->size % 2 == 0 && mc6800_reg_x->isFree)
+      if (IS_AOP_X (AOP (vop[i])))
+        storeRegToAop (mc6800_reg_x, aop, 0);
+      else if (AOP_TYPE (vop[i]) == AOP_REG)
+        {
+          for (int offset = aop->size - 1; offset >= 0; offset--)
+            storeRegToAop (AOP (vop[i])->aopu.aop_reg[offset], aop, offset);
+        }
+      else if (AOP_TYPE (vop[i]) != AOP_STL && aop->size % 2 == 0 && mc6800_reg_x->isFree)
         {
           for (int offset = aop->size - 2; offset >= 0; offset -= 2)
             {
@@ -9876,7 +9883,7 @@ genmc6800iCode (iCode *ic)
             }
           else
             destaop = AOP (IC_RESULT (ic));
-          if ((destaop->type == AOP_DIR || destaop->type == AOP_EXT) && destaop->size % 2 == 0 && mc6800_reg_x->isFree)
+          if ((destaop->type == AOP_DIR || destaop->type == AOP_EXT) && destaop->size % 2 == 0 && regDead (X_IDX, ic))
             {
               for (int offset = destaop->size - 2; offset >= 0; offset -= 2)
                 {
