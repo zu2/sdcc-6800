@@ -3501,8 +3501,6 @@ genPlusIncr (iCode * ic)
     return false;
   if (stackBasedOffset (IC_LEFT (ic)) || stackBasedOffset (IC_RIGHT (ic)))
     return false;
-  if (isOperandVolatile (IC_RESULT (ic), false))
-    return false;
   if (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8))
     return false;
 
@@ -3972,8 +3970,6 @@ genMinusDec (iCode * ic)
   if (!IS_OP_LITERAL (IC_RIGHT (ic)))
     return false;
   if (stackBasedOffset (IC_LEFT (ic)))
-    return false;
-  if (isOperandVolatile (IC_RESULT (ic), false))
     return false;
   if (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8))
     return false;
@@ -9682,12 +9678,16 @@ genmc6800iCode (iCode *ic)
   int savedtemp = _G.tempOfs;
   operand *vop[2] = { IC_LEFT (ic), IC_RIGHT (ic) };
   asmop *tmpaop[2] = { NULL, NULL };
+  if (IC_RESULT (ic) && IS_SYMOP (IC_RESULT (ic)) && isOperandVolatile (IC_RESULT (ic), false) &&
+      ic->op != '=' && ic->op != RECEIVE)
+    fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "volatile result outside assignment");
   bool volatilestore = ic->op == '=' &&
     (POINTER_SET (ic) ?
      !IS_BITVAR (operandType (IC_RESULT (ic))->next) && IS_VOLATILE (operandType (IC_RESULT (ic))->next) :
      isOperandVolatile (IC_RESULT (ic), false));
 
-  if (ic->op == ADDRESS_OF || ic->op == SEND || ic->op == GET_VALUE_AT_ADDRESS || ic->op == DUMMY_READ_VOLATILE)
+  if (ic->op == ADDRESS_OF || ic->op == GET_VALUE_AT_ADDRESS || ic->op == DUMMY_READ_VOLATILE ||
+      (ic->op == SEND && getSize (operandType (IC_LEFT (ic))) == 1))
     vop[0] = vop[1] = NULL;
   for (int i = 0; i < 2; i++)
     {
