@@ -3202,7 +3202,7 @@ genEndFunction (iCode * ic)
     }
 }
 
-static void genDataPointerStore (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic);
+static void genDataPointerStore (asmop *derefaop, asmop *right, const iCode *ic);
 
 /*-----------------------------------------------------------------*/
 /* genRet - generate code for return statement                     */
@@ -3243,7 +3243,7 @@ genRet (iCode * ic)
 
       derefaop = aopDerefAop (retptr, 0);
       derefaop->size = size;
-      genDataPointerStore (derefaop, AOP (IC_LEFT (ic)), false, ic);
+      genDataPointerStore (derefaop, AOP (IC_LEFT (ic)), ic);
 
       freeAsmop (NULL, derefaop, ic, true);
       freeTempAop (retptr);
@@ -8096,7 +8096,7 @@ release:
 }
 
 static void
-genDataPointerSet1 (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic)
+genDataPointerSet1 (asmop *derefaop, asmop *right, const iCode *ic)
 {
   reg_info *acc;
   int pushedaccs;
@@ -8109,7 +8109,7 @@ genDataPointerSet1 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
       return;
     }
 
-  if (right->type == AOP_LIT && !derefvolatile && !ullFromVal (right->aopu.aop_lit))
+  if (right->type == AOP_LIT && !ullFromVal (right->aopu.aop_lit))
     {
       setupXForAop (derefaop);
       emitOp_o ("clr", derefaop, 0);
@@ -8139,7 +8139,7 @@ genDataPointerSet1 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
 }
 
 static void
-genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic)
+genDataPointerSet2 (asmop *derefaop, asmop *right, const iCode *ic)
 {
   reg_info *acc;
   int pushedaccs;
@@ -8162,7 +8162,7 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
 
       storeRegToAop (mc6800_reg_x, rightx, 0);
       mc6800_freeReg (mc6800_reg_x);
-      genDataPointerSet2 (derefaop, rightx, derefvolatile, ic);
+      genDataPointerSet2 (derefaop, rightx, ic);
       if (!regDead (X_IDX, ic))
         loadRegFromAop (mc6800_reg_x, rightx, 0);
       freeTempAop (rightx);
@@ -8189,20 +8189,7 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
       pushedaccs = pushLiveAccs (ic, acc->mask);
 
       setupXForAop (derefaop);
-      if (derefvolatile)
-        {
-          asmop *tmpaop = allocTempAop (2);
-
-          makeAopFromStl (tmpaop, right, acc);
-          for (offset = 1; offset >= 0; offset--)
-            {
-              loadRegFromAop (acc, tmpaop, offset);
-              storeRegToAop (acc, derefaop, offset);
-            }
-          freeTempAop (tmpaop);
-        }
-      else
-        makeAopFromStl (derefaop, right, acc);
+      makeAopFromStl (derefaop, right, acc);
       pullAccs (pushedaccs);
       return;
     }
@@ -8216,7 +8203,7 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
       return;
     }
 
-  if (right->type == AOP_LIT && !derefvolatile && !ullFromVal (right->aopu.aop_lit))
+  if (right->type == AOP_LIT && !ullFromVal (right->aopu.aop_lit))
     {
       setupXForAop (derefaop);
       for (offset = 1; offset >= 0; offset--)
@@ -8233,7 +8220,7 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
         {
           int c = byteOfVal (right->aopu.aop_lit, offset);
 
-          if (!c && !derefvolatile)
+          if (!c)
             emitOp_o ("clr", derefaop, offset);
           else
             {
@@ -8274,14 +8261,14 @@ genDataPointerSet2 (asmop *derefaop, asmop *right, bool derefvolatile, const iCo
 }
 
 static void
-genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic)
+genDataPointerSetMANY (asmop *derefaop, asmop *right, const iCode *ic)
 {
   reg_info *acc;
   int pushedaccs;
   struct xbases xbases;
   int offset;
 
-  if (right->type == AOP_LIT && !derefvolatile && !ullFromVal (right->aopu.aop_lit))
+  if (right->type == AOP_LIT && !ullFromVal (right->aopu.aop_lit))
     {
       setupXForAop (derefaop);
       for (offset = derefaop->size - 1; offset >= 0; offset--)
@@ -8298,7 +8285,7 @@ genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile, const 
         {
           int c = byteOfVal (right->aopu.aop_lit, offset);
 
-          if (!c && !derefvolatile)
+          if (!c)
             emitOp_o ("clr", derefaop, offset);
           else
             {
@@ -8346,14 +8333,14 @@ genDataPointerSetMANY (asmop *derefaop, asmop *right, bool derefvolatile, const 
 /* genDataPointerStore - store right to derefaop, by size          */
 /*-----------------------------------------------------------------*/
 static void
-genDataPointerStore (asmop *derefaop, asmop *right, bool derefvolatile, const iCode *ic)
+genDataPointerStore (asmop *derefaop, asmop *right, const iCode *ic)
 {
   if (derefaop->size == 1)
-    genDataPointerSet1 (derefaop, right, derefvolatile, ic);
+    genDataPointerSet1 (derefaop, right, ic);
   else if (derefaop->size == 2)
-    genDataPointerSet2 (derefaop, right, derefvolatile, ic);
+    genDataPointerSet2 (derefaop, right, ic);
   else
-    genDataPointerSetMANY (derefaop, right, derefvolatile, ic);
+    genDataPointerSetMANY (derefaop, right, ic);
 }
 
 /*-----------------------------------------------------------------*/
@@ -8366,7 +8353,6 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
   asmop *derefaop;
   int litOffset = 0;
   asmop *xsave = NULL;
-  bool derefvolatile = IS_VOLATILE (operandType (result)->next);
 
   D (emitcode (";     genDataPointerSet", ""));
 
@@ -8390,7 +8376,7 @@ genDataPointerSet (operand * left, operand * right, operand * result, iCode * ic
       && !IS_AOP_X (AOP (right)))
     xsave = saveXIfSurv ();
 
-  genDataPointerStore (derefaop, AOP (right), derefvolatile, ic);
+  genDataPointerStore (derefaop, AOP (right), ic);
 
   if (xsave)
     restoreX (xsave);
@@ -8849,7 +8835,6 @@ genAssignMANY (operand *result, operand *right, const iCode *ic)
 static void
 genAssign (iCode * ic)
 {
-  int pushedaccs;
   operand *result, *right;
 
   D (emitcode (";     genAssign", ""));
@@ -8875,80 +8860,7 @@ genAssign (iCode * ic)
       }
   }
 
-  if (isOperandVolatile (result, false))
-    {
-      int offset;
-
-      if (!sameRegs (AOP (right), AOP (result)))
-        setupXForAop (AOP (right));
-      if (!IS_AOP_X (AOP (right)) && !sameRegs (AOP (right), AOP (result)))
-        setupXForAop (AOP (result));
-      if (AOP_TYPE (right) == AOP_LIT)
-        {
-          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
-
-          pushedaccs = pushLiveAccs (ic, acc->mask);
-          for (offset = AOP_SIZE (result) - 1; offset >= 0; offset--)
-            storeConstToAop (byteOfVal (AOP (right)->aopu.aop_lit, offset), AOP (result), offset, acc);
-          pullAccs (pushedaccs);
-        }
-      else if (IS_AOP_X (AOP (right)) && AOP_TYPE (result) == AOP_SOF)
-        {
-          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
-          pushedaccs = pushLiveAccs (ic, acc->mask);
-
-          storeXToSof (AOP (result), 0, acc);
-          mc6800_freeReg (acc);
-          pullAccs (pushedaccs);
-        }
-      else if (IS_AOP_X (AOP (right)))
-        storeRegToAop (mc6800_reg_x, AOP (result), 0);
-      else if (AOP_TYPE (right) == AOP_REG)
-        {
-          for (offset = AOP_SIZE (result) - 1; offset >= 0; offset--)
-            storeRegToAop (AOP (right)->aopu.aop_reg[offset], AOP (result), offset);
-        }
-      else if (AOP_TYPE (right) == AOP_STL)
-        {
-          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
-          asmop *tmpaop = allocTempAop (2);
-
-          pushedaccs = pushLiveAccs (ic, acc->mask);
-          makeAopFromStl (tmpaop, AOP (right), acc);
-          for (offset = 1; offset >= 0; offset--)
-            {
-              loadRegFromAop (acc, tmpaop, offset);
-              storeRegToAop (acc, AOP (result), offset);
-            }
-          freeTempAop (tmpaop);
-          pullAccs (pushedaccs);
-        }
-      else if (AOP_SIZE (result) % 2 == 0 && AOP_TYPE (result) != AOP_SOF && regDead (X_IDX, ic))
-        {
-          for (offset = AOP_SIZE (result) - 2; offset >= 0; offset -= 2)
-            {
-              setupXForAop (AOP (right));
-              loadRegFromAop (mc6800_reg_x, AOP (right), offset);
-              storeRegToAop (mc6800_reg_x, AOP (result), offset);
-              mc6800_freeReg (mc6800_reg_x);
-            }
-        }
-      else
-        {
-          reg_info *acc = chooseAcc (ic, MC6800MASK_D);
-          pushedaccs = pushLiveAccs (ic, acc->mask);
-
-          for (offset = AOP_SIZE (result) - 1; offset >= 0; offset--)
-            {
-              loadRegFromAop (acc, AOP (right), offset);
-              storeRegToAop (acc, AOP (result), offset);
-            }
-          pullAccs (pushedaccs);
-        }
-      goto release;
-    }
-  if (!isOperandVolatile (right, false)
-      && (operandsEqu (result, right) || sameRegs (AOP (right), AOP (result))))
+  if (operandsEqu (result, right) || sameRegs (AOP (right), AOP (result)))
     goto release;
 
   if (AOP_SIZE (result) == 1)
@@ -9770,6 +9682,10 @@ genmc6800iCode (iCode *ic)
   int savedtemp = _G.tempOfs;
   operand *vop[2] = { IC_LEFT (ic), IC_RIGHT (ic) };
   asmop *tmpaop[2] = { NULL, NULL };
+  bool volatilestore = ic->op == '=' &&
+    (POINTER_SET (ic) ?
+     !IS_BITVAR (operandType (IC_RESULT (ic))->next) && IS_VOLATILE (operandType (IC_RESULT (ic))->next) :
+     isOperandVolatile (IC_RESULT (ic), false));
 
   if (ic->op == ADDRESS_OF || ic->op == SEND || ic->op == GET_VALUE_AT_ADDRESS || ic->op == DUMMY_READ_VOLATILE)
     vop[0] = vop[1] = NULL;
@@ -9777,7 +9693,7 @@ genmc6800iCode (iCode *ic)
     {
       asmop *aop;
 
-      if (!vop[i] || !IS_SYMOP (vop[i]) || !isOperandVolatile (vop[i], false))
+      if (!vop[i] || !((i == 1 && volatilestore) || (IS_SYMOP (vop[i]) && isOperandVolatile (vop[i], false))))
         {
           vop[i] = NULL;
           continue;
@@ -9787,7 +9703,7 @@ genmc6800iCode (iCode *ic)
       aop = allocTempAop (AOP_SIZE (vop[i]));
       aop->op = vop[i];
       tmpaop[i] = aop;
-      if (aop->size % 2 == 0 && mc6800_reg_x->isFree)
+      if (AOP_TYPE (vop[i]) != AOP_STL && aop->size % 2 == 0 && mc6800_reg_x->isFree)
         {
           for (int offset = aop->size - 2; offset >= 0; offset -= 2)
             {
@@ -9801,11 +9717,14 @@ genmc6800iCode (iCode *ic)
         {
           reg_info *acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
           bool needpullacc = pushRegIfUsed (acc);
-          for (int offset = aop->size - 1; offset >= 0; offset--)
-            {
-              loadRegFromAop (acc, AOP (vop[i]), offset);
-              storeRegToAop (acc, aop, offset);
-            }
+          if (AOP_TYPE (vop[i]) == AOP_STL)
+            makeAopFromStl (aop, AOP (vop[i]), acc);
+          else
+            for (int offset = aop->size - 1; offset >= 0; offset--)
+              {
+                loadRegFromAop (acc, AOP (vop[i]), offset);
+                storeRegToAop (acc, aop, offset);
+              }
           pullOrFreeReg (acc, needpullacc);
         }
       freeAsmop (vop[i], NULL, ic, true);
@@ -9941,7 +9860,52 @@ genmc6800iCode (iCode *ic)
       break;
 
     case '=':
-      if (POINTER_SET (ic))
+      if (volatilestore)
+        {
+          asmop *destaop;
+          asmop *xsave = NULL;
+
+          aopOp (IC_RESULT (ic), ic, !POINTER_SET (ic));
+          if (POINTER_SET (ic))
+            {
+              destaop = aopDerefAop (AOP (IC_RESULT (ic)), decodePointerOffset (IC_LEFT (ic)));
+              destaop->size = tmpaop[1]->size;
+              freeAsmop (IC_RESULT (ic), NULL, ic, true);
+              if (destaop->type == AOP_SOF || (destaop->type == AOP_XPTR && !IS_AOP_XPTR_IN_X (destaop)))
+                xsave = saveXIfSurv ();
+            }
+          else
+            destaop = AOP (IC_RESULT (ic));
+          if ((destaop->type == AOP_DIR || destaop->type == AOP_EXT) && destaop->size % 2 == 0 && mc6800_reg_x->isFree)
+            {
+              for (int offset = destaop->size - 2; offset >= 0; offset -= 2)
+                {
+                  loadRegFromAop (mc6800_reg_x, tmpaop[1], offset);
+                  storeRegToAop (mc6800_reg_x, destaop, offset);
+                  mc6800_freeReg (mc6800_reg_x);
+                }
+            }
+          else
+            {
+              reg_info *acc = (mc6800_reg_a->isFree || !mc6800_reg_b->isFree) ? mc6800_reg_a : mc6800_reg_b;
+              bool needpullacc = pushRegIfUsed (acc);
+
+              setupXForAop (destaop);
+              for (int offset = destaop->size - 1; offset >= 0; offset--)
+                {
+                  loadRegFromAop (acc, tmpaop[1], offset);
+                  storeRegToAop (acc, destaop, offset);
+                }
+              pullOrFreeReg (acc, needpullacc);
+            }
+          if (xsave)
+            restoreX (xsave);
+          if (POINTER_SET (ic))
+            freeAsmop (NULL, destaop, ic, true);
+          else
+            freeAsmop (IC_RESULT (ic), NULL, ic, true);
+        }
+      else if (POINTER_SET (ic))
         genPointerSet (ic);
       else
         genAssign (ic);
