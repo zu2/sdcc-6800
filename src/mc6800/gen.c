@@ -4867,7 +4867,7 @@ genCmpMANY (iCode * ic, iCode * ifx, int opcode, int sign)
       right = temp;
       opcode = exchangedCmp (opcode);
     }
-  if ((AOP_TYPE (right) == AOP_LIT) && !isOperandVolatile (left, false))
+  if (AOP_TYPE (right) == AOP_LIT)
     {
       lit = ullFromVal (AOP (right)->aopu.aop_lit);
       while ((size > 1) && (((lit >> (8 * offset)) & 0xff) == 0))
@@ -5422,73 +5422,6 @@ genAnd (iCode * ic, iCode * ifx)
       bitpos = isLiteralBit (lit) - 1;
     }
 
-  if (AOP_TYPE (result) == AOP_CRY && size > 1 && (isOperandVolatile (left, false) || isOperandVolatile (right, false)))
-    {
-      const char *ltmp = NULL;
-      const char *tmp;
-
-      if (size == 2 && (IS_AOP_D (AOP (left)) || IS_AOP_X (AOP (left))))
-        {
-          ltmp = allocTemp ();
-          if (IS_AOP_X (AOP (left)))
-            {
-              emitOp ("stx", MODE_DIR, "*%s", ltmp);
-            }
-          else
-            {
-              emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
-              emitOp ("staa", MODE_DIR, "*%s", ltmp);
-            }
-        }
-
-      tmp = allocTemp ();
-
-      pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
-
-      /* this generates ugly code, but meets volatility requirements */
-      setupXBases (&xbases, AOP (left), AOP (right), NULL);
-      loadRegFromConst (mc6800_reg_a, 0);
-      emitOp ("staa", MODE_DIR, "*%s", tmp);
-
-      offset = 0;
-      while (size--)
-        {
-          if (ltmp)
-            {
-              emitOp ("ldaa", MODE_DIR, offset ? "*%s" : "*%s+1", ltmp);
-              mc6800_dirtyReg (mc6800_reg_a, false);
-              mc6800_useReg (mc6800_reg_a);
-            }
-          else
-            {
-              switchXToAop (&xbases, AOP (left));
-              loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-            }
-          switchXToAop (&xbases, AOP (right));
-          accopWithAop ("and", mc6800_reg_a, AOP (right), offset);
-          emitOp ("oraa", MODE_DIR, "*%s", tmp);
-          emitOp ("staa", MODE_DIR, "*%s", tmp);
-          offset++;
-        }
-
-      freeXBases (&xbases);
-      emitOp ("ldaa", MODE_DIR, "*%s", tmp);
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      mc6800_useReg (mc6800_reg_a);
-      freeTemp (tmp);
-      if (ltmp)
-        {
-          freeTemp (ltmp);
-        }
-      emitOp ("tsta", MODE_INH, "");
-
-      pullAccs (pushedaccs);
-
-      genIfxJump (ifx, "a");
-
-      goto release;
-    }
-
   if (AOP_TYPE (result) == AOP_CRY && AOP_TYPE (right) == AOP_LIT)
     {
       if (bitpos >= 0 && (bitpos & 7) == 7 && !IS_AOP_X (AOP (left)))
@@ -5608,18 +5541,6 @@ genAnd (iCode * ic, iCode * ifx)
     {
       if (aopIsLitVal (left->aop, offset, 1, 0x00) || aopIsLitVal (right->aop, offset, 1, 0x00))
         {
-          if (isOperandVolatile (left, false))
-            {
-              switchXToAop (&xbases, AOP (left));
-              loadRegFromAop (acc, AOP (left), offset);
-              mc6800_freeReg (acc);
-            }
-          if (isOperandVolatile (right, false))
-            {
-              switchXToAop (&xbases, AOP (right));
-              loadRegFromAop (acc, AOP (right), offset);
-              mc6800_freeReg (acc);
-            }
           switchXToAop (&xbases, AOP (result));
           storeConstToAop (0, AOP (result), offset, acc);
         }
@@ -5709,73 +5630,6 @@ genOr (iCode * ic, iCode * ifx)
     lit = ullFromVal (AOP (right)->aopu.aop_lit);
 
   size = (AOP_SIZE (left) >= AOP_SIZE (right)) ? AOP_SIZE (left) : AOP_SIZE (right);
-
-  if (AOP_TYPE (result) == AOP_CRY && size > 1 && (isOperandVolatile (left, false) || isOperandVolatile (right, false)))
-    {
-      const char *ltmp = NULL;
-      const char *tmp;
-
-      if (size == 2 && (IS_AOP_D (AOP (left)) || IS_AOP_X (AOP (left))))
-        {
-          ltmp = allocTemp ();
-          if (IS_AOP_X (AOP (left)))
-            {
-              emitOp ("stx", MODE_DIR, "*%s", ltmp);
-            }
-          else
-            {
-              emitOp ("stab", MODE_DIR, "*%s+1", ltmp);
-              emitOp ("staa", MODE_DIR, "*%s", ltmp);
-            }
-        }
-
-      tmp = allocTemp ();
-
-      pushedaccs = pushLiveAccs (ic, MC6800MASK_A);
-
-      /* this generates ugly code, but meets volatility requirements */
-      setupXBases (&xbases, AOP (left), AOP (right), NULL);
-      loadRegFromConst (mc6800_reg_a, 0);
-      emitOp ("staa", MODE_DIR, "*%s", tmp);
-
-      offset = 0;
-      while (size--)
-        {
-          if (ltmp)
-            {
-              emitOp ("ldaa", MODE_DIR, offset ? "*%s" : "*%s+1", ltmp);
-              mc6800_dirtyReg (mc6800_reg_a, false);
-              mc6800_useReg (mc6800_reg_a);
-            }
-          else
-            {
-              switchXToAop (&xbases, AOP (left));
-              loadRegFromAop (mc6800_reg_a, AOP (left), offset);
-            }
-          switchXToAop (&xbases, AOP (right));
-          accopWithAop ("ora", mc6800_reg_a, AOP (right), offset);
-          emitOp ("oraa", MODE_DIR, "*%s", tmp);
-          emitOp ("staa", MODE_DIR, "*%s", tmp);
-          offset++;
-        }
-
-      freeXBases (&xbases);
-      emitOp ("ldaa", MODE_DIR, "*%s", tmp);
-      mc6800_dirtyReg (mc6800_reg_a, false);
-      mc6800_useReg (mc6800_reg_a);
-      freeTemp (tmp);
-      if (ltmp)
-        {
-          freeTemp (ltmp);
-        }
-      emitOp ("tsta", MODE_INH, "");
-
-      pullAccs (pushedaccs);
-
-      genIfxJump (ifx, "a");
-
-      goto release;
-    }
 
   if (AOP_TYPE (result) == AOP_CRY)
     {
@@ -5869,12 +5723,6 @@ genOr (iCode * ic, iCode * ifx)
     {
       if (aopIsLitVal (right->aop, offset, 1, 0xff))
         {
-          if (isOperandVolatile (left, false))
-            {
-              switchXToAop (&xbases, AOP (left));
-              loadRegFromAop (acc, AOP (left), offset);
-              mc6800_freeReg (acc);
-            }
           switchXToAop (&xbases, AOP (result));
           storeConstToAop (0xff, AOP (result), offset, acc);
         }
