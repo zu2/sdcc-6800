@@ -1,0 +1,73 @@
+;-------------------------------------------------------------------------
+; _mulint.s - MC6800 multiplication for the mc6800-stack-auto calling convention
+;
+; Adapted from chibicc-6800-v1 libc/__mul16x16.s.
+; Copyright (c) 2025-2026, ZUKERAN, shin
+;
+; MIT License
+;
+; Permission is hereby granted, free of charge, to any person obtaining a copy
+; of this software and associated documentation files (the "Software"), to deal
+; in the Software without restriction, including without limitation the rights
+; to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+; copies of the Software, and to permit persons to whom the Software is
+; furnished to do so, subject to the following conditions:
+;
+; The above copyright notice and this permission notice shall be included in all
+; copies or substantial portions of the Software.
+;
+; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+; IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+; FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+; AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+; LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+; SOFTWARE.
+;-------------------------------------------------------------------------
+
+	.module _mulint
+	.globl __mulint
+	.globl __muluchar
+	.globl REGTEMP2
+	.globl REGTEMP3
+	.area CSEG (CODE)
+
+; A:B: first operand; 2-3,x: second operand after TSX.
+__mulint:
+	tsx
+	staa *REGTEMP2
+	oraa 2,x
+	bne 00001$
+	ldaa 3,x
+	jmp __muluchar
+00001$:
+	stab *(REGTEMP2+1)
+	ldx 2,x
+	stx *REGTEMP3
+	ldx #8
+	clrb
+	clra
+	lsr REGTEMP3+1
+00002$:
+	bcc 00003$
+	addb *(REGTEMP2+1)
+	adca *REGTEMP2
+00003$:
+	rora
+	rorb
+	ror REGTEMP3+1
+	dex
+	bne 00002$
+	ldx #8
+	ldaa *REGTEMP3
+	lsra
+00004$:
+	bcc 00005$
+	addb *(REGTEMP2+1)
+00005$:
+	rorb
+	rora
+	dex
+	bne 00004$
+	ldab *(REGTEMP3+1)
+	rts
