@@ -27,10 +27,11 @@ ifdef CROSSCOMPILING
   SDCCFLAGS += -I$(top_srcdir)
 endif
 
-SDCCFLAGS += -mmc6800 --less-pedantic --out-fmt-ihx
+SDCCFLAGS += -mmc6800 --stack-loc 0xefff --less-pedantic --out-fmt-ihx
 LINKFLAGS += mc6800.lib
 
 EMU_PORT_FLAG = -t 6800
+EMU_FLAGS += -C $(PORTS_DIR)/mc6800/ucsim-init.cmd
 
 OBJEXT = .rel
 BINEXT = .ihx
