@@ -326,7 +326,7 @@ cl_pia::conf_op(cl_memory_cell *cell, t_addr addr, t_mem *val)
 	  int i;
 	  if (uc->rom->valid_address(*val))
 	    {
-	      for (i= 0; i < 3; i++)
+	      for (i= 0; i < 4; i++)
 		unregister_cell(rs[i]);
 	      base= *val;
 	      init();
@@ -605,7 +605,7 @@ cl_pia::set_cmd(class cl_cmdline *cmdline, class cl_console_base *con)
 			 AU(uc->rom->highest_valid_address()));
 	  return true;
 	}
-      for (i= 0; i < 3; i++)
+      for (i= 0; i < 4; i++)
 	unregister_cell(rs[i]);
       base= a;
       init();
