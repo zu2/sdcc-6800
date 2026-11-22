@@ -8973,7 +8973,15 @@ genCast1 (operand *result, operand *right, bool fixtopbyte, const iCode *ic)
 
   if (AOP_TYPE (right) == AOP_STL)
     {
-      UNIMPLEMENTED;
+      unsigned resultMask = AOP_TYPE (result) == AOP_REG ? AOP (result)->aopu.aop_reg[0]->mask : 0;
+
+      pushedaccs = pushLiveAccs (ic, MC6800MASK_D & ~resultMask);
+      loadDFromStl (AOP (right));
+      if (fixtopbyte)
+        fixTopByte (mc6800_reg_b, resulttype);
+      setupXForAop (AOP (result));
+      storeRegToAop (mc6800_reg_b, AOP (result), 0);
+      pullAccs (pushedaccs);
       return;
     }
 
