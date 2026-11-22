@@ -19,8 +19,7 @@ MC6800_INT =
 
 MC6800_FLOAT = $(COMMON_FLOAT)
 
-MC6800_LONG = $(COMMON_LONG) \
-  _divulong.c
+MC6800_LONG = $(filter-out _divslong.c _modslong.c _modulong.c,$(COMMON_LONG))
 
 MC6800_LONGLONG = $(COMMON_LONGLONG) \
   _srulonglong.c \
@@ -56,7 +55,7 @@ MC6800_SDCC = $(COMMON_SDCC) \
 MC6800SOURCES = $(addprefix ../,$(MC6800_FLOAT) $(MC6800_INT) $(MC6800_LONG) $(MC6800_LONGLONG) $(MC6800_SDCC))
 MC6800OBJECTS = $(patsubst %.c,%.rel,$(MC6800_FLOAT) $(MC6800_INT) $(MC6800_LONG) $(MC6800_LONGLONG) $(MC6800_SDCC))
 
-OBJ = __sdcc_regs.rel _ret.rel _setjmp.rel atomic_flag_test_and_set.rel _muluchar.rel _mulschar.rel _mulint.rel _mullong.rel _divmodchar.rel _divmodint.rel
+OBJ = __sdcc_regs.rel _ret.rel _setjmp.rel atomic_flag_test_and_set.rel _muluchar.rel _mulschar.rel _mulint.rel _mullong.rel _divmodchar.rel _divmodint.rel _divmodlong.rel
 
 LIB = mc6800.lib
 AS = $(SAS)
