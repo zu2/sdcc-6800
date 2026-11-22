@@ -9783,7 +9783,7 @@ genmc6800iCode (iCode *ic)
   operand *vop[2] = { IC_LEFT (ic), IC_RIGHT (ic) };
   asmop *tmpaop[2] = { NULL, NULL };
   if (IC_RESULT (ic) && IS_SYMOP (IC_RESULT (ic)) && isOperandVolatile (IC_RESULT (ic), false) &&
-      ic->op != '=' && ic->op != RECEIVE)
+      ic->op != '=' && ic->op != RECEIVE && ic->op != DUMMY_READ_VOLATILE)
     fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "volatile result outside assignment");
   bool volatilestore = ic->op == '=' &&
     (POINTER_SET (ic) ?
