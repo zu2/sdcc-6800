@@ -32,14 +32,11 @@ MC6800_LONGLONG = $(COMMON_LONGLONG) \
   _modslonglong.c \
   _modulonglong.c
 
-MC6800_SDCC = $(filter-out _memset.c _memcmp.c _memchr.c,$(COMMON_SDCC)) \
+MC6800_SDCC = $(filter-out _memset.c _memcmp.c _memchr.c _strcat.c _strchr.c _strrchr.c _strncmp.c _strncpy.c _strncat.c _strstr.c strtok.c,$(COMMON_SDCC)) \
   __itoa.c \
   __ltoa.c \
   _startup.c \
-  _strcmp.c \
-  strlen.c \
   strnlen.c \
-  _strcpy.c \
   div.c \
   ldiv.c \
   memcpy.c \
@@ -53,7 +50,7 @@ MC6800_SDCC = $(filter-out _memset.c _memcmp.c _memchr.c,$(COMMON_SDCC)) \
 MC6800SOURCES = $(addprefix ../,$(MC6800_FLOAT) $(MC6800_INT) $(MC6800_LONG) $(MC6800_LONGLONG) $(MC6800_SDCC))
 MC6800OBJECTS = $(patsubst %.c,%.rel,$(MC6800_FLOAT) $(MC6800_INT) $(MC6800_LONG) $(MC6800_LONGLONG) $(MC6800_SDCC))
 
-OBJ = __sdcc_regs.rel _ret.rel _setjmp.rel atomic_flag_test_and_set.rel _muluchar.rel _mulschar.rel _mulint.rel _mullong.rel _divmodchar.rel _divmodint.rel _divmodlong.rel _mc6800_memcpy.rel _mc6800_memmove.rel _mc6800_memset.rel _mc6800_memcmp.rel _mc6800_memchr.rel
+OBJ = __sdcc_regs.rel _ret.rel _setjmp.rel atomic_flag_test_and_set.rel _muluchar.rel _mulschar.rel _mulint.rel _mullong.rel _divmodchar.rel _divmodint.rel _divmodlong.rel _mc6800_memcpy.rel _mc6800_memmove.rel _mc6800_memset.rel _mc6800_memcmp.rel _mc6800_memchr.rel _mc6800_strlen.rel _mc6800_strcpy.rel _mc6800_strcat.rel _mc6800_strcmp.rel _mc6800_strchr.rel _mc6800_strrchr.rel _mc6800_strncmp.rel _mc6800_strncpy.rel _mc6800_strncat.rel _mc6800_strstr.rel _mc6800_strtok.rel
 
 LIB = mc6800.lib
 AS = $(SAS)
