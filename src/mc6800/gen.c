@@ -554,6 +554,76 @@ adjustStack (int n)
     }
 }
 
+/* Adjust a function frame without changing registers that contain values. */
+static void
+adjustStackFrame (int n, bool aFree, bool bFree)
+{
+  int pages = n / 256;
+  int remainder = n % 256;
+  int pageBytes;
+  int addBytes = (aFree || bFree) ? 16 : 20;
+  const char *spTemp;
+  const char *savedAcc = NULL;
+  reg_info *acc;
+
+  if (remainder > 128)
+    {
+      pages++;
+      remainder -= 256;
+    }
+  else if (remainder < -128)
+    {
+      pages--;
+      remainder += 256;
+    }
+  pageBytes = pages ? 4 + 3 * abs (pages) + abs (remainder) : abs (n);
+
+  if (abs (n) <= pageBytes && abs (n) <= addBytes)
+    {
+      adjustStack (n);
+      return;
+    }
+
+  spTemp = allocTemp ();
+  if (pageBytes <= addBytes && pageBytes < abs (n))
+    {
+      emitOp ("sts", MODE_DIR, "*%s", spTemp);
+      for (int i = 0; i < abs (pages); i++)
+        emitOp (pages > 0 ? "inc" : "dec", MODE_EXT, "%s", spTemp);
+      emitOp ("lds", MODE_DIR, "*%s", spTemp);
+      freeTemp (spTemp);
+      _G.stackPushes -= pages * 256;
+      updateCFA ();
+      adjustStack (remainder);
+      return;
+    }
+
+  acc = aFree ? mc6800_reg_a : bFree ? mc6800_reg_b : mc6800_reg_a;
+  if (!aFree && !bFree)
+    {
+      savedAcc = allocTemp ();
+      emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", savedAcc);
+    }
+  emitOp ("sts", MODE_DIR, "*%s", spTemp);
+  emitOpWithAcc ("lda", acc, MODE_DIR, "*%s+1", spTemp);
+  emitOpWithAcc ("add", acc, MODE_IMM, "#%u", (unsigned int) n & 0xff);
+  emitOpWithAcc ("sta", acc, MODE_DIR, "*%s+1", spTemp);
+  emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", spTemp);
+  emitOpWithAcc ("adc", acc, MODE_IMM, "#%u", ((unsigned int) n >> 8) & 0xff);
+  emitOpWithAcc ("sta", acc, MODE_DIR, "*%s", spTemp);
+  emitOp ("lds", MODE_DIR, "*%s", spTemp);
+  if (savedAcc)
+    {
+      emitOpWithAcc ("lda", acc, MODE_DIR, "*%s", savedAcc);
+      freeTemp (savedAcc);
+    }
+  freeTemp (spTemp);
+  if (!savedAcc)
+    mc6800_dirtyReg (acc, false);
+  _G.stackPushes -= n;
+  updateCFA ();
+}
+
 #if DD(1) -1 == 0
 /*--------------------------------------------------------------------------*/
 /* aopName - Return a string with debugging information about an asmop.     */
@@ -2969,7 +3039,18 @@ genFunction (iCode * ic)
   iCode *ric = (ic->next && ic->next->op == RECEIVE) ? ic->next : NULL;
   int stackAdjust = sym->stack;
   int accIsFree = sym->recvSize == 0;
+  bool aFree = true;
+  bool bFree = true;
 
+  for (iCode *receive = ric; receive && receive->op == RECEIVE; receive = receive->next)
+    if (receive->argreg && IC_RESULT (receive))
+      {
+        int size = getSize (operandType (IC_RESULT (receive)));
+        if (receive->argreg == 1)
+          bFree = false;
+        if (receive->argreg == 2 || (receive->argreg == 1 && size >= 2))
+          aFree = false;
+      }
 
   D (emitcode (";     genFunction", ""));
   _G.stackPushes = 0;
@@ -3046,7 +3127,12 @@ genFunction (iCode * ic)
               reg_info *reg = mc6800_aop_pass[ofs + (ric->argreg - 1)]->aopu.aop_reg[0];
               pushReg (reg, true);
               if (reg->rIdx == A_IDX)
-                accIsFree = 1;
+                {
+                  accIsFree = 1;
+                  aFree = true;
+                }
+              else if (reg->rIdx == B_IDX)
+                bFree = true;
               stackAdjust--;
             }
           genLine.lineElement.ic = ic;
@@ -3077,7 +3163,10 @@ genFunction (iCode * ic)
   /* adjust the stack for the function */
   if (stackAdjust)
     {
-      adjustStack (-stackAdjust);
+      if (IFFUNC_ISISR (sym->type))
+        adjustStack (-stackAdjust);
+      else
+        adjustStackFrame (-stackAdjust, aFree, bFree);
     }
   _G.stackOfs = sym->stack;
   _G.stackPushes = 0;
@@ -3162,7 +3251,13 @@ genEndFunction (iCode * ic)
   if (sym->stack)
     {
       _G.stackPushes += sym->stack;
-      adjustStack (sym->stack);
+      if (IFFUNC_ISISR (sym->type))
+        adjustStack (sym->stack);
+      else
+        {
+          int returnSize = IS_VOID (sym->type->next) || IS_STRUCT (sym->type->next) ? 0 : getSize (sym->type->next);
+          adjustStackFrame (sym->stack, returnSize != 2, returnSize != 1 && returnSize != 2);
+        }
     }
 
 
