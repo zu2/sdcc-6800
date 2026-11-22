@@ -3,6 +3,9 @@
 	.globl ___sdcc_external_startup
 	.globl s_ZP
 	.globl l_ZP
+	.globl s_ZPISEG
+	.globl s_ZPINIT
+	.globl l_ZPINIT
 	.globl s_XSEG
 	.globl l_XSEG
 	.globl s_XINIT
@@ -20,11 +23,13 @@ SIMIF_STOP =	0x73
 ;  Ordering of segments for the linker.
 ;--------------------------------------------------------
 	.area ZP      (PAG)
+	.area ZPISEG
 	.area HOME    (CODE)
 	.area GSINIT0 (CODE)
 	.area GSINIT  (CODE)
 	.area GSFINAL (CODE)
 	.area CSEG    (CODE)
+	.area ZPINIT  (CODE)
 	.area XINIT   (CODE)
 	.area CONST   (CODE)
 	.area XSEG
@@ -60,6 +65,25 @@ __sdcc_init_data:
 	bne	00001$
 ;
 00002$:
+	ldab	#<l_ZPINIT
+	beq	00019$
+	ldx	#s_ZPINIT
+	stx	*___SDCC_mc6800_tmp0
+	ldx	#s_ZPISEG
+00015$:
+	stx	*___SDCC_mc6800_tmp1
+	ldx	*___SDCC_mc6800_tmp0
+	ldaa	0,x
+	inx
+	stx	*___SDCC_mc6800_tmp0
+	ldx	*___SDCC_mc6800_tmp1
+	staa	0,x
+	inx
+	decb
+	bne	00015$
+00019$:
+
+	clra
 	ldx	#l_XSEG
 	beq	00004$
 	stx	*___SDCC_mc6800_tmp0

@@ -337,6 +337,8 @@ _mc6800_genAssemblerStart (FILE * of)
   tfprintf (of, "\t!area\n",XINIT_NAME);
   tfprintf (of, "\t!area\n",CONST_NAME);
   tfprintf (of, "\t!area\n",DATA_NAME);
+  tfprintf (of, "\t!area\n",INITIALIZED_NAME);
+  tfprintf (of, "\t!area\n",INITIALIZER_NAME);
   tfprintf (of, "\t!area\n",OVERLAY_NAME);
   tfprintf (of, "\t!area\n",XDATA_NAME);
   tfprintf (of, "\t!area\n",XIDATA_NAME);
@@ -686,8 +688,8 @@ PORT mc6800_port =
     "CABS    (ABS,CODE)", // cabs_name - const absolute data (code or not)
     "XABS    (ABS)",      // xabs_name - absolute xdata
     "IABS    (ABS)",      // iabs_name - absolute data
-    NULL,                 // name of segment for initialized variables
-    NULL,                 // name of segment for copies of initialized variables in code space
+    "ZPISEG",             // initialized zero-page data
+    "ZPINIT  (CODE)",     // initial values for zero-page data
     NULL,
     NULL,
     1,

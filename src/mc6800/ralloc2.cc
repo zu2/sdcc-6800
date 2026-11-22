@@ -462,7 +462,7 @@ iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
 
   set_spilt(control_flow_graph, conflict_graph, stack_conflict_graph);
 
-  if(options.stackAuto || IFFUNC_ISREENT(currFunc->type))
+  if(currFunc && (options.stackAuto || IFFUNC_ISREENT(currFunc->type)))
     {
       std::map<const symbol *, var_t> sindex;
 
