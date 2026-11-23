@@ -263,6 +263,22 @@ replace {
 } if notVolatile(%1)
 
 replace {
+	staa	%1,x
+	ldaa	%1,x
+} by {
+	; Peephole 11c - removed redundant ldaa
+	staa	%1,x
+} if notVolatile(%1)
+
+replace {
+	stab	%1,x
+	ldab	%1,x
+} by {
+	; Peephole 11d - removed redundant ldab
+	stab	%1,x
+} if notVolatile(%1)
+
+replace {
 	jmp	%5
 } by {
 	; Peephole 6a  - replaced jmp to rts with rts
