@@ -6982,6 +6982,22 @@ genLeftShift (iCode *ic)
   aopOp (result, ic, false);
   aopOp (left, ic, false);
 
+  if (AOP_TYPE (right) == AOP_LIT && IS_AOP_D (AOP (left)) && IS_AOP_D (AOP (result)) &&
+      ulFromVal (AOP (right)->aopu.aop_lit) <= 4 && topbytemask == 0xff)
+    {
+      unsigned long count = ulFromVal (AOP (right)->aopu.aop_lit);
+      while (count--)
+        {
+          emitOp ("aslb", MODE_INH, "");
+          emitOp ("rola", MODE_INH, "");
+        }
+      mc6800_dirtyReg (mc6800_reg_d, false);
+      freeAsmop (left, NULL, ic, true);
+      freeAsmop (result, NULL, ic, true);
+      freeAsmop (right, NULL, ic, true);
+      return;
+    }
+
   if (IS_AOP_X (AOP (result)))
     {
       UNIMPLEMENTED;
