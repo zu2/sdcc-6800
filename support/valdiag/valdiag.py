@@ -180,6 +180,28 @@ testmodes = {
             "__has_reentrant":"1"
         }
     },
+    "mc6800":{
+        "compiler":sdcc,
+        "port":"mc6800",
+        "extra-defines": {
+            "__has_data":"1",
+            "__has_xdata":"1",
+            "__has_reentrant":"1"
+        }
+    },
+    "mc6800-stack-auto":{
+        "compiler":sdcc,
+        "port":"mc6800",
+        "flags":"--stack-auto",
+        "defined": {
+            "SDCC_STACK_AUTO":"1"
+        },
+        "extra-defines": {
+            "__has_data":"1",
+            "__has_xdata":"1",
+            "__has_reentrant":"1"
+        }
+    },
     "mos6502":{
         "compiler":sdcc,
         "port":"mos6502",
