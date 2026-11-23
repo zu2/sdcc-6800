@@ -8826,6 +8826,15 @@ genAssign1 (operand *result, operand *right, const iCode *ic)
       return;
     }
 
+  if ((AOP_TYPE (result) == AOP_EXT || AOP_TYPE (result) == AOP_SOF)
+      && aopIsLitVal (AOP (right), 0, 1, 0)
+      && !isOperandVolatile (result, false))
+    {
+      setupXForAop (AOP (result));
+      storeConstToAop (0, AOP (result), 0, mc6800_reg_a);
+      return;
+    }
+
   acc = chooseAcc (ic, MC6800MASK_D);
   pushedaccs = pushLiveAccs (ic, acc->mask);
   setupXBases (&xbases, AOP (right), NULL, AOP (result));
