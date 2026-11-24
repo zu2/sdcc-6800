@@ -4628,7 +4628,16 @@ genCmp1 (iCode * ic, iCode * ifx, int opcode, int sign)
       loadRegFromAop (reg, AOP (left), 0);
     }
   switchXToAop (&xbases, AOP (right));
-  accopWithAop ("cmp", reg, AOP (right), 0);
+  if (!ifx && !sign && (opcode == '>' || opcode == LE_OP)
+      && AOP_TYPE (right) == AOP_LIT && !aopIsLitVal (AOP (right), 0, 1, 0xff))
+    {
+      unsigned int limit = byteOfVal (AOP (right)->aopu.aop_lit, 0) + 1;
+
+      emitOpWithAcc ("cmp", reg, MODE_IMM, "#0x%02x", limit);
+      opcode = opcode == '>' ? GE_OP : '<';
+    }
+  else
+    accopWithAop ("cmp", reg, AOP (right), 0);
   freeXBases (&xbases);
   mc6800_freeReg (reg);
   freeAsmop (right, NULL, ic, false);
@@ -4649,19 +4658,32 @@ genCmp1 (iCode * ic, iCode * ifx, int opcode, int sign)
     }
   else
     {
-      symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-      symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
-
       reg = acc;
-      emitBranch (branchInstCmp (opcode, sign), tlbl1);
-      loadRegFromConst (reg, 0);
-      emitBranch ("bra", tlbl2);
-      if (!regalloc_dry_run)
-        emitLabel (tlbl1);
-      mc6800_dirtyReg (reg, false);
-      loadRegFromConst (reg, 1);
-      if (!regalloc_dry_run)
-        emitLabel (tlbl2);
+      if (!sign && opcode == '<')
+        {
+          emitOpWithAcc ("lda", reg, MODE_IMM, "#0x00");
+          rmwWithReg ("rol", reg);
+        }
+      else if (!sign && opcode == GE_OP)
+        {
+          emitOpWithAcc ("lda", reg, MODE_IMM, "#0x01");
+          emitOpWithAcc ("sbc", reg, MODE_IMM, "#0x00");
+        }
+      else
+        {
+          symbol *tlbl1 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+          symbol *tlbl2 = (regalloc_dry_run ? 0 : newiTempLabel (NULL));
+
+          emitBranch (branchInstCmp (opcode, sign), tlbl1);
+          loadRegFromConst (reg, 0);
+          emitBranch ("bra", tlbl2);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl1);
+          mc6800_dirtyReg (reg, false);
+          loadRegFromConst (reg, 1);
+          if (!regalloc_dry_run)
+            emitLabel (tlbl2);
+        }
       mc6800_dirtyReg (reg, false);
       setupXForAop (AOP (IC_RESULT (ic)));
       storeRegToFullAop (reg, AOP (IC_RESULT (ic)), false);
