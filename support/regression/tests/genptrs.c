@@ -9,22 +9,22 @@
 #pragma disable_warning 244
 #endif
 
-char eq(void * p1, void * p2)
+char eq(const void * p1, const void * p2)
 {
 	return (p1 == p2);
 }
 
-char neq(void * p1, void * p2)
+char neq(const void * p1, const void * p2)
 {
 	return (p1 != p2);
 }
 
-char smaller(void * p1, void * p2)
+char smaller(const void * p1, const void * p2)
 {
 	return (p1 < p2);
 }
 
-char greater(void * p1, void * p2)
+char greater(const void * p1, const void * p2)
 {
 	return (p1 > p2);
 }
@@ -35,8 +35,8 @@ char __idata * ip0 = NULL;
 char __idata * ip1 = (char __idata *)0x0001;
 char __pdata * pp0 = NULL;
 char __pdata * pp1 = (char __pdata *)0x0001;
-char __code  * cp0 = NULL;
-char __code  * cp1 = (char __code *)0x0001;
+char __code const * cp0 = NULL;
+char __code const * cp1 = (char __code const *)0x0001;
 void (* fp0)(void) = NULL;
 void (* fp1)(void) = (void (*)(void))0x0001;
 #if defined (__SDCC_MODEL_HUGE)
@@ -50,7 +50,7 @@ void testPtrs(void)
 {
 #ifndef __SDCC_pic16
 #if defined (__SDCC_MODEL_HUGE)
-	char __code  * cp2 = (char __code *)0x0002;
+	char __code const * cp2 = (char __code const *)0x0002;
 	void (* fp2)(void) = (void (*)(void))0x0002;
 
 	ASSERT (eq(cp2, fp2));

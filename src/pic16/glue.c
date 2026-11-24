@@ -78,7 +78,7 @@ unsigned int pic16aopLiteral (value *val, int offset)
   /* if it is a float then it gets tricky */
   /* otherwise it is fairly simple */
   if (!(IS_FLOAT(val->type) || IS_FIXED(val->type))) {
-    unsigned long v = ulFromVal (val);
+    unsigned long long v = ullFromVal (val);
 
     return ( (v >> (offset * 8)) & 0xff);
   }
@@ -203,8 +203,8 @@ pic16emitRegularMap (memmap * map, bool addPublics, bool arFlag)
                 /* if extern then do nothing or is a function
                  * then do nothing */
                 if (IS_FUNC (sym->type) && !IS_STATIC(sym->etype)) {
-                        if(SPEC_OCLS(sym->etype) == code) {
-//                              fprintf(stderr, "%s:%d: symbol added: %s\n", __FILE__, __LINE__, sym->rname);
+                        if(SPEC_OCLS(sym->etype) == code &&
+                                !(IFFUNC_ISINLINE(sym->type) && !IS_STATIC(sym->etype) && !IS_EXTERN(sym->etype))) {
                                 checkAddSym(&publics, sym);
                         }
                         continue;
@@ -1434,9 +1434,30 @@ CODESPACE: %d\tCONST: %d\tPTRCONST: %d\tSPEC_CONST: %d\n", __FUNCTION__, map->sn
 
                   pic16_pCodeConstString (sym->rname, SPEC_CVAL (sym->etype).v_char, getSize (sym->type));
                 }
+              /* char16_t / char32_t (and wchar_t) strings: the host holds
+               * them as uint16_t / uint32_t values; emit them as little
+               * endian target bytes */
+              else if (IS_ARRAY (sym->type) && IS_INT (sym->type->next) && SPEC_CVAL (sym->etype).v_char &&
+                       (getSize (sym->type->next) == 2 || getSize (sym->type->next) == 4))
+                {
+                  unsigned int esize = getSize (sym->type->next);
+                  unsigned int len = getSize (sym->type);
+                  char *buf = Safe_alloc (len ? len : 1);
+                  unsigned int i, b;
+
+                  for (i = 0; i < len / esize; i++)
+                    {
+                      unsigned long v = (esize == 2) ? SPEC_CVAL (sym->etype).v_char16[i] : SPEC_CVAL (sym->etype).v_char32[i];
+                      for (b = 0; b < esize; b++)
+                        buf[i * esize + b] = (char) ((v >> (8 * b)) & 0xff);
+                    }
+                  pic16_pCodeConstString (sym->rname, buf, len);
+                  Safe_free (buf);
+                }
               else
                 {
-                  assert (0);
+                  werrorfl (sym->fileDef, sym->lineDef, E_INTERNAL_ERROR, __FILE__, __LINE__,
+                            "pic16: unsupported initializer for a constant array in code space");
                 }
             }
         }

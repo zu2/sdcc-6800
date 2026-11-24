@@ -587,12 +587,10 @@ else
 fi
 
 # standard libs
-AC_DEFINE_UNQUOTED(STD_LIB,       "libsdcc", [XXX])
-AC_DEFINE_UNQUOTED(STD_INT_LIB,   "libint", [XXX])
-AC_DEFINE_UNQUOTED(STD_LONG_LIB,  "liblong", [XXX])
-AC_DEFINE_UNQUOTED(STD_FP_LIB,    "libfloat", [XXX])
-AC_DEFINE_UNQUOTED(STD_DS390_LIB, "libds390", [XXX])
-AC_DEFINE_UNQUOTED(STD_DS400_LIB, "libds400", [XXX])
+#AC_DEFINE_UNQUOTED(STD_LIB,       "libsdcc", [XXX])
+#AC_DEFINE_UNQUOTED(STD_INT_LIB,   "libint", [XXX])
+#AC_DEFINE_UNQUOTED(STD_LONG_LIB,  "liblong", [XXX])
+#AC_DEFINE_UNQUOTED(STD_FP_LIB,    "libfloat", [XXX])
 
 # SDCC runtime environment variables
 sdcc_dir_name="SDCC_HOME"
@@ -747,6 +745,7 @@ AC_DO_PORT(pdk15,    pdk,    PDK15,    [Excludes the PDK15 port])
 AC_DO_PORT_ENABLER(pdk16,    pdk,    PDK16,    [Includes the PDK16 port])
 AC_DO_PORT(mos6502,  mos6502,MOS6502,  [Excludes the MOS6502 port])
 AC_DO_PORT(mos65c02, mos6502,MOS65C02, [Excludes the MOS65C02 port])
+AC_DO_PORT(huc6280,  mos6502,HUC6280,  [Excludes the HUC6280 port])
 AC_DO_PORT(f8,       f8,     F8,       [Excludes the f8 port])
 AC_DO_PORT(f8l,      f8,     F8L,      [Excludes the f8l port])
 
@@ -815,34 +814,39 @@ if test $OPT_DISABLE_HC08 = 0 || test $OPT_DISABLE_S08 = 0; then
                                                        device/lib/s08-stack-auto/Makefile])
 fi
 
-if test $OPT_DISABLE_MOS6502 = 0 || test $OPT_DISABLE_MOS65C02 = 0; then
+if test $OPT_DISABLE_MOS6502 = 0 || test $OPT_DISABLE_MOS65C02 = 0 || test $OPT_DISABLE_HUC6280 = 0; then
   AC_CONFIG_FILES([src/mos6502/Makefile
                    sdas/as6500/Makefile])
   test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_FILES([device/lib/mos6502/Makefile
                                                        device/lib/mos6502-stack-auto/Makefile
-                                                       device/lib/mos65c02/Makefile])
+                                                       device/lib/mos65c02/Makefile
+                                                       device/lib/mos65c02-stack-auto/Makefile
+                                                       device/lib/huc6280/Makefile])
 fi
 
 if test $OPT_DISABLE_MCS51 = 0; then
   AC_CONFIG_FILES([src/mcs51/Makefile
                    sdas/as8051/Makefile])
-  test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_FILES([device/lib/mcs51/Makefile
-                                                       device/lib/small/Makefile
-                                                       device/lib/medium/Makefile
-                                                       device/lib/large/Makefile
-                                                       device/lib/huge/Makefile])
+  test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_FILES([device/lib/mcs51-small/Makefile
+                                                       device/lib/mcs51-medium/Makefile
+                                                       device/lib/mcs51-large/Makefile
+                                                       device/lib/mcs51-huge/Makefile
+                                                       device/lib/mcs51-small-stack-auto/Makefile
+                                                       device/lib/mcs51-large-stack-auto/Makefile
+                                                       device/lib/mcs51-small-xstack-auto/Makefile])
 fi
 
 if test $OPT_DISABLE_PIC14 = 0; then
   AC_CONFIG_FILES(src/pic14/Makefile)
-  test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_SUBDIRS(device/lib/pic14)
+  test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_FILES([device/lib/pic14/regular/Makefile
+                                                       device/lib/pic14/enhanced/Makefile])
 fi
 if test $OPT_DISABLE_PIC14 = 0 && test $OPT_DISABLE_NON_FREE = 0; then
   test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_SUBDIRS(device/non-free/lib/pic14)
 fi
 if test $OPT_DISABLE_PIC16 = 0; then
   AC_CONFIG_FILES(src/pic16/Makefile)
-  test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_SUBDIRS(device/lib/pic16)
+  test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_FILES([device/lib/pic16/Makefile])
 fi
 if test $OPT_DISABLE_PIC16 = 0 && test $OPT_DISABLE_NON_FREE = 0; then
   test $OPT_DISABLE_DEVICE_LIB = 0 && AC_CONFIG_SUBDIRS(device/non-free/lib/pic16)
@@ -1023,6 +1027,7 @@ sdcc ${VERSION} is now configured for
     pdk16               ${enable_pdk16_port}
     mos6502             ${enable_mos6502_port}
     mos65c02            ${enable_mos65c02_port}
+    huc6280             ${enable_huc6280_port}
     f8                  ${enable_f8_port}
     f8l                 ${enable_f8l_port}
 

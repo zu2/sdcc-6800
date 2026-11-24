@@ -450,7 +450,8 @@ static const char *stm8AsmCmd[] =
   "sdasstm8", "$l", "$3", "\"$1.asm\"", NULL
 };
 
-static const char *const _libs_stm8[] = { "stm8", NULL, };
+static const char *const _libs[] = { "libsdcc", "libsdccf", "libc", "libm", NULL };
+
 
 PORT stm8_port =
 {
@@ -480,7 +481,7 @@ PORT stm8_port =
     ".rel",
     1,
     NULL,                       /* crt */
-    _libs_stm8,                 /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     stm8_defaultRules,
@@ -603,11 +604,11 @@ PORT stm8_port =
   hasExtBitOp,                  /* hasExtBitOp */
   NULL,                         /* oclsExpense */
   TRUE,
-  FALSE,                        /* little endian */
-  0,                            /* leave lt */
-  0,                            /* leave gt */
-  1,                            /* transform <= to ! > */
-  1,                            /* transform >= to ! < */
+  false,                        // not little endian - STM8 is big endian.
+  0,                            // leave lt
+  0,                            // leave gt
+  1,                            // transform <= to ! >
+  1,                            // transform >= to ! <
   false,                        // leave !=
   false,                        // leave ==
   false,                        // Array initializer support

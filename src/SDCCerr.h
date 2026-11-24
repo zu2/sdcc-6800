@@ -276,7 +276,7 @@ enum {
   W_STATIC_ASSERTION_2          = 246, /* static assertion failed */
   E_DECL_AFTER_STATEMENT_C99    = 247, /* declaration after statement requires ISO C99 or later */
   E_SHORTCALL_INVALID_VALUE     = 248, /* Invalid value for a __z88dk_shortcall specifier */
-  E_DUPLICATE_PARAMTER_NAME     = 249, /* duplicate parameter name */
+  E_DUPLICATE_PARAMETER_NAME    = 249, /* duplicate parameter name */
   E_AUTO_FILE_SCOPE             = 250, /* auto in declaration at file scope */
   E_U8_CHAR_C23                 = 251, /* u8 character constant requires ISO C23 or later */
   E_U8_CHAR_INVALID             = 252, /* invalid u8 character constant */
@@ -341,13 +341,13 @@ enum {
   E_INVALID_OCTAL               = 311, /* \o{...} used without valid octal digits */
   E_SELECTION_DECLARATION_C2Y   = 312, /* declaration within selection header requires ISO C2y or later */
   E_COMPLIT_SCLASS_C23          = 313, // compound literals with storage class specifier require ISO C23 or later
-  W_ENUM_UNDERLYING_BITINT      = 314, // enum's underlying type may not be a bit-precise type in ISO C23
+  W_ENUM_UNDERLYING_BITINT      = 314, // enum's underlying bit-precise type requires ISO C2y or later
   W_BITINTWIDTH_1_C2Y           = 315, // signed bit-precise integer type of width 1 requires ISO C2y or later
   E_ATOMIC_ARRAY                = 316, // _Atomic array
   E_ATOMIC_FUNCTION             = 317, // _Atomic function
   E_ATOMIC_SPEC_ATOMIC          = 318, // _Atomic specifier on atomic type
   E_ATOMIC_SPEC_QUALIFIED       = 319, // _Atomic specifier on qualified type
-  E_BLOCK_SCOPE_EXTERN_INIT     = 320, // block scope variable declared extern and intialized
+  E_BLOCK_SCOPE_EXTERN_INIT     = 320, // block-scope variable declared extern and initialized
   E_BLOCK_SCOPE_FUNC_SCLASS     = 321, // Function declared at block scope with explicit storage-class specifier other than extern
   W_PTR2INT_NOREPRESENT         = 322, // Cast of pointer to integer type that cannot represent all values of the pointer type
   W_MAIN_TYPE                   = 323, // Function main should be void main(void) or int main(void)
@@ -389,11 +389,28 @@ enum {
   W_OPTIONAL_ARITHMETIC         = 359, // pointer to _Optional could not be proven to be non-null at pointer arithmetic
   W_NONCONST_STRINGLIT          = 360, // string literal assigned to pointer to non-const
   W_QUALIFIED_RETURN            = 361, // qualifier on return type has no effect
+  W_DATA_LOC_RANGE              = 362, // data location is likely out of range
+  E_NEGATIVE_BITFLD_SIZE        = 363, // negative bit-field size
+  E_SIZEOF_BITFLD               = 364, // sizeof applied to bit-field
+  E_INCOMPLETE_RETURN           = 365, // function has incomplete return type
+  E_FUNC_RETURN                 = 366, // function '%s' has function return type
+  W_ALIGNOF_INCOMPLETE_ARRAY_C2Y = 367, // alignof applied to an incomplete array requires ISO C2y or later
+  E_STRUCT_DEF_NESTED           = 368, // defining declarations of the same struct or union are nested
+  E_ARRAY_LENGTH_NON_INTEGER    = 369, // array length not an integer
+  E_INCOMPLETE_PARAMETER        = 370, // function definition has an incomplete parameter type
+  E_DUPLICATE_GENERIC_TYPE      = 371, // generic association type is compatible with previous association at %s:%d
+
+  W_COMPARE_POINTERS           = 372, // invalid pointer comparison
+  E_CAST_PTR_TO_FLOAT          = 373, // pointer cannot be cast to floating type
+  E_CAST_NONSCALAR             = 374, // non-scalar operand of cast to non-void type
+  E_ENUM_REDECL                = 375, // enumeration redeclared with incompatible underlying type or fixedness
+  E_SIZEOF_FUNCTION            = 376, // sizeof applied to a function type
+  E_CONSTEXPR_INTEGER          = 377, // constexpr integer requires integer constant expression
 
   // If you get a merge conflict here, some #pragma disable_warning in support/valdiag and support/regression will likely need to be adapted to the resolution. Check there!
 
-  /* don't touch this! */
-  NUMBER_OF_ERROR_MESSAGES             /* Number of error messages */
+  // don't touch this!
+  NUMBER_OF_ERROR_MESSAGES             // Number of error messages
 };
 
 /** sdcc style assertion */

@@ -2480,7 +2480,6 @@ void
 pic16_toBoolean (operand * oper)
 {
   int size = AOP_SIZE (oper) - 1;
-  int offset = 1;
 
   DEBUGpic16_emitcode ("; ***", "%s  %d", __FUNCTION__, __LINE__);
 
@@ -2902,6 +2901,163 @@ inWparamList (char *s)
 
 
 /*-----------------------------------------------------------------*/
+/* genPushAggregate - push the value of an aggregate (struct)      */
+/* argument (IPUSH_VALUE_AT_ADDRESS) onto the stack.               */
+/* Like every other argument, the bytes are pushed most            */
+/* significant first, so that the aggregate ends up in memory in   */
+/* its normal (little endian) layout.  If keepw is set, byte 0 is  */
+/* left in WREG instead of being pushed (wparam convention).       */
+/* Returns the number of bytes pushed, or -1 after reporting an    */
+/* error for an unsupported case.                                  */
+/*-----------------------------------------------------------------*/
+static int
+genPushAggregate (iCode *sic, bool keepw)
+{
+  operand *ptr = IC_LEFT (sic);
+  sym_link *type = operandType (ptr);
+  int size, off = 0, i;
+
+  if (!IS_PTR (type) || !type->next)
+    {
+      werrorfl (sic->filename, sic->lineno, E_INTERNAL_ERROR, __FILE__, __LINE__,
+                "pic16: aggregate argument is not passed through a pointer");
+      return -1;
+    }
+
+  size = getSize (type->next);
+
+  if (IC_RIGHT (sic))
+    {
+      if (!IS_OP_LITERAL (IC_RIGHT (sic)))
+        {
+          werrorfl (sic->filename, sic->lineno, E_INTERNAL_ERROR, __FILE__, __LINE__,
+                    "pic16: aggregate argument with a non-constant offset is not supported");
+          return -1;
+        }
+      off = (int) operandLitValue (IC_RIGHT (sic));
+    }
+
+  if (size < 1 || size > 255 || off < 0 || off + size > 0xffff)
+    {
+      werrorfl (sic->filename, sic->lineno, E_INTERNAL_ERROR, __FILE__, __LINE__,
+                "pic16: aggregate argument of this size is not supported (1..255 bytes)");
+      return -1;
+    }
+
+  pic16_aopOp (ptr, sic, FALSE);
+
+  if (AOP_TYPE (ptr) == AOP_ACC)
+    {
+      werrorfl (sic->filename, sic->lineno, E_INTERNAL_ERROR, __FILE__, __LINE__,
+                "pic16: aggregate argument through a pointer held in WREG is not supported");
+      pic16_freeAsmop (ptr, NULL, sic, TRUE);
+      return -1;
+    }
+
+  switch (DCL_TYPE (type))
+    {
+    case POINTER:
+    case IPOINTER:
+    case PPOINTER:
+      {
+        /* data space: FSR0 = address of the last byte, copy downwards */
+        int adj = off + size - 1;
+
+        /* not pic16_loadFSR0 (): for a rematerialized address it loads
+         * only the low byte (LFSR 0, LOW(sym)) */
+        mov2fp (pic16_popCopyReg (&pic16_pc_fsr0l), AOP (ptr), 0);
+        mov2fp (pic16_popCopyReg (&pic16_pc_fsr0h), AOP (ptr), 1);
+        if (adj)
+          {
+            pic16_emitpcode (POC_MOVLW, pic16_popGetLit (adj & 0xff));
+            pic16_emitpcode (POC_ADDWF, pic16_popCopyReg (&pic16_pc_fsr0l));
+            pic16_emitpcode (POC_MOVLW, pic16_popGetLit ((adj >> 8) & 0xff));
+            pic16_emitpcode (POC_ADDWFC, pic16_popCopyReg (&pic16_pc_fsr0h));
+          }
+        for (i = size; i > (keepw ? 1 : 0); i--)
+          {
+            pic16_emitpcode (POC_MOVFF, pic16_popGet2p (pic16_popCopyReg (&pic16_pc_postdec0),
+                                                        pic16_popCopyReg (pic16_stack_postdec)));
+            if (pic16_options.gstack)
+              pic16_testStackOverflow ();
+          }
+        if (keepw)
+          pic16_emitpcode (POC_MOVFW, pic16_popCopyReg (&pic16_pc_indf0));
+      }
+      break;
+
+    case GPOINTER:
+    case CPOINTER:
+      {
+        /* generic or code space: read through _gptrload/_gptrgetN in
+         * chunks of up to 4 bytes, highest chunk first.  A code pointer
+         * has the same layout as a generic pointer to code space
+         * (bits 7 and 6 of the upper byte clear). */
+        int end, c;
+
+        for (end = size; end > 0; end -= c)
+          {
+            int start, o;
+
+            c = (end > PIC16_GENPTRRW_MAXSIZE) ? PIC16_GENPTRRW_MAXSIZE : end;
+            start = end - c;
+            o = off + start;
+
+            mov2fp (pic16_popCopyReg (&pic16_pc_tblptrl), AOP (ptr), 0);
+            mov2fp (pic16_popCopyReg (&pic16_pc_tblptrh), AOP (ptr), 1);
+            mov2fp (pic16_popCopyReg (&pic16_pc_pclath), AOP (ptr), 2);
+            if (o)
+              {
+                pic16_emitpcode (POC_MOVLW, pic16_popGetLit (o & 0xff));
+                pic16_emitpcode (POC_ADDWF, pic16_popCopyReg (&pic16_pc_tblptrl));
+                pic16_emitpcode (POC_MOVLW, pic16_popGetLit ((o >> 8) & 0xff));
+                pic16_emitpcode (POC_ADDWFC, pic16_popCopyReg (&pic16_pc_tblptrh));
+                pic16_emitpcode (POC_MOVLW, pic16_popGetLit (0));
+                pic16_emitpcode (POC_ADDWFC, pic16_popCopyReg (&pic16_pc_pclath));
+              }
+            pic16_callGenericPointerLoad ();
+            pic16_callGenericPointerRW (0, c);
+
+            /* _gptrgetN returns bytes 0..3 in WREG, PRODL, PRODH, TABLAT */
+            if (c > 3)
+              {
+                pic16_emitpcode (POC_MOVFF, pic16_popGet2p (pic16_popCopyReg (&pic16_pc_tablat),
+                                                            pic16_popCopyReg (pic16_stack_postdec)));
+                if (pic16_options.gstack)
+                  pic16_testStackOverflow ();
+              }
+            if (c > 2)
+              {
+                pic16_emitpcode (POC_MOVFF, pic16_popGet2p (pic16_popCopyReg (&pic16_pc_prodh),
+                                                            pic16_popCopyReg (pic16_stack_postdec)));
+                if (pic16_options.gstack)
+                  pic16_testStackOverflow ();
+              }
+            if (c > 1)
+              {
+                pic16_emitpcode (POC_MOVFF, pic16_popGet2p (pic16_popCopyReg (&pic16_pc_prodl),
+                                                            pic16_popCopyReg (pic16_stack_postdec)));
+                if (pic16_options.gstack)
+                  pic16_testStackOverflow ();
+              }
+            if (!(keepw && start == 0))
+              pushw ();
+          }
+      }
+      break;
+
+    default:
+      werrorfl (sic->filename, sic->lineno, E_INTERNAL_ERROR, __FILE__, __LINE__,
+                "pic16: aggregate argument through this pointer class is not supported");
+      pic16_freeAsmop (ptr, NULL, sic, TRUE);
+      return -1;
+    }
+
+  pic16_freeAsmop (ptr, NULL, sic, TRUE);
+  return keepw ? size - 1 : size;
+}
+
+/*-----------------------------------------------------------------*/
 /* genCall - generates a call statement                            */
 /*-----------------------------------------------------------------*/
 static void
@@ -2950,6 +3106,36 @@ genCall (iCode * ic)
         {
           int size;
 //          int offset = 0;
+
+          if (sic->op == IPUSH_VALUE_AT_ADDRESS)
+            {
+              /* aggregate passed by value */
+              stackParms += getSize (operandType (IC_LEFT (sic))->next);
+              if (stackParms > 255)
+                werrorfl (sic->filename, sic->lineno, E_INTERNAL_ERROR, __FILE__, __LINE__,
+                          "pic16: more than 255 bytes of stack arguments are not supported");
+              if (inwparam)
+                {
+                  /* the last byte of the last parameter stays in WREG */
+                  if (!firstTimeThruLoop)
+                    {
+                      pushw ();
+                      use_wreg = 1;
+                    }
+                  firstTimeThruLoop = 0;
+                  genPushAggregate (sic, TRUE);
+                }
+              else
+                {
+                  use_wreg = 0;
+                  if (_G.resDirect)
+                    werrorfl (sic->filename, sic->lineno, E_INTERNAL_ERROR, __FILE__, __LINE__,
+                              "pic16: aggregate argument with a directly loaded result is not supported");
+                  else
+                    genPushAggregate (sic, FALSE);
+                }
+              continue;
+            }
 
           pic16_aopOp (IC_LEFT (sic), sic, FALSE);
           size = AOP_SIZE (IC_LEFT (sic));
@@ -3109,6 +3295,17 @@ genPcall (iCode * ic)
       for (sic = setFirstItem (_G.sendSet); sic; sic = setNextItem (_G.sendSet))
         {
           int size;
+
+          if (sic->op == IPUSH_VALUE_AT_ADDRESS)
+            {
+              /* aggregate passed by value, always on the stack here */
+              stackParms += getSize (operandType (IC_LEFT (sic))->next);
+              if (stackParms > 255)
+                werrorfl (sic->filename, sic->lineno, E_INTERNAL_ERROR, __FILE__, __LINE__,
+                          "pic16: more than 255 bytes of stack arguments are not supported");
+              genPushAggregate (sic, FALSE);
+              continue;
+            }
 
           pic16_aopOp (IC_LEFT (sic), sic, FALSE);
           size = AOP_SIZE (IC_LEFT (sic));
@@ -4219,7 +4416,7 @@ genDiv (iCode * ic)
   int negated = 0;
   int leftVal = 0, rightVal = 0;
   int signedLits = 0;
-  char *functions[2][2] = { {"__divschar", "__divuchar"}, {"__modschar", "__moduchar"} };
+  char *functions[2][2] = { {"___divschar", "___divuchar"}, {"___modschar", "___moduchar"} };
   int op = 0;
 
   /* Division is a very lengthy algorithm, so it is better
@@ -4270,12 +4467,12 @@ genDiv (iCode * ic)
     {
       if ((!IS_UNSIGNED (operandType (right)) || rightVal < 0) && (!IS_UNSIGNED (operandType (left)) || leftVal < 0))
         {
-          /* Both operands are signed or negative, use _divschar
-           * instead of _divuchar */
+          /* Both operands are signed or negative, use __divschar
+           * instead of __divuchar */
           pushaop (AOP (right), 0);
           pushaop (AOP (left), 0);
 
-          /* call _divschar */
+          /* call __divschar */
           pic16_emitpcode (POC_CALL, pic16_popGetWithString (functions[op][0]));
 
           {
@@ -4354,7 +4551,7 @@ genDiv (iCode * ic)
           pushaop (AOP (left), 0);
         }
 
-      /* call _divuchar */
+      /* call __divuchar */
       pic16_emitpcode (POC_CALL, pic16_popGetWithString (functions[op][1]));
 
       {
@@ -4814,11 +5011,11 @@ genSkipc (resolvedIfx * rifx)
 /*                  aop is a literal)                              */
 /*-----------------------------------------------------------------*/
 void
-mov2w_regOrLit (asmop * aop, unsigned long lit, int offset)
+mov2w_regOrLit (asmop * aop, unsigned long long lit, int offset)
 {
   if (aop->type == AOP_LIT)
     {
-      pic16_emitpcode (POC_MOVLW, pic16_popGetLit (lit >> (offset * 8)));
+      pic16_emitpcode (POC_MOVLW, pic16_popGetLit ((lit >> (offset * 8)) & 0xff));
     }
   else
     {
@@ -4846,8 +5043,8 @@ genCmp (operand * left, operand * right, operand * result, iCode * ifx, int sign
   int offs;
   symbol *templbl;
   operand *dummy;
-  unsigned long lit;
-  unsigned long mask;
+  unsigned long long lit;
+  unsigned long long mask;
   int performedLt;
 
   FENTRY;
@@ -4856,7 +5053,7 @@ genCmp (operand * left, operand * right, operand * result, iCode * ifx, int sign
   assert (AOP_SIZE (left) == AOP_SIZE (right));
 
   size = AOP_SIZE (right) - 1;
-  mask = (0x100UL << (size * 8)) - 1;
+  mask = (0x100ULL << (size * 8)) - 1;
   // in the end CARRY holds "left < right" (performedLt == 1) or "left >= right" (performedLt == 0)
   performedLt = 1;
   templbl = NULL;
@@ -4901,7 +5098,7 @@ genCmp (operand * left, operand * right, operand * result, iCode * ifx, int sign
       assert (isAOP_REGlike (right));
       // swap left and right
       // left < right <==> right > left <==> (right >= left + 1)
-      lit = ulFromVal (AOP (left)->aopu.aop_lit);
+      lit = ullFromVal (AOP (left)->aopu.aop_lit);
 
       if ((!sign && (lit & mask) == mask) || (sign && (lit & mask) == (mask >> 1)))
         {
@@ -4925,7 +5122,7 @@ genCmp (operand * left, operand * right, operand * result, iCode * ifx, int sign
     }
   else if (isAOP_LIT (right))
     {
-      lit = ulFromVal (AOP (right)->aopu.aop_lit);
+      lit = ullFromVal (AOP (right)->aopu.aop_lit);
     }                           // if
 
   assert (isAOP_REGlike (left));        // left must be register or the like
@@ -4940,7 +5137,7 @@ genCmp (operand * left, operand * right, operand * result, iCode * ifx, int sign
       if (!sign)
         {
           // unsigned comparison to a literal
-          DEBUGpc ("unsigned compare: left %s lit(0x%X=%lu), size=%d", performedLt ? "<" : ">=", lit, lit, size + 1);
+          DEBUGpc ("unsigned compare: left %s lit(0x%llX=%llu), size=%d", performedLt ? "<" : ">=", lit, lit, size + 1);
           if (lit == 0)
             {
               // unsigned left < 0? always false
@@ -4954,9 +5151,10 @@ genCmp (operand * left, operand * right, operand * result, iCode * ifx, int sign
       else
         {
           // signed comparison to a literal
-          DEBUGpc ("signed compare: left %s lit(0x%X=%ld), size=%d, mask=%x", performedLt ? "<" : ">=", lit, lit, size + 1,
+          DEBUGpc ("signed compare: left %s lit(0x%llX=%lld), size=%d, mask=%llx",
+                   performedLt ? "<" : ">=", lit, (long long)lit, size + 1,
                    mask);
-          if ((lit & mask) == ((0x80 << (size * 8)) & mask))
+          if ((lit & mask) == ((0x80ULL << (size * 8)) & mask))
             {
               // signed left < 0x80000000? always false
               if (performedLt)
@@ -5233,7 +5431,7 @@ genCmpEq (iCode * ic, iCode * ifx)
   int preserve_result = 0;
   int generate_result = 0;
   int i = 0;
-  unsigned long lit = -1;
+  unsigned long long lit = -1ULL;
 
   FENTRY;
 
@@ -5260,7 +5458,7 @@ genCmpEq (iCode * ic, iCode * ifx)
 
   if (AOP_TYPE (right) == AOP_LIT)
     {
-      lit = ulFromVal (AOP (right)->aopu.aop_lit);
+      lit = ullFromVal (AOP (right)->aopu.aop_lit);
     }
 
   if (regsInCommon (left, result) || regsInCommon (right, result))
@@ -5818,6 +6016,7 @@ genOrOp (iCode * ic)
   pic16_freeAsmop (result, NULL, ic, TRUE);
 }
 
+#if 0
 /*-----------------------------------------------------------------*/
 /* isLiteralBit - test if lit == 2^n                               */
 /*-----------------------------------------------------------------*/
@@ -5840,6 +6039,7 @@ isLiteralBit (unsigned long lit)
       return idx + 1;
   return 0;
 }
+#endif
 
 /*-----------------------------------------------------------------*/
 /* continueIfTrue -                                                */
@@ -5897,7 +6097,7 @@ genAnd (iCode * ic, iCode * ifx)
 {
   operand *left, *right, *result;
   int size, offset = 0;
-  unsigned long lit = 0L;
+  unsigned long long lit = 0ULL;
   resolvedIfx rIfx;
 
   // This becomes true if we need to emit a jump to ifx based on the zero flag
@@ -5937,7 +6137,7 @@ genAnd (iCode * ic, iCode * ifx)
     }
 
   if (AOP_TYPE (right) == AOP_LIT)
-    lit = ulFromVal (AOP (right)->aopu.aop_lit);
+    lit = ullFromVal (AOP (right)->aopu.aop_lit);
 
   size = AOP_SIZE (result);
 
@@ -6243,7 +6443,7 @@ genOr (iCode * ic, iCode * ifx)
 {
   operand *left, *right, *result;
   int size, offset = 0;
-  unsigned long lit = 0L;
+  unsigned long long lit = 0ULL;
   resolvedIfx rIfx;
 
   FENTRY;
@@ -6281,7 +6481,7 @@ genOr (iCode * ic, iCode * ifx)
   DEBUGpic16_pic16_AopType (__LINE__, left, right, result);
 
   if (AOP_TYPE (right) == AOP_LIT)
-    lit = ulFromVal (AOP (right)->aopu.aop_lit);
+    lit = ullFromVal (AOP (right)->aopu.aop_lit);
 
   size = AOP_SIZE (result);
 
@@ -6576,7 +6776,7 @@ genXor (iCode * ic, iCode * ifx)
 {
   operand *left, *right, *result;
   int size, offset = 0;
-  unsigned long lit = 0L;
+  unsigned long long lit = 0ULL;
   resolvedIfx rIfx;
 
   FENTRY;
@@ -6613,7 +6813,7 @@ genXor (iCode * ic, iCode * ifx)
     }
 
   if (AOP_TYPE (right) == AOP_LIT)
-    lit = ulFromVal (AOP (right)->aopu.aop_lit);
+    lit = ullFromVal (AOP (right)->aopu.aop_lit);
 
   size = AOP_SIZE (result);
 
@@ -10225,7 +10425,7 @@ genAssign (iCode * ic)
   operand *result, *right;
   sym_link *restype, *rtype;
   int size, offset, know_W;
-  unsigned long lit = 0L;
+  unsigned long long lit = 0ULL;
 
   result = IC_RESULT (ic);
   right = IC_RIGHT (ic);
@@ -10301,7 +10501,7 @@ genAssign (iCode * ic)
     {
       if (!(IS_FLOAT (operandType (right)) || IS_FIXED (operandType (right))))
         {
-          lit = ulFromVal (AOP (right)->aopu.aop_lit);
+          lit = ullFromVal (AOP (right)->aopu.aop_lit);
 
           /* patch tag for literals that are cast to pointers */
           if (IS_CODEPTR (restype))
@@ -11364,6 +11564,11 @@ genpic16Code (iCode * lic)
 
         case IPUSH:
           genIpush (ic);
+          break;
+
+        case IPUSH_VALUE_AT_ADDRESS:
+          /* aggregate argument: pushed by genCall/genPcall */
+          addSet (&_G.sendSet, ic);
           break;
 
         case IPOP:

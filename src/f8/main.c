@@ -140,6 +140,15 @@ static char *f8_keywords[] = {
 };
 
 static void
+f8_genAssemblerStart (FILE *of)
+{
+  if (TARGET_IS_F8L)
+    fprintf (of, "\t.f8l\n");
+  else
+    fprintf (of, "\t.f8\n");
+}
+
+static void
 f8_genAssemblerEnd (FILE *of)
 {
   if (options.out_fmt == 'E' && options.debug)
@@ -307,7 +316,7 @@ int
 f8_genIVT(struct dbuf_s * oBuf, symbol ** intTable, int intCount)
 {
   dbuf_tprintf (oBuf, "\tjp #s_GSINIT ; reset\n");
-  dbuf_tprintf (oBuf, "\tnop\n");
+  dbuf_tprintf (oBuf, "\ttrap\n");
   if (interrupts[0])
     dbuf_printf (oBuf, "\tjp #%s ; interrupt handler\n", interrupts[0]->rname);
   else
@@ -394,7 +403,7 @@ static const char *f8AsmCmd[] =
   "sdasf8", "$l", "$3", "\"$1.asm\"", NULL
 };
 
-static const char *const _libs_f8[] = { "f8", NULL, };
+static const char *const _libs[] = { "libsdcc", "libsdccf", "libc", "libm", NULL };
 
 PORT f8_port =
 {
@@ -424,7 +433,7 @@ PORT f8_port =
     ".rel",
     1,
     NULL,                       // crt
-    _libs_f8,                   // libs
+    _libs,                      // libs
   },
   {                             /* Peephole optimizer */
     f8_defaultRules,
@@ -533,7 +542,7 @@ PORT f8_port =
   0,
   NULL,
   f8_keywords,
-  NULL,
+  f8_genAssemblerStart,
   f8_genAssemblerEnd,
   f8_genIVT,
   0,                            /* no genXINIT code */
@@ -565,8 +574,6 @@ PORT f8_port =
   PORT_MAGIC
 };
 
-static const char *const _libs_f8l[] = { "f8l", NULL, };
-
 PORT f8l_port =
 {
   TARGET_ID_F8L,
@@ -595,7 +602,7 @@ PORT f8l_port =
     ".rel",
     1,
     NULL,                       // crt
-    _libs_f8l,                  // libs
+    _libs,                      // libs
   },
   {                             /* Peephole optimizer */
     f8_defaultRules,
@@ -704,7 +711,7 @@ PORT f8l_port =
   0,
   NULL,
   f8_keywords,
-  NULL,
+  f8_genAssemblerStart,
   f8_genAssemblerEnd,
   f8_genIVT,
   0,                            /* no genXINIT code */

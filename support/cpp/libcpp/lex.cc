@@ -2150,7 +2150,7 @@ forms_identifier_p (cpp_reader *pfile, int first,
 	  if (__builtin_expect (*buffer->cur == bidi::utf8_start, 0)
 	      && warn_bidi_p)
 	    {
-	      location_t loc;
+	      location_t loc = 0;
 	      bidi::kind kind = get_bidi_utf8 (pfile, buffer->cur, &loc);
 	      maybe_warn_bidi_on_char (pfile, kind, /*ucn_p=*/false, loc);
 	    }
@@ -2166,7 +2166,7 @@ forms_identifier_p (cpp_reader *pfile, int first,
 	  buffer->cur += 2;
 	  if (warn_bidi_p)
 	    {
-	      location_t loc;
+	      location_t loc = 0;
 	      bidi::kind kind;
 	      if (buffer->cur[-1] == 'N')
 		kind = get_bidi_named (pfile, buffer->cur, &loc);
@@ -4065,6 +4065,9 @@ _cpp_lex_direct (cpp_reader *pfile)
               _sdcpp_skip_asm_block (pfile);
               /* Save the __asm block as a token in its own right.  */
               _sdcpp_save_asm (pfile, result, comment_start, result->val.node.node == pfile->spec_nodes.n__asm);
+              /* The matching __endasm is consumed by _sdcpp_skip_asm_block(),
+                 so no separate token will carry EXIT_ASM. */
+              result->flags |= EXIT_ASM;
 				}
           result->flags |= ENTER_ASM;
         }
@@ -5475,7 +5478,13 @@ cpp_directive_only_process (cpp_reader *pfile,
 		    switch (c)
 		      {
 		      case '\\':
-			esc = true;
+			if (esc)
+			  {
+			    star = false;
+			    esc = false;
+			  }
+			else
+			  esc = true;
 			break;
 
 		      case '\r':
@@ -5506,7 +5515,7 @@ cpp_directive_only_process (cpp_reader *pfile,
 			break;
 
 		      case '/':
-			if (star)
+			if (star && !esc)
 			  goto done_comment;
 			/* FALLTHROUGH  */
 

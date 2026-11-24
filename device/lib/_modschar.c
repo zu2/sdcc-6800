@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------------------
-   _modschar.c :- routine for signed char (8 bit) division. just calls
+   __modschar.c :- routine for signed char (8 bit) division. just calls
                  routine for signed int division after sign extension
 
    Copyright (C) 2013, Philipp Klaus Krause . pkk@spth.de
@@ -27,21 +27,24 @@
    might be covered by the GNU General Public License.
 -------------------------------------------------------------------------*/
 
+#include <sdcc-lib.h>
+
 signed int
-_modschar (signed char x, signed char y)
+__modschar (signed char x, signed char y) __SDCC_NONBANKED
+{
+  return ((int)x % (int)y);
+}
+
+/*
+signed int
+__moduschar (unsigned char x, signed char y) __SDCC_NONBANKED
 {
   return ((int)x % (int)y);
 }
 
 signed int
-_moduschar (unsigned char x, signed char y)
+__modsuchar (signed char x, unsigned char y) __SDCC_NONBANKED
 {
   return ((int)x % (int)y);
 }
-
-signed int
-_modsuchar (signed char x, unsigned char y)
-{
-  return ((int)x % (int)y);
-}
-
+*/

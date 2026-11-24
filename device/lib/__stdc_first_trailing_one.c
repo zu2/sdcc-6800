@@ -30,10 +30,15 @@
 
 #include <limits.h>
 #include <stdint.h>
+#include <assert.h>
+
+#ifndef ULLONG_WIDTH
+#define ULLONG_WIDTH	64
+#endif
 
 static_assert(INT_FAST8_MAX >= ULLONG_WIDTH, "Unsuitable return type");
 
-unsigned _BitInt(8) __stdc_first_trailing_one(unsigned long long value)
+__stdc_bitcount_t __stdc_first_trailing_one(unsigned long long value)
 {
 	for(uint_fast8_t i = 0; i < ULLONG_WIDTH; i++)
 		if(value & (1ull << i))

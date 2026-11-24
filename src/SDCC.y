@@ -71,6 +71,8 @@ STACK_DCL(blockNum,int,MAX_NEST_LEVEL*3)
 value *cenum = NULL;        /* current enumeration  type chain*/
 bool uselessDecl = true;
 
+static void checkTagKind (symbol *tag, int kind);
+
 #define YYDEBUG 1
 
 %}
@@ -112,6 +114,7 @@ bool uselessDecl = true;
 %token BITWISEAND UNARYMINUS IPUSH IPUSH_VALUE_AT_ADDRESS IPOP PCALL ENDFUNCTION JUMPTABLE
 %token ROT
 %token CAST CALL PARAM NULLOP BLOCK LABEL RECEIVE SEND ARRAYINIT
+%token POINTER_NONNULL_CHECK
 %token DUMMY_READ_VOLATILE ENDCRITICAL INLINE RESTRICT SMALLC RAISONANCE IAR COSMIC DYNAMICC SDCCCALL PRESERVES_REGS Z88DK_FASTCALL Z88DK_CALLEE Z88DK_SHORTCALL Z88DK_PARAMS_OFFSET
 
 /* C11 */
@@ -222,10 +225,13 @@ postfix_expression
           }
    | postfix_expression '.' { ignoreTypedefType = 1; } identifier
                       {
+                        ast *address;
                         ignoreTypedefType = 0;
                         $4 = newSymbol($4->name,NestLevel);
                         $4->implicit = 1;
-                        $$ = newNode(PTR_OP,newNode('&',$1,NULL),newAst_VALUE(symbolVal($4)));
+                        address = newNode('&',$1,NULL);
+                        address->addressOrigin = ADDRESS_DOT;
+                        $$ = newNode(PTR_OP,address,newAst_VALUE(symbolVal($4)));
                       }
    | postfix_expression PTR_OP { ignoreTypedefType = 1; } identifier
                       {
@@ -252,10 +258,18 @@ postfix_expression
 
                         /* add the specifier list to the id */
                         symbol *sym1 = prepareDeclarationSymbol(NULL, $2, sym);
-                        /* implicitly make the symbol a constexpr if the initializer allows it */
+                        /* implicitly make the symbol a constexpr if the initializer allows it.
+                           This is the compiler's own inference, not something the program wrote,
+                           so record that: a constexpr the program declares is const (C23
+                           6.7.2p6), while a compound literal without a storage class has the
+                           type written in it and nothing more (C11 6.5.2.5p4). */
                         sym1->etype = getSpec(sym1->type);
-                        if (constExprTree(list2expr(sym1->ival)))
-                          SPEC_CONSTEXPR(sym1->etype) = 1;
+                        /* Preserve the initialiser when decoration replaces its root. */
+                        if (constExprTree(copyAst(list2expr(sym1->ival))))
+                          {
+                            SPEC_CONSTEXPR(sym1->etype) = 1;
+                            SPEC_IMPLICIT_CONSTEXPR(sym1->etype) = 1;
+                          }
 
                         /* mark as temporary symbol for compound literal, so that gatherImplicitVariables
                            can attach it to a block, and add the temporary symbol to the symbol table */
@@ -316,10 +330,7 @@ unary_expression
              if (isOptional (type->next))
                {
                  type = copyLinkChain (type);
-                 if (IS_DECL (type->next))
-                   DCL_PTR_OPTIONAL (type->next) = false;
-                 else
-                   SPEC_OPTIONAL (type->next) = false;
+                 removeOptionalQualifier (type->next);
                  $$ = newNode (CAST, newAst_LINK(type), $$);
                  $$->values.cast.semDeref = true;
                }
@@ -327,7 +338,11 @@ unary_expression
          else if ($1 == '*' && IS_AST_OP ($2) && $2->opval.op == '&' && $2->right == NULL)
            $$ = $2->left;
          else
-           $$ = newNode ($1, $2, NULL);
+           {
+             $$ = newNode ($1, $2, NULL);
+             if ($1 == '&')
+               $$->addressOrigin = ADDRESS_EXPLICIT;
+           }
        }
    | SIZEOF unary_expression        { $$ = newNode (SIZEOF, NULL, $2); }
    | SIZEOF '(' type_name ')'       { $$ = newAst_VALUE (sizeofOp ($3)); }
@@ -744,11 +759,21 @@ type_specifier_without_struct_or_union
    | ATOMIC '(' type_name ')' {
                   checkTypeSanity ($3, "(_Atomic)");
                   $$=$3;
-                  if (SPEC_ATOMIC($$))
+                  /* Recover with a scalar type after diagnosing an invalid
+                     derived type, so later specifier handling stays valid. */
+                  if (IS_ARRAY($$) || IS_FUNC($$))
+                    {
+                      werror (IS_ARRAY($$) ? E_ATOMIC_ARRAY : E_ATOMIC_FUNCTION);
+                      $$=newIntLink();
+                    }
+                  if (isAtomic($$))
                     werror (E_ATOMIC_SPEC_ATOMIC);
-                  if (SPEC_CONST($$) || SPEC_RESTRICT($$) || SPEC_VOLATILE($$) || SPEC_ATOMIC($$))
+                  if (isConst($$) || isRestrict($$) || isVolatile($$) || isAtomic($$))
                     werror (E_ATOMIC_SPEC_QUALIFIED);
-                  SPEC_ATOMIC($$) = 1;
+                  if (IS_PTR($$))
+                    DCL_PTR_ATOMIC($$) = 1;
+                  else
+                    SPEC_ATOMIC($$) = 1;
                   werror (E_ATOMIC_UNSUPPORTED);
                }
    | DECIMAL128 {
@@ -834,6 +859,9 @@ struct_or_union_specifier
         {
           structdef *sdef;
 
+          if ($3->tagsym)
+            checkTagKind ($3->tagsym, $1);
+
           if (!$3->tagsym)
             {
               /* no tag given, so new struct def for current scope */
@@ -847,8 +875,16 @@ struct_or_union_specifier
                   /* Error if a complete type already defined in this scope */
                   if (sdef->block == currBlockno)
                     {
-                      if (sdef->fields)
-                        $3->redefinition = true;
+                      if (sdef->being_defined)
+                        {
+                          werror (E_STRUCT_DEF_NESTED, $3->tag);
+                          /* Keep the nested definition separate for recovery. */
+                        }
+                      else if (sdef->fields)
+                        {
+                          $3->redefinition = true;
+                          sdef->being_defined = true;
+                        }
                       else // We are completing an incomplete type
                         $3 = sdef;
                     }
@@ -871,11 +907,7 @@ struct_or_union_specifier
             {
               $3->type = $1;
             }
-          else
-            {
-              if ($3->type != $1)
-                  werror(E_BAD_TAG, $3->tag, $1==STRUCT ? "struct" : "union");
-            }
+          $3->being_defined = true;
         }
    '{' member_declaration_list '}'
         {
@@ -907,14 +939,17 @@ struct_or_union_specifier
                 }
             }
 
+          $3->being_defined = false;
+
           /* Create a structdef   */
           $3->fields = reverseSyms($6);        /* link the fields */
-          $3->size = compStructSize($1, $3);   /* update size of  */
-          promoteAnonStructs ($1, $3);
+          $3->size = compStructSize($3);       /* update size of  */
+          promoteAnonStructs ($3);
 
           if ($3->redefinition) // Since C23, multiple definitions for struct / union are allowed, if they are compatible and have the same tags. The current standard draft N3047 allows redeclarations of unions to have a different order of the members. We don't. The rule in N3047 is now considered a mistake by many, and will hopefully be changed to the SDCC behaviour via a national body comment for the final version of the standard.
             {
               sdef = findSymWithBlock (StructTab, $3->tagsym, currBlockno, NestLevel);
+              sdef->being_defined = false;
               bool compatible = options.std_c23 && sdef->tagsym && $3->tagsym && !strcmp (sdef->tagsym->name, $3->tagsym->name);
               for (symbol *fieldsym1 = sdef->fields, *fieldsym2 = $3->fields; compatible; fieldsym1 = fieldsym1->next, fieldsym2 = fieldsym2->next)
                 {
@@ -924,10 +959,12 @@ struct_or_union_specifier
                     compatible = false;
                   else if (strcmp (fieldsym1->name, fieldsym2->name))
                     compatible = false;
-                  else if (compareType (fieldsym1->type, fieldsym2->type, true) <= 0)
+                  /* Corresponding members require the same type, not just
+                     compatible types with a possible composite array bound. */
+                  else if (compareTypeExact (fieldsym1->type, fieldsym2->type, -1, true) <= 0)
                     compatible = false;
                }
-              if (!compatible)
+              if (!compatible && sdef->type == $1)
                 {
                   werror(E_STRUCT_REDEF_INCOMPATIBLE, $3->tag);
                   werrorfl(sdef->tagsym->fileDef, sdef->tagsym->lineDef, E_PREVIOUS_DEF);
@@ -1059,7 +1096,9 @@ member_declarator
           unsigned int bitsize;
           $$ = newSymbol (genSymName(NestLevel), NestLevel);
           bitsize = (unsigned int) ulFromVal(constExprValue($2, true));
-          if (!bitsize)
+          if (floatFromVal (constExprValue($2, true)) < 0)
+              werror (E_NEGATIVE_BITFLD_SIZE);
+          else if (!bitsize)
               bitsize = BITVAR_PAD;
           $$->bitVar = bitsize;
           $$->bitUnnamed = 1;
@@ -1068,8 +1107,9 @@ member_declarator
         {
           unsigned int bitsize;
           bitsize = (unsigned int) ulFromVal(constExprValue($3, true));
-
-          if (!bitsize)
+          if (floatFromVal (constExprValue($3, true)) < 0)
+              werror (E_NEGATIVE_BITFLD_SIZE);
+          else if (!bitsize)
             {
               $$ = newSymbol (genSymName(NestLevel), NestLevel);
               $$->bitVar = BITVAR_PAD;
@@ -1096,14 +1136,18 @@ enum_specifier
           symbol *csym;
           sym_link *enumtype;
 
+          checkTagKind ($2, ENUM);
           enumtype = newEnumType ($4, NULL);
           SPEC_SCLS(getSpec(enumtype)) = 0;
           $2->type = enumtype;
 
           csym = findSymWithLevel(enumTab, $2);
-          if ((csym && csym->level == $2->level))
+          if (csym && csym->block == $2->block && csym->level == $2->level)
             {
-              if (!options.std_c23 || compareType (csym->type, $2->type, true) <= 0)
+              if (SPEC_ENUM_FIXED (csym->type) != SPEC_ENUM_FIXED (enumtype) ||
+                  SPEC_ENUM_FIXED (enumtype) && !compatibleTypes (csym->type, enumtype))
+                werrorfl ($2->fileDef, $2->lineDef, E_ENUM_REDECL, $2->name);
+              else if (!options.std_c23 || compareType (csym->type, $2->type, true) <= 0)
                 {
                   werrorfl($2->fileDef, $2->lineDef, E_DUPLICATE_TYPEDEF, csym->name);
                   werrorfl(csym->fileDef, csym->lineDef, E_PREVIOUS_DEF);
@@ -1111,7 +1155,7 @@ enum_specifier
             }
 
           /* add this to the enumerator table */
-          if (!csym)
+          if (!csym || csym->block != $2->block || csym->level != $2->level)
               addSym (enumTab, $2, $2->name, $2->level, $2->block, false);
           $$ = copyLinkChain(enumtype);
         }
@@ -1120,14 +1164,18 @@ enum_specifier
           symbol *csym;
           sym_link *enumtype;
 
+          checkTagKind ($2, ENUM);
           enumtype = newEnumType ($5, $3);
           SPEC_SCLS(getSpec(enumtype)) = 0;
           $2->type = enumtype;
 
           csym = findSymWithLevel(enumTab, $2);
-          if ((csym && csym->level == $2->level))
+          if (csym && csym->block == $2->block && csym->level == $2->level)
             {
-              if (!options.std_c23 || compareType (csym->type, $2->type, true) <= 0)
+              if (SPEC_ENUM_FIXED (csym->type) != SPEC_ENUM_FIXED (enumtype) ||
+                  SPEC_ENUM_FIXED (enumtype) && !compatibleTypes (csym->type, enumtype))
+                werrorfl ($2->fileDef, $2->lineDef, E_ENUM_REDECL, $2->name);
+              else if (!options.std_c23 || compareType (csym->type, $2->type, true) <= 0)
                 {
                   werrorfl($2->fileDef, $2->lineDef, E_DUPLICATE_TYPEDEF, csym->name);
                   werrorfl(csym->fileDef, csym->lineDef, E_PREVIOUS_DEF);
@@ -1135,7 +1183,7 @@ enum_specifier
             }
 
           /* add this to the enumerator table */
-          if (!csym)
+          if (!csym || csym->block != $2->block || csym->level != $2->level)
               addSym (enumTab, $2, $2->name, $2->level, $2->block, false);
           $$ = copyLinkChain(enumtype);
         }
@@ -1163,17 +1211,22 @@ simple_typed_enum_decl
         {
           symbol *csym;
 
-          /* let newEnumType check the enum-type-specifier and discard the returned type */
-          newEnumType (NULL, $3);
+          sym_link *enumtype = newEnumType (NULL, $3);
 
-          /* check the enumerator table */
-          if ((csym = findSymWithLevel(enumTab, $2)))
-              $$ = copyLinkChain(csym->type);
+          /* A fixed-underlying declaration establishes a complete tagged type. */
+          csym = findSymWithLevel (enumTab, $2);
+          if (csym && csym->block == $2->block && csym->level == $2->level)
+            {
+              if (!SPEC_ENUM_FIXED (csym->type) || !compatibleTypes (csym->type, enumtype))
+                werrorfl ($2->fileDef, $2->lineDef, E_ENUM_REDECL, $2->name);
+              enumtype = csym->type;
+            }
           else
             {
-              $$ = newLink(SPECIFIER);
-              SPEC_NOUN($$) = V_INT;
+              $2->type = enumtype;
+              addSym (enumTab, $2, $2->name, $2->level, $2->block, false);
             }
+          $$ = copyLinkChain (enumtype);
         }
    ;
 
@@ -1858,9 +1911,17 @@ parameter_declaration
 abstract_declarator
    : pointer { $$ = reverseLink($1); }
    | direct_abstract_declarator
-   | pointer direct_abstract_declarator   { $1 = reverseLink($1); $2->next = $1; $$ = $2;
-          if (IS_PTR($1) && IS_FUNC($2))
-            DCL_TYPE($1) = CPOINTER;
+   | pointer direct_abstract_declarator
+        {
+          sym_link *p;
+
+          $1 = reverseLink ($1);
+          for (p = $2; p->next; p = p->next)
+            ;
+          p->next = $1;
+          $$ = $2;
+          if (IS_PTR ($1) && IS_FUNC ($2))
+            DCL_TYPE ($1) = CPOINTER;
         }
    ;
 
@@ -1884,7 +1945,10 @@ array_abstract_declarator
         DCL_ELEM ($$) = 0;
         if ($1)
           {
-            $1->next = $$;
+            sym_link *p;
+            for (p = $1; p->next; p = p->next)
+              ;
+            p->next = $$;
             $$ = $1;
           }
       }
@@ -1896,7 +1960,13 @@ array_abstract_declarator
         if (val && SPEC_SCLS (val->etype) == S_LITERAL)
           {
             DCL_ARRAY_LENGTH_TYPE ($$) = ARRAY_LENGTH_KNOWN_CONST;
-            DCL_ELEM ($$) = (int) ulFromVal (val);
+            if (!IS_INTEGRAL (val->type))
+              {
+                werror (E_ARRAY_LENGTH_NON_INTEGER);
+                DCL_ELEM ($$) = 1; /* Recover as for a negative array length. */
+              }
+            else
+              DCL_ELEM ($$) = (int) ulFromVal (val);
           }
         else
           {
@@ -1905,7 +1975,10 @@ array_abstract_declarator
           }
         if ($1)
           {
-            $1->next = $$;
+            sym_link *p;
+            for (p = $1; p->next; p = p->next)
+              ;
+            p->next = $$;
             $$ = $1;
           }
       }
@@ -2009,6 +2082,11 @@ designator
             if (!tval || (SPEC_SCLS(tval->etype) != S_LITERAL))
               {
                 werror (E_CONST_EXPECTED);
+                elemno = 0; /* arbitrary fixup */
+              }
+            else if (!IS_INTEGRAL (tval->type))
+              {
+                werror (E_IDX_NOT_INT);
                 elemno = 0; /* arbitrary fixup */
               }
             else
@@ -3010,6 +3088,7 @@ type_name
               p->next = $1;
             }
           $$ = $2;
+          processFuncPtr ($$);
           ignoreTypedefType = 0;
         }
    ;
@@ -3317,3 +3396,16 @@ identifier
    : IDENTIFIER   { $$ = newSymbol ($1, NestLevel); }
    ;
 %%
+
+/* Definitions may shadow outer tags, but all three tag kinds share a scope. */
+static void
+checkTagKind (symbol *tag, int kind)
+{
+  structdef *sdef = findSymWithBlock (StructTab, tag, currBlockno, NestLevel);
+  symbol *edef = findSymWithLevel (enumTab, tag);
+
+  if (sdef && sdef->block == currBlockno && sdef->type != kind ||
+      edef && edef->block == currBlockno && kind != ENUM)
+    werrorfl (tag->fileDef, tag->lineDef, E_BAD_TAG, tag->name,
+              kind == STRUCT ? "struct" : kind == UNION ? "union" : "enum");
+}

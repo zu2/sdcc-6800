@@ -25,7 +25,7 @@
   Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
   -------------------------------------------------------------------------*/
 
-#include "m6502.h"
+#include "subport.h"
 #include "ralloc.h"
 #include "gen.h"
 #include "dbuf_string.h"
@@ -56,9 +56,9 @@ genMinusDec (iCode * ic)
 
   icount = (unsigned int) ulFromVal (AOP (right)->aopu.aop_lit);
 
-  m6502_emitComment (TRACEGEN, "  %s - size=%d  icount=%d", __func__, size, icount);
+  emitComment (TRACEGEN, "  %s - size=%d  icount=%d", __func__, size, icount);
 
-  m6502_emitComment (TRACEGEN|VVDBG, "  %s: icount = %d, m6502_sameRegs=%d",
+  emitComment (TRACEGEN|VVDBG, "  %s: icount = %d, m6502_sameRegs=%d",
 		     __func__, icount, m6502_sameRegs (AOP (left), AOP (result)));
 
   if (icount>255 && ((icount&0xff)!=0) )
@@ -98,7 +98,7 @@ genMinusDec (iCode * ic)
 	  tlbl = m6502_safeNewiTempLabel (NULL);
 	  INIT_CARRY();
 	  m6502_accopWithAop (OPCODE, AOP (right), 0);
-	  m6502_emitBranch ("bcs", tlbl);
+	  m6502_emitBranch ("bcs", tlbl, BR_DEFAULT);
 	  m6502_rmwWithReg (OPINCDEC, m6502_reg_x);
 	  m6502_safeEmitLabel (tlbl);
 	  m6502_dirtyReg(m6502_reg_x);
@@ -128,6 +128,18 @@ genMinusDec (iCode * ic)
 		  return true;  
 		}
 	    }
+	  // Use X or Y as scratch register for mem = mem + 1
+	  else if (!dst_reg && AOP_TYPE(result)!=AOP_SOF && AOP_TYPE(left)!=AOP_SOF)
+	    {
+	      reg_info *scratch = m6502_getFreeIdxReg();
+	      if (scratch && scratch->isDead)
+		{
+		  m6502_loadRegFromAop (scratch, AOP(left), 0);
+		  m6502_rmwWithReg (OPINCDEC, scratch);
+		  m6502_storeRegToAop (scratch, AOP(result), 0);
+		  return true;
+		}
+	    }
 	}
       return false;
     }
@@ -137,7 +149,7 @@ genMinusDec (iCode * ic)
   if (!m6502_aopCanIncDec (AOP (result)))
     return false;
 
-  m6502_emitComment (TRACEGEN|VVDBG, "    %s - sameregs", __func__);
+  emitComment (TRACEGEN|VVDBG, "    %s - sameregs", __func__);
 
   if (size==1 && AOP(result)->type==AOP_REG)
     {
@@ -166,7 +178,7 @@ genMinusDec (iCode * ic)
 
           tlbl = m6502_safeNewiTempLabel (NULL);
           m6502_loadRegFromAop (reg, AOP (left), 0);
-          m6502_emitBranch ("bne", tlbl);
+          m6502_emitBranch ("bne", tlbl, BR_DEFAULT);
           m6502_rmwWithAop (OPINCDEC, AOP (result), 1);
           m6502_safeEmitLabel (tlbl);
           m6502_rmwWithAop (OPINCDEC, AOP (result), 0);
@@ -197,13 +209,14 @@ m6502_genMinus (iCode * ic)
   bool init_carry = true;
   int size, offset;
   bool savea = false;
+  bool opskip = true;
 
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
     (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
   bool maskedtopbyte = (topbytemask != 0xff);
 
-  m6502_emitComment (TRACEGEN, __func__);
+  emitComment (TRACEGEN, __func__);
 
   m6502_aopOp (left, ic);
   m6502_aopOp (right, ic);
@@ -214,7 +227,7 @@ m6502_genMinus (iCode * ic)
   if (!maskedtopbyte && genMinusDec (ic))
     goto release;
 
-  m6502_emitComment (TRACEGEN|VVDBG, "    %s - Can't %s", __func__, OPINCDEC);
+  emitComment (TRACEGEN|VVDBG, "    %s - Can't %s", __func__, OPINCDEC);
 
   size = AOP_SIZE (result);
   bool is_right_byte = (AOP_SIZE(right)==1) 
@@ -229,13 +242,13 @@ m6502_genMinus (iCode * ic)
     {
       symbol *skiplabel = m6502_safeNewiTempLabel (NULL);
 
-      m6502_emitComment (TRACEGEN|VVDBG, "    %s: size==2 && one byte", __func__);
+      emitComment (TRACEGEN|VVDBG, "    %s: size==2 && one byte", __func__);
       savea = fastSaveAIfSurv ();
       INIT_CARRY();
       m6502_loadRegFromAop (m6502_reg_a, AOP(left), 0);
       m6502_accopWithAop (OPCODE, AOP(right), 0);
       m6502_storeRegToAop (m6502_reg_a, AOP (result), 0);
-      m6502_emitBranch ("bcs", skiplabel);
+      m6502_emitBranch ("bcs", skiplabel, BR_DEFAULT);
       m6502_rmwWithAop (OPINCDEC, AOP(result), 1);
       if(IS_AOP_WITH_X(AOP(result)))
 	m6502_dirtyReg(m6502_reg_x);
@@ -254,6 +267,7 @@ m6502_genMinus (iCode * ic)
       bool restore_a = !m6502_reg_a->isDead;
       bool restore_x = !m6502_reg_x->isDead;
       int a_loc, x_loc;
+
       storeRegTemp(m6502_reg_a, true);
       a_loc=m6502_getLastTempOfs();
       storeRegTemp(m6502_reg_x, true);
@@ -334,10 +348,16 @@ m6502_genMinus (iCode * ic)
 
   savea = fastSaveAIfSurv ();
 
-  m6502_emitComment (TRACEGEN|VVDBG, "    %s - general case size=%d", __func__, size);
+  emitComment (TRACEGEN|VVDBG, "    %s - general case size=%d", __func__, size);
 
   for(offset=0; offset<size; offset++)
     {
+      if (opskip && AOP_TYPE (right) == AOP_LIT 
+          && (byteOfVal (AOP (right)->aopu.aop_lit, offset) == 0x00)
+          && m6502_sameRegs (AOP (left), AOP (result)) 
+          && !IS_AOP_XA (AOP(result)) )
+        continue;
+
       if (AOP_TYPE (right) == AOP_REG && AOP (right)->aopu.aop_reg[offset]->rIdx == A_IDX)
 	{
 	  storeRegTemp (m6502_reg_a, true);
@@ -347,14 +367,22 @@ m6502_genMinus (iCode * ic)
 
 	  m6502_emitRegTempOp(OPCODE, m6502_getLastTempOfs() );
  	  m6502_loadRegTemp (NULL);
+          opskip = false;
 	}
       else
 	{
 	  m6502_loadRegFromAop (m6502_reg_a, AOP(left), offset);
-	  if (init_carry)
-	    INIT_CARRY();
 
-	  m6502_accopWithAop (OPCODE, AOP(right), offset);
+	  if (!opskip || AOP_TYPE (right) != AOP_LIT || (byteOfVal (AOP (right)->aopu.aop_lit, offset) != 0x00) )
+	    {
+	      if (init_carry)
+		INIT_CARRY();
+
+	      m6502_accopWithAop (OPCODE, AOP(right), offset);
+	      opskip = false;
+	    }
+	  else
+	    emitComment (TRACEGEN|VVDBG, "  %s - opskip offset=%d", __func__, offset);
 	}
 
       if ( (offset==size-1) && maskedtopbyte)
@@ -362,7 +390,7 @@ m6502_genMinus (iCode * ic)
 
       if ( offset==0 && IS_AOP_XA (AOP(result)) )
 	{
-	  m6502_emitComment (TRACEGEN|VVDBG, "  %s - save offset=%d", __func__, offset);
+	  emitComment (TRACEGEN|VVDBG, "  %s - save offset=%d", __func__, offset);
  	  m6502_fastSaveA();
 
           if(savea)
@@ -372,11 +400,13 @@ m6502_genMinus (iCode * ic)
 	}
       else
 	{
-	  m6502_emitComment (TRACEGEN|VVDBG, "  %s - store offset=%d", __func__, offset);
+	  emitComment (TRACEGEN|VVDBG, "  %s - store offset=%d", __func__, offset);
 	  m6502_storeRegToAop (m6502_reg_a, AOP (result), offset);
 	}
 
-      init_carry = false;
+      m6502_freeReg (m6502_reg_a);
+      if (!opskip)
+        init_carry = false;
     }
 
   fastRestoreOrFreeA (savea);

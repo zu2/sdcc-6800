@@ -167,6 +167,7 @@ designation *newDesignation(int, void *);
 designation *revDesignation (designation *);
 designation *copyDesignation (designation *);
 initList *reorderIlist (sym_link *, initList *);
+initList *reorderIlistIval (sym_link *, initList *);
 value *valFromType (sym_link *);
 value *constFloatVal (const char *);
 value *constFixed16x16Val (const char *);
@@ -185,5 +186,8 @@ TYPE_TARGET_ULONGLONG ullFromLit (sym_link *lit);
 value *valRecastLitVal (sym_link * dtype, value *val);
 void checkParameterTypeList (value *forward_declaration, value *parameters);
 
+void checkConstexprIntegerInitialiser (sym_link *type, initList *ilist);
+void checkConstexprBoolInitialiser (sym_link *type, initList *ilist);
+bool stringInitializerTypesMatch (sym_link *array, sym_link *string);
 #endif
 

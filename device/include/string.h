@@ -2,6 +2,7 @@
    string.h - ISO header for string library functions
 
    Copyright (C) 1998, Sandeep Dutta
+   Copyright (C) 2004, Vangelis Rokas, vrokas AT otenet.gr
    Copyright (C) 2009-2025, Philipp Klaus Krause pkk@spth.de, philipp@colecovision.eu
    Copyright (C) 2025, Gabriele Gorla
 
@@ -55,11 +56,12 @@ typedef int errno_t;
 
 #endif
 
-#if defined(__SDCC_mcs51) || defined(__SDCC_ds390) || defined(__SDCC_mos6502) || defined(__SDCC_mos65c02)
+#if defined(__SDCC_mcs51) || defined(__SDCC_ds390) || defined(__SDCC_mos6502) || defined(__SDCC_mos65c02) || defined(__SDCC_huc6280) || defined(__SDCC_pic14) || defined(__SDCC_pic16)
 #define __SDCC_BROKEN_STRING_FUNCTIONS
 #endif
 
-#if defined(__SDCC_mos6502) && !defined(__SDCC_STACK_AUTO)
+#undef _NEAR
+#if (defined(__SDCC_mos6502) || defined(__SDCC_mos65c02) || defined(__SDCC_huc6280) )&& !defined(__SDCC_STACK_AUTO)
 #define _NEAR __zp
 #else
 #define _NEAR
@@ -97,8 +99,8 @@ extern char *strcpy (char dest[restrict static 1], const char src[restrict stati
 #else
 extern char *strcpy (char *dest, const char *_NEAR src);
 #endif
-
 #endif
+
 #if __STDC_VERSION__ >= 199901L
 extern char *strncpy (char *restrict dest, const char *restrict src, size_t n);
 #else
@@ -120,12 +122,26 @@ extern char *strcat (char *dest, const char *src);
 extern char *strncat (char * dest, const char *src, size_t n);
 #endif
 
-// Comparison functions (ISo C23 7.28.4)
+// Comparison functions (ISO C23 7.28.4)
 extern int memcmp (const void *s1, const void *_NEAR s2, _NEAR size_t n);
+#if defined(__SDCC_z80) || defined (__SDCC_z80n) || defined(__SDCC_z180) || defined(__SDCC_r800)
+#if __STDC_VERSION__ >= 199901L
+extern int strcmp (const char s1[static 1], const char s2[static 1]) __preserves_regs(c, b, iyl, iyh);
+#else
+extern int strcmp (const char *s1, const char *_NEAR s2) __preserves_regs(c, b, iyl, iyh);
+#endif
+#elif defined(__SDCC_r2k) || defined (__SDCC_r2ka) || defined(__SDCC_r3ka) || defined(__SDCC_r4k) || defined(__SDCC_r5k) || defined(__SDCC_r6k)
+#if __STDC_VERSION__ >= 199901L
+extern int strcmp (const char s1[static 1], const char s2[static 1]) __preserves_regs(c, b);
+#else
+extern int strcmp (const char *s1, const char *_NEAR s2) __preserves_regs(c, b);
+#endif
+#else
 #if __STDC_VERSION__ >= 199901L
 extern int strcmp (const char s1[static 1], const char s2[static 1]);
 #else
 extern int strcmp (const char *s1, const char *_NEAR s2);
+#endif
 #endif
 #define strcoll(s1, s2) strcmp(s1, s2)
 /*int strcoll(const char *s1, const char *s2) {return strcmp(s1, s2);}*/
@@ -202,7 +218,7 @@ extern char *strtok (char *restrict str, const char delim[restrict static 1]);
 extern char *strtok (char *str, const char *delim);
 #endif
 
-// Miscanelleous functions (ISo C23 7.28.6)
+// Miscanelleous functions (ISO C23 7.28.6)
 #ifdef __SDCC_BROKEN_STRING_FUNCTIONS
 extern void *memset (void *s, _NEAR unsigned char c, _NEAR size_t n); // c should be int according to standard.
 #else
@@ -299,8 +315,17 @@ extern void __xdata *memcpyx(void __xdata *, void __xdata *, int) __naked;
 #endif
 #define memset(dst, c, n) __builtin_memset(dst, c, n)
 #else
+#ifdef __SDCC_huc6280
+// huc memcpy needs parameters in DATA (not ZP)
+extern void *__memcpy (void *dest, const void *src, size_t n);
+#else
 extern void *__memcpy (void *dest, const void *_NEAR src, _NEAR size_t n);
+#endif
 #define memcpy(dst, src, n) __memcpy(dst, src, n)
+#endif
+
+#if defined(__SDCC_mos6502) && !defined(__SDCC_STACK_AUTO)
+//#define memset(dst, c, n) __builtin_memset(dst, c, n)
 #endif
 
 #endif

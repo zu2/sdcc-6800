@@ -1,7 +1,7 @@
 /* m08mch.c */
 
 /*
- *  Copyright (C) 1993-2025  Alan R. Baldwin
+ *  Copyright (C) 1993-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -35,9 +35,8 @@ char	*dsft	= "asm";
 #define	OPCY_ERR	((char) (0xFE))
 #define	OPCY_CPU	((char)	(0xFD))
 
-
-/*	OPCY_NONE	((char) (0x80))	*/
-/*	OPCY_MASK	((char) (0x7F))	*/
+#define	OPCY_NONE	((char) (0x80))
+#define	OPCY_MASK	((char) (0x7F))
 
 #define	UN	((char) (OPCY_NONE | 0x00))
 #define	P2	((char) (OPCY_NONE | 0x01))
@@ -208,9 +207,15 @@ machine(struct mne *mp)
 {
 	int op, t1, t2, type;
 	struct expr e1, e2, e3;
-        a_uint espv;
+	struct sym *sp;
 	char id[NCPS];
-	int c, v1;
+	int c, v1, v2, v3;
+
+	/*
+	 * Using Internal Format
+	 * For Cycle Counting
+	 */
+	opcycles = OPCY_NONE;
 
 	clrexpr(&e1);
 	clrexpr(&e2);
@@ -223,9 +228,10 @@ machine(struct mne *mp)
 		opcycles = OPCY_SDP;
 		zpg = dot.s_area;
 		if (more()) {
-			expr(&e1, 0);
+			expr(&e1);
 			if (e1.e_flag == 0 && e1.e_base.e_ap == NULL) {
 				if (e1.e_addr) {
+					e1.e_addr = 0;
 					xerr('b', "Only Page 0 Allowed.");
 				}
 			}
@@ -233,6 +239,7 @@ machine(struct mne *mp)
 				getid(id, -1);
 				zpg = alookup(id);
 				if (zpg == NULL) {
+					zpg = dot.s_area;
 					xerr('u', "Undefined Area.");
 				}
 			} else {
@@ -243,6 +250,17 @@ machine(struct mne *mp)
 		lmode = SLIST;
 		break;
 
+	case S_PGD:
+		do {
+			getid(id, -1);
+			sp = lookup(id);
+			sp->s_flag &= ~S_LCL;
+			sp->s_flag |=  S_GBL;
+			sp->s_area = (zpg != NULL) ? zpg : dot.s_area;
+ 		} while (comma(0));
+		lmode = SLIST;
+		break;
+ 
 	case S_CPU:
 		opcycles = OPCY_CPU;
 		mchtyp = op;
@@ -273,10 +291,9 @@ machine(struct mne *mp)
 			break;
 		} /* Fall Through */
 	case S_BRA:
-		expr(&e1, 0);
+		expr(&e1);
 		outab(op);
-		if (mchpcr(&e1)) {
-			v1 = (int) (e1.e_addr - dot.s_addr - 1);
+		if (mchpcr(&e1, &v1, 1)) {
 			if ((v1 < -128) || (v1 > 127))
 				xerr('a', "Branching Range Exceeded.");
 			outab(v1);
@@ -381,20 +398,25 @@ machine(struct mne *mp)
 
 	case S_TYP3:
 		t1 = addr(&e1);
-                espv = e1.e_addr;
 		if (t1 != S_IMMED)
 			xerr('a', "Require Immediate(#) For First Argument.");
 		comma(1);
 		t2 = addr(&e2);
 		if (t2 != S_DIR)
 			xerr('a', "Require Direct Mode For Second Argument.");
-                outab(op + 2*(espv&0x07));
+		if (is_abs(&e1)) {
+			v1 = (int) e1.e_addr;
+			if (v1 & ~0x07)
+				xerr('a', "Valid Bit Values Are 0 -> 7.");
+			outab(op | ((v1 & 0x07) << 1));
+		} else {
+			outrbm(&e1, R_MBRO | R_3BIT, op);
+		}
 		outrb(&e2, R_PAG0);
 		break;
 
 	case S_TYP4:
 		t1 = addr(&e1);
-                espv = e1.e_addr;
 		if (t1 != S_IMMED)
 			xerr('a', "Require Immediate(#) For First Argument.");
 		comma(1);
@@ -402,14 +424,20 @@ machine(struct mne *mp)
 		if (t2 != S_DIR)
 			xerr('a', "Require Direct Mode For Second Argument.");
 		comma(1);
-		expr(&e3, 0);
-                outab(op + 2*(espv&0x07));
+		expr(&e3);
+		if (is_abs(&e1)) {
+			v1 = (int) e1.e_addr;
+			if (v1 & ~0x07)
+				xerr('a', "Valid Bit Values Are 0 -> 7.");
+			outab(op | ((v1 & 0x07) << 1));
+		} else {
+			outrbm(&e1, R_MBRO | R_3BIT, op);
+		}
 		outrb(&e2, R_PAG0);
-                if (mchpcr(&e3)) {
-                        v1 = (int) (e3.e_addr - dot.s_addr - 1);
-			if ((v1 < -128) || (v1 > 127))
-				aerr();
-			outab(v1);
+		if (mchpcr(&e3, &v3, 1)) {
+			if ((v3 < -128) || (v3 > 127))
+				xerr('a', "Branching Range Exceeded.");
+			outab(v3);
 		} else {
 			outrb(&e3, R_PCR);
 		}
@@ -513,7 +541,7 @@ machine(struct mne *mp)
 		}
 		t1 = addr(&e1);
 		comma(1);
-		expr(&e2, 0);
+		expr(&e2);
 		if (t1 == S_IMMED) {
 			outab(op);
 			outrb(&e1, 0);
@@ -537,11 +565,10 @@ machine(struct mne *mp)
 			xerr('a', "Invalid Addressing Mode.");
 			break;
 		}
-		if (mchpcr(&e2)) {
-			v1 = (int) (e2.e_addr - dot.s_addr - 1);
-			if ((v1 < -128) || (v1 > 127))
+		if (mchpcr(&e2, &v2, 1)) {
+			if ((v2 < -128) || (v2 > 127))
 				xerr('a', "Branching Range Exceeded.");
-			outab(v1);
+			outab(v2);
 		} else {
 			outrb(&e2, R_PCR);
 		}
@@ -559,14 +586,13 @@ machine(struct mne *mp)
 		if (t1 != S_IMMED)
 			xerr('a', "Immediate(#) First Argument Required.");
 		comma(1);
-		expr(&e2, 0);
+		expr(&e2);
 		outab(op);
 		outrb(&e1, 0);
-		if (mchpcr(&e2)) {
-			v1 = (int) (e2.e_addr - dot.s_addr - 1);
-			if ((v1 < -128) || (v1 > 127))
+		if (mchpcr(&e2, &v2, 1)) {
+			if ((v2 < -128) || (v2 > 127))
 				xerr('a', "Branching Range Exceeded.");
-			outab(v1);
+			outab(v2);
 		} else {
 			outrb(&e2, R_PCR);
 		}
@@ -582,7 +608,7 @@ machine(struct mne *mp)
 		}
 		t1 = addr(&e1);
 		comma(1);
-		expr(&e2, 0);
+		expr(&e2);
 		if (t1 == S_DIR || t1 == S_EXT) {
 			outab(op);
 			outrb(&e1, R_PAG0);
@@ -602,11 +628,10 @@ machine(struct mne *mp)
 			xerr('a', "Invalid Addressing Mode.");
 			break;
 		}
-		if (mchpcr(&e2)) {
-			v1 = (int) (e2.e_addr - dot.s_addr - 1);
-			if ((v1 < -128) || (v1 > 127))
+		if (mchpcr(&e2, &v2, 1)) {
+			if ((v2 < -128) || (v2 > 127))
 				xerr('a', "Branching Range Exceeded.");
-			outab(v1);
+			outab(v2);
 		} else {
 			outrb(&e2, R_PCR);
 		}
@@ -620,10 +645,9 @@ machine(struct mne *mp)
 			xerr('o', "A 68HC(S)08 Instruction.");
 			break;
 		}
-		expr(&e1, 0);
+		expr(&e1);
 		outab(op);
-		if (mchpcr(&e1)) {
-			v1 = (int) (e1.e_addr - dot.s_addr - 1);
+		if (mchpcr(&e1, &v1, 1)) {
 			if ((v1 < -128) || (v1 > 127))
 				xerr('a', "Branching Range Exceeded.");
 			outab(v1);
@@ -703,15 +727,36 @@ machine(struct mne *mp)
 			break;
 		}
 	}
+ 	/*
+	 * Translate To External Format
+	 */
+	if (opcycles == OPCY_NONE) { opcycles  =  CYCL_NONE; } else
+	if (opcycles  & OPCY_NONE) { opcycles |= (CYCL_NONE | 0x3F00); }
 }
 
 /*
  * Branch/Jump PCR Mode Check
  */
 int
-mchpcr(struct expr *esp)
+mchpcr(struct expr *esp, int *v, int n)
 {
 	if (esp->e_base.e_ap == dot.s_area) {
+		if (v != NULL) {
+#if 1
+			/* Allows branching from top-to-bottom and bottom-to-top */
+ 			*v = (int) (esp->e_addr - dot.s_addr - n);
+			/* only bits 'a_mask' are significant, make circular */
+			if (*v & s_mask) {
+				*v |= (int) ~a_mask;
+			}
+			else {
+				*v &= (int) a_mask;
+			}
+#else
+			/* Disallows branching from top-to-bottom and bottom-to-top */
+			*v = (int) ((esp->e_addr & a_mask) - (dot.s_addr & a_mask) - n);
+#endif
+		}
 		return(1);
 	}
 	if (esp->e_flag==0 && esp->e_base.e_ap==NULL) {

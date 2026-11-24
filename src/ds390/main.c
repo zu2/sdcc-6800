@@ -63,10 +63,10 @@ static char *_ds390_keywords[] =
   "near",
   "pdata",
   "reentrant",
+  "sbit",
   "sfr",
   "sfr16",
   "sfr32",
-  "sbit",
   "using",
   "xdata",
   "_data",
@@ -108,13 +108,27 @@ _ds390_reset_regparm (struct sym_link *funcType)
 {
   regParmFlg = 0;
   regParmFuncType = funcType;
+  while (regParmFuncType && !IS_FUNC (regParmFuncType))
+    regParmFuncType = regParmFuncType->next;
 }
 
 static int
 _ds390_regparm (sym_link * l, bool reentrant)
 {
+  wassert (regParmFuncType);
+
   if (IFFUNC_HASVARARGS (regParmFuncType))
     return 0;
+
+  /* Keep parameter registers for the struct return pointer. */
+  if (IS_STRUCT (getSpec (regParmFuncType->next)))
+    {
+      sym_link *etype = getSpec (l);
+
+      SPEC_REGPARM (etype) = 0;
+      SPEC_ARGREG (etype) = 0;
+      return 0;
+    }
 
   if (IS_STRUCT (l))
     return 0;
@@ -176,9 +190,7 @@ static void
 _ds390_finaliseOptions (void)
 {
   if (options.noXinitOpt)
-    {
-      port->genXINIT=0;
-    }
+    port->genXINIT=0;
 
   /* Hack-o-matic: if we are using the flat24 model,
    * adjust pointer sizes.
@@ -336,32 +348,30 @@ ds390_genAtomicSupport (struct dbuf_s *oBuf, unsigned int startaddr)
       startaddr += (8 - startaddr % 8);
     }
   // Support routine block may not cross 256B boundary.
-  if (startaddr / 256 != (startaddr + 8 * 4 + 7) / 256)
+  if (startaddr / 256 != (startaddr + 8 * 5 + 6) / 256)
     {
       dbuf_printf (oBuf, "\t.ds\t%d\n", 256 - startaddr % 256);
       startaddr += 256 - startaddr % 256;
     }
 
+  // The following routine just needs to be in jnb range of the below ones,
+  // it doesn't have alignment requirements. Align it anyway for faster
+  // fall through for atomic in idata implementation and size reduction.
+
+  // If the value of the byte at b:dptr is the value of r2, store the value
+  // of r3 into that byte. Return the new value of that byte in acc.
+  // Overwrites r0; reads r2, r3.
+  dbuf_printf (oBuf, "sdcc_atomic_compare_exchange_gptr_impl::\n"
+                     "\tjnb\tb.6, sdcc_atomic_compare_exchange_xdata_impl\n"
+                     "\tmov\tr0, dpl\n"
+                     "\tjb\tb.5, sdcc_atomic_compare_exchange_pdata_impl\n"
+//                   "\tsjmp\tsdcc_atomic_compare_exchange_idata_impl\n"    // fall through
+              );
+
   dbuf_printf (oBuf, "sdcc_atomic_exchange_rollback_start::\n");
 
   // Each routine (except the last one) needs to be 8 bytes long.
   // Restart may happen at bytes 1 to 5 of each routine.
-  dbuf_printf (oBuf, "\tnop\n"
-                     "\tnop\n"
-                     "sdcc_atomic_exchange_pdata_impl:\n"
-                     "\tmovx\ta, @r0\n"
-                     "\tmov\tr3, a\n"
-                     "\tmov\ta, r2\n"
-                     "\tmovx\t@r0, a\n"
-                     "\tsjmp\tsdcc_atomic_exchange_exit\n");
-  dbuf_printf (oBuf, "\tnop\n"
-                     "\tnop\n"
-                     "sdcc_atomic_exchange_xdata_impl:\n"
-                     "\tmovx\ta, @dptr\n"
-                     "\tmov\tr3, a\n"
-                     "\tmov\ta, r2\n"
-                     "\tmovx\t@dptr, a\n"
-                     "\tsjmp\tsdcc_atomic_exchange_exit\n");
   dbuf_printf (oBuf, "sdcc_atomic_compare_exchange_idata_impl:\n"
                      "\tmov\ta, @r0\n"
                      "\tcjne\ta, ar2, .+#5\n"
@@ -381,13 +391,38 @@ ds390_genAtomicSupport (struct dbuf_s *oBuf, unsigned int startaddr)
                      "\tcjne\ta, ar2, .+#5\n"
                      "\tmov\ta, r3\n"
                      "\tmovx\t@dptr, a\n"
-                     "\tret\n");
+                     "\tret\n"
+                     "\tnop\n");
+  dbuf_printf (oBuf, "\tnop\n"
+                     "\tnop\n"
+                     "sdcc_atomic_exchange_pdata_impl:\n"
+                     "\tmovx\ta, @r0\n"
+                     "\tmov\tr3, a\n"
+                     "\tmov\ta, r2\n"
+                     "\tmovx\t@r0, a\n"
+                     "\tsjmp\tsdcc_atomic_exchange_exit\n");
+  dbuf_printf (oBuf, "\tnop\n"
+                     "\tnop\n"
+                     "sdcc_atomic_exchange_xdata_impl:\n"
+                     "\tmovx\ta, @dptr\n"
+                     "\tmov\tr3, a\n"
+                     "\tmov\ta, r2\n"
+                     "\tmovx\t@dptr, a\n"
+//                   "\tsjmp\tsdcc_atomic_exchange_exit\n"          // fall through
+              );
   dbuf_printf (oBuf, "sdcc_atomic_exchange_rollback_end::\n\n");
 
-  // The following two routines just need to be in jnb range of the above ones, they don't have alignment requirements.
+  dbuf_printf (oBuf, "sdcc_atomic_exchange_exit:\n"
+                     "\tmov\tdpl, r3\n"
+                     "\tret\n");
+  // The following routine just needs to be in jnb range of the above ones, it doesn't have alignment requirements.
 
+  dbuf_printf (oBuf, "_atomic_flag_test_and_set::\n"
+                     "\tmov\tr2, #1\n"
+//                   "\tsjmp\tsdcc_atomic_exchange_gptr_impl\n"     // fall through
+              );
   // Store value in r2 into byte at b:dptr, return previous byte at b:dptr in dpl.
-  // Overwrites r0, r2, r3.
+  // Overwrites r0, r3; reads r2.
   dbuf_printf (oBuf, "sdcc_atomic_exchange_gptr_impl::\n"
                      "\tjnb\tb.6, sdcc_atomic_exchange_xdata_impl\n"
                      "\tmov\tr0, dpl\n"
@@ -396,19 +431,7 @@ ds390_genAtomicSupport (struct dbuf_s *oBuf, unsigned int startaddr)
                      "\tmov\ta, r2\n"
                      "\txch\ta, @r0\n"
                      "\tmov\tdpl, a\n"
-                     "\tret\n"
-                     "sdcc_atomic_exchange_exit:\n"
-                     "\tmov\tdpl, r3\n"
                      "\tret\n");
-
-  // If the value of the byte at b:dptr is the value of r2, store the value
-  // of r3 into that byte. Return the new value of that byte in a.
-  // Overwrites r0, r2, r3.
-  dbuf_printf (oBuf, "sdcc_atomic_compare_exchange_gptr_impl::\n"
-                     "\tjnb\tb.6, sdcc_atomic_compare_exchange_xdata_impl\n"
-                     "\tmov\tr0, dpl\n"
-                     "\tjb\tb.5, sdcc_atomic_compare_exchange_pdata_impl\n"
-                     "\tsjmp\tsdcc_atomic_compare_exchange_idata_impl\n");
 }
 
 /* Generate interrupt vector table. */
@@ -511,7 +534,7 @@ _ds390_genInitStartup (FILE *of)
     {
       fprintf (of, "\tmov\tP2,#0x%02x\n",
                (((unsigned int) options.xdata_loc) >> 8) & 0xff);
-      fprintf (of, "\tmov\t_spx,#0x%02x\n",
+      fprintf (of, "\tmov\tspx,#0x%02x\n",
                (unsigned int) options.xdata_loc & 0xff);
     }
 
@@ -596,11 +619,7 @@ static void _ds390_genXINIT (FILE * of)
 static bool cseCostEstimation (iCode *ic, iCode *pdic)
 {
   operand *result = IC_RESULT(ic);
-  //operand *right  = IC_RIGHT(ic);
-  //operand *left   = IC_LEFT(ic);
   sym_link *result_type = operandType(result);
-  //sym_link *right_type  = (right ? operandType(right) : 0);
-  //sym_link *left_type   = (left  ? operandType(left)  : 0);
 
   /* if it is a pointer then return ok for now */
   if (IC_RESULT(ic) && IS_PTR(result_type))
@@ -620,16 +639,6 @@ static bool cseCostEstimation (iCode *ic, iCode *pdic)
 
     /* for others it is cheaper to do the cse */
     return 1;
-}
-
-bool _ds390_nativeMulCheck(iCode *ic, sym_link *left, sym_link *right)
-{
-  if (IS_BITINT (OP_SYM_TYPE (IC_RESULT(ic))) && SPEC_BITINTWIDTH (OP_SYM_TYPE (IC_RESULT(ic))) % 8)
-    return false;
-
-  return
-    getSize (left) == 1 && getSize (right) == 1 ||
-    options.useAccelerator && getSize (left) == 2 && getSize (right) == 2;
 }
 
 /* Indicate which extended bit operations this port supports */
@@ -663,6 +672,17 @@ oclsExpense (struct memmap *oclass)
     return 1;
 
   return 0;
+}
+
+static bool
+_ds390_nativeMulCheck(iCode *ic, sym_link *left, sym_link *right)
+{
+  if (IS_BITINT (OP_SYM_TYPE (IC_RESULT(ic))) && SPEC_BITINTWIDTH (OP_SYM_TYPE (IC_RESULT(ic))) % 8)
+    return false;
+
+  return
+    getSize (left) == 1 && getSize (right) == 1 ||
+    options.useAccelerator && getSize (left) == 2 && getSize (right) == 2;
 }
 
 static int
@@ -780,8 +800,8 @@ instructionSize(char *inst, char *op1, char *op2)
   return 999;
 }
 
-asmLineNode *
-ds390newAsmLineNode (int currentDPS)
+static asmLineNode *
+newAsmLineNode (int currentDPS)
 {
   asmLineNode *aln;
 
@@ -1001,10 +1021,16 @@ ds390opcodeCompare (const void *key, const void *member)
   return strcmp((const char *)key, ((ds390opcodedata *)member)->name);
 }
 
+static const char* skip_spaces (const char* p)
+{
+  while (*p && isspace(*p)) p++;
+  return p;
+}
+
 static asmLineNode *
 asmLineNodeFromLineNode (lineNode *ln, int currentDPS)
 {
-  asmLineNode *aln = ds390newAsmLineNode(currentDPS);
+  asmLineNode *aln = newAsmLineNode(currentDPS);
   char *op, op1[256], op2[256];
   int opsize;
   const char *p;
@@ -1015,7 +1041,9 @@ asmLineNodeFromLineNode (lineNode *ln, int currentDPS)
 
   p = ln->line;
 
-  while (*p && isspace(*p)) p++;
+  /* extract instruction */
+
+  p = skip_spaces (p);
   for (op = inst, opsize=1; *p; p++)
     {
       if (isspace(*p) || *p == ';' || *p == ':' || *p == '=')
@@ -1029,7 +1057,7 @@ asmLineNodeFromLineNode (lineNode *ln, int currentDPS)
   if (*p == ';' || *p == ':' || *p == '=')
     return aln;
 
-  while (*p && isspace(*p)) p++;
+  p = skip_spaces (p);
   if (*p == '=')
     return aln;
 
@@ -1150,7 +1178,7 @@ static const char *_asmCmd[] =
   "sdas390", "$l", "$3", "$2", "$1.asm", NULL
 };
 
-static const char * const _libs_ds390[] = { STD_DS390_LIB, NULL, };
+static const char *const _libs[] = { "libsdcc", "libsdccf", "libc", "libm", NULL };
 
 /* Globals */
 PORT ds390_port =
@@ -1158,7 +1186,7 @@ PORT ds390_port =
   TARGET_ID_DS390,
   "ds390",
   "DS80C390",                   /* Target name */
-  NULL,
+  NULL,                         /* Processor name */
   {
     glue,
     TRUE,                       /* Emit glue around main */
@@ -1166,7 +1194,7 @@ PORT ds390_port =
     MODEL_SMALL,
     get_model,
   },
-  {
+  {                             /* Assembler */
     _asmCmd,
     NULL,
     "-plosgffwy",               /* Options with debug */
@@ -1182,9 +1210,9 @@ PORT ds390_port =
     ".rel",
     1,
     NULL,                       /* crt */
-    _libs_ds390,                /* libs */
+    _libs,                      /* libs */
   },
-  {
+  {                             /* Peephole optimizer */
     _defaultRules,
     getInstructionSize,
     getRegsRead,
@@ -1199,27 +1227,25 @@ PORT ds390_port =
   },
   /* Sizes: char, short, int, long, long long, near ptr, far ptr, gptr, func ptr, banked func ptr, bit, float, _BitInt (in bits) */
   { 1, 2, 2, 4, 8, 1, 2, 3, 2, 3, 1, 4, 64 },
-
   /* tags for generic pointers */
   { 0x00, 0x40, 0x60, 0x80 },           /* far, near, xstack, code */
-
   {
-    "XSEG    (XDATA)",
-    "STACK   (DATA)",
-    "CSEG    (CODE)",
-    "DSEG    (DATA)",
-    "ISEG    (DATA)",
-    "PSEG    (PAG,XDATA)",
-    "XSEG    (XDATA)",
+    "XSEG    (XDATA)",          // xstack_name
+    "STACK   (DATA)",           // istack_name
+    "CSEG    (CODE)",           // code_name
+    "DSEG    (DATA)",           // data_name
+    "ISEG    (DATA)",           // idata_name
+    "PSEG    (PAG,XDATA)",      // pdata_name
+    "XSEG    (XDATA)",          // xdata_name
     NULL,                       // xconst_name
-    "BSEG    (BIT)",
-    "RSEG    (DATA)",
-    "GSINIT  (CODE)",
-    "OSEG    (OVR,DATA)",
-    "GSFINAL (CODE)",
-    "HOME    (CODE)",
-    "XISEG   (XDATA)",          // initialized xdata
-    "XINIT   (CODE)",           // a code copy of xiseg
+    "BSEG    (BIT)",            // bit_name
+    "RSEG    (DATA)",           // reg_name
+    "GSINIT  (CODE)",           // static_name
+    "OSEG    (OVR,DATA)",       // overlay_name
+    "GSFINAL (CODE)",           // post_static_name
+    "HOME    (CODE)",           // home_name
+    "XISEG   (XDATA)",          // xidata_name - initialized xdata
+    "XINIT   (CODE)",           // xinit_name - a code copy of xiseg
     "CONST   (CODE)",           // const_name - const data (code or not)
     "CABS    (ABS,CODE)",       // cabs_name - const absolute data (code or not)
     "XABS    (ABS,XDATA)",      // xabs_name - absolute xdata/pdata
@@ -1229,14 +1255,22 @@ PORT ds390_port =
     NULL,
     NULL,
     1,
-    true,                       // unqualified pointer can point to __sfr: TODO: CHECK IF THIS IS ACTUALLY SUPPORTED. Set to true to emulate behaviour of rpevious version of sdcc for now.
+    false,                      // unqualified pointer cannot point to __sfr
     1                           // No fancy alignments supported.
   },
   { NULL, NULL },
   0,                            // ABI revision
-  { +1, 1, 4, 1, 1, 0, 0 },
+  {
+    +1,         /* direction (+1 = stack grows up) */
+    1,          /* bank_overhead (switch between register banks) */
+    4,          /* isr_overhead */
+    1,          /* call_overhead (2 for return address - 1 for pre-incrementing push */
+    1,          /* reent_overhead */
+    0,          /* banked_overhead (switch between code banks) */
+    0           /* offset (sp points directly at last item pushed) */
+  },
   /* ds390 has an 16 bit mul & div */
-  { -1, FALSE },
+  { -1, false, false },
   { ds390_emitDebuggerSymbol },
   {
     255/4,      /* maxCount */
@@ -1265,13 +1299,13 @@ PORT ds390_port =
   _ds390_genInitStartup,
   _ds390_reset_regparm,
   _ds390_regparm,
-  NULL,
-  NULL,
-  _ds390_nativeMulCheck,
+  NULL,                         /* process_pragma */
+  NULL,                         /* getMangledFunctionName */
+  _ds390_nativeMulCheck,        /* hasNativeMulFor */
   hasExtBitOp,                  /* hasExtBitOp */
   oclsExpense,                  /* oclsExpense */
-  FALSE,
-  TRUE,                         /* little endian */
+  FALSE,                        /* use_dw_for_init */
+  TRUE,                         /* little_endian */
   0,                            /* leave lt */
   0,                            /* leave gt */
   1,                            /* transform <= to ! > */
@@ -1282,10 +1316,10 @@ PORT ds390_port =
   cseCostEstimation,
   __ds390_builtins,             /* table of builtin functions */
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
-  true,
-  false,
+  true,                         // __far is a subspace of the generic space.
+  false,                        // the generic space is not a subspace of __far.
   1,                            /* reset labelKey to 1 */
-  1,                            /* globals & local static allowed */
+  1,                            /* globals & local statics allowed */
   0,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
   PORT_MAGIC
 };
@@ -1374,7 +1408,7 @@ static void _tininative_genAssemblerStart (FILE * of)
   fputs("$include(ds80c390.inc)\n", of);
   fputs("$include(tinimacro.inc)\n", of);
   fputs("$include(apiequ.inc)\n", of);
-  fputs("_bpx EQU 01Eh \t\t; _bpx (frame pointer) mapped to R7_B3:R6_B3\n", of);
+  fputs("bpx EQU 01Eh \t\t; bpx (frame pointer) mapped to R7_B3:R6_B3\n", of);
   fputs("acc1  EQU 01Dh \t\t; acc1 mapped to R5_B3\n", of);
   /* Must be first and return 0 */
   fputs("Lib_Native_Init:\n",of);
@@ -1537,7 +1571,7 @@ PORT tininative_port =
     ".tlib",
     1,
     NULL,                       /* crt */
-    _libs_ds390,                /* libs */
+    _libs,                      /* libs */
   },
   {
     _defaultRules,
@@ -1582,7 +1616,7 @@ PORT tininative_port =
     NULL,
     NULL,
     1,
-    true,                       // unqualified pointer can point to __sfr: TODO: CHECK IF THIS IS ACTUALLY SUPPORTED. Set to true to emulate behaviour of rpevious version of sdcc for now.
+    false,                      // unqualified pointer cannot point to __sfr
     1                           // No fancy alignments supported.
   },
   { NULL, NULL },
@@ -1766,8 +1800,6 @@ static void _ds400_linkRomDataArea(FILE *fp)
   fprintf(fp, "-b ROMSEG = 0x0068\n");
 }
 
-static const char * const _libs_ds400[] = { STD_DS400_LIB, NULL, };
-
 PORT ds400_port =
 {
   TARGET_ID_DS400,
@@ -1797,7 +1829,7 @@ PORT ds400_port =
     ".rel",
     1,
     NULL,                       /* crt */
-    _libs_ds400,                /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _defaultRules,
@@ -1843,7 +1875,7 @@ PORT ds400_port =
     NULL,
     NULL,
     1,
-    true,                       // unqualified pointer can point to __sfr: TODO: CHECK IF THIS IS ACTUALLY SUPPORTED. Set to true to emulate behaviour of rpevious version of sdcc for now.
+    false,                      // unqualified pointer cannot point to __sfr
     1
   },
   { _ds400_generateRomDataArea, _ds400_linkRomDataArea },
@@ -1895,8 +1927,8 @@ PORT ds400_port =
   cseCostEstimation,
   __ds390_builtins,             /* table of builtin functions */
   GPOINTER,                     /* treat unqualified pointers as "generic" pointers */
-  true,
-  false,
+  true,                         // __far is a subspace of the generic space.
+  false,                        // the generic space is not a subspace of __far.
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local static allowed */
   0,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */

@@ -266,7 +266,7 @@ prependCast (iCode *ic, operand *op, sym_link *type, eBBlock *ebb)
         IC_RIGHT (ic) = newop;
       return;
     }
-            
+
   iCode *newic = newiCode (CAST, operandFromLink (type), op);
   hTabAddItem (&iCodehTab, newic->key, newic);
 
@@ -819,7 +819,7 @@ convilong (iCode *ic, eBBlock *ebp)
       if ((op == '*' || op == '/' || op == '%') && port->hasNativeMulFor && port->hasNativeMulFor (ic, operandType (IC_LEFT (ic)), operandType (IC_RIGHT (ic)))) // Avoid introducing calls to non-existing support functions.
         return;
     }
-  
+
   symbol *func = NULL;
   iCode *ip = ic->next;
   iCode *newic;
@@ -925,7 +925,7 @@ convilong (iCode *ic, eBBlock *ebp)
                     lic->op = '=';
                   OP_SYMBOL (left)->type = newLongLink ();
                   SPEC_USIGN (OP_SYMBOL (left)->type) = 1;
-                }   
+                }
 
               if (!ric)
                 ic->right = operandFromValue (valCastLiteral (roptype, operandLitValue (right), operandLitValueUll (right)), false);
@@ -934,7 +934,7 @@ convilong (iCode *ic, eBBlock *ebp)
                   ric->op = '=';
                   OP_SYMBOL (right)->type = newCharLink ();
                   SPEC_USIGN (OP_SYMBOL (right)->type) = 1;
-                }    
+                }
 
               if (func) // Use support function
                 goto found;
@@ -974,7 +974,7 @@ convilong (iCode *ic, eBBlock *ebp)
                 {
                   lic->op = '=';
                   setOperandType (left, optype);
-                }          
+                }
 
               if (!ric)
                 ic->right = operandFromValue (valCastLiteral (optype, operandLitValue (right), operandLitValueUll (right)), false);
@@ -1218,6 +1218,7 @@ convbuiltin (iCode *const ic, eBBlock *ebp)
       /* TODO: Eliminate it, convert any SEND of volatile into DUMMY_READ_VOLATILE. */
       /* For now just convert back to call to make sure any volatiles are read. */
 
+      // memcpy is special, we might get an builtin memcpy here, even if string.h was never included, and no memcpy is visible, so we need to convert to __memcpy instead.
       strcpy (OP_SYMBOL (IC_LEFT (icc))->rname, !strcmp (bif->name, "__builtin_memcpy") ? "___memcpy" : (!strcmp (bif->name, "__builtin_strncpy") ? "_strncpy" : "_memset"));
       goto convert;
     }
@@ -1232,12 +1233,36 @@ convbuiltin (iCode *const ic, eBBlock *ebp)
       goto convert;
     }
 
+#if 0
+  if ((TARGET_IS_MOS6502) && (!strcmp (bif->name, "__builtin_memset")))
+    {
+      /* Replace iff return value is used or last parameter is not an integer constant (except for memcpy, where non-integers can be handled). */
+      if (bitVectIsZero (OP_USES (IC_RESULT (icc))) && (IS_OP_LITERAL (IC_LEFT (lastparam))) && operandLitValue (IC_LEFT (lastparam)) < 256 )
+        return;
+
+      strcpy(OP_SYMBOL (IC_LEFT (icc))->rname, "_memset");
+  icc=ic;
+  while (icc->op != CALL)
+    {
+      if (icc->op == SEND)
+       icc->builtinSEND=0;
+      icc->generated=0;
+      icc = icc->next;
+    }
+ftype->funcAttrs.builtin=0;
+      return;
+      goto convert;
+    }
+#endif
+
   return;
 
 convert:
   /* Convert parameter passings from SEND to PUSH. */
   stack = 0;
   struct value *args;
+  symbol *nonbuiltin_memcpy = findSym (SymbolTab, NULL, "__memcpy");
+  wassert (nonbuiltin_memcpy);
   for (icc = ic, args = FUNC_ARGS (nonbuiltin_memcpy->type); icc->op != CALL; icc = icc->next, args = args->next)
     {
       wassert (args);
@@ -1371,7 +1396,7 @@ convertToFcall (eBBlock ** ebbs, int count)
           if (ic->op == '%' && isOperandLiteral (IC_RIGHT(ic)))
             {
               bool us = IS_UNSIGNED (operandType (IC_LEFT(ic)));
-              bool upcast = FALSE;
+              bool upcast = false;
               iCode *dic = NULL;
 
               // Chek if left really is just an upcasted unsigned value.
@@ -1645,7 +1670,7 @@ separateAddressSpaces (eBBlock **ebbs, int count)
           if (right && IS_SYMOP (right))
             rightaddrspace = getAddrspace (OP_SYMBOL (right)->type);
           if (result && IS_SYMOP (result))
-            { 
+            {
               if (POINTER_SET (ic))
                 {
                   assert (!(IS_DECL (OP_SYMBOL (result)->type) && DCL_PTR_ADDRSPACE (OP_SYMBOL (result)->type)));
@@ -1858,9 +1883,7 @@ replaceRegEqvOperand (iCode *ic, operand **opp, int force_isaddr, int new_isaddr
 
       nop = operandFromOperand (OP_REQV (op));
       nop->isConstEliminated = op->isConstEliminated;
-      nop->isRestrictEliminated = op->isRestrictEliminated;
       nop->isOptionalEliminated = op->isOptionalEliminated;
-      nop->isSemDeref = op->isSemDeref;
 
       /* Copy def/use info from true symbol to register equivalent */
       /* but only if this hasn't been done already. */
@@ -1907,7 +1930,7 @@ replaceRegEqv (ebbIndex *ebbi)
               if (ic->result && IS_AGGREGATE (operandType (ic->result)))
                 setOperandType (ic->result, aggrToPtr (operandType (ic->result), false));
             }
-          
+
           if (SKIP_IC2 (ic))
             continue;
 
@@ -1935,7 +1958,7 @@ replaceRegEqv (ebbIndex *ebbi)
   /* a defining iCode or not. Only replace a local variable     */
   /* with its register equivalent if there is a defining iCode; */
   /* otherwise, the port's register allocater may choke.        */
-  cseAllBlocks (ebbi, TRUE);
+  cseAllBlocks (ebbi, true);
 
   for (i = 0; i < count; i++)
     {
@@ -2004,10 +2027,10 @@ findReqv (symbol * prereqv, eBBlock ** ebbs, int count)
 static int
 killiCode (eBBlock **ebbs, int i, int count, iCode *ic)
 {
-  bool volLeft = IS_SYMOP (IC_LEFT (ic)) && isOperandVolatile (IC_LEFT (ic), FALSE);
-  bool volRight = IS_SYMOP (IC_RIGHT (ic))  && isOperandVolatile (IC_RIGHT (ic), FALSE);
+  bool volLeft = IS_SYMOP (IC_LEFT (ic)) && isOperandVolatile (IC_LEFT (ic), false);
+  bool volRight = IS_SYMOP (IC_RIGHT (ic))  && isOperandVolatile (IC_RIGHT (ic), false);
 
-  // A dead address-of operation should die, even if takingthe address of a volatile object.
+  // A dead address-of operation should die, even if taking the address of a volatile object.
   if (ic->op == ADDRESS_OF)
     volLeft = false;
 
@@ -2091,7 +2114,7 @@ killiCode (eBBlock **ebbs, int i, int count, iCode *ic)
 /* killDeadCode - eliminates dead assignments                      */
 /*-----------------------------------------------------------------*/
 int
-killDeadCode (ebbIndex * ebbi)
+killDeadCode (ebbIndex *ebbi, bool cleanblocks)
 {
   eBBlock **ebbs = ebbi->dfOrder;
   int count = ebbi->count;
@@ -2122,8 +2145,16 @@ killDeadCode (ebbIndex * ebbi)
           /* for all instructions in the block do */
           for (ic = ebbs[i]->sch; ic; ic = ic->next)
             {
-              int kill, j;
-              kill = 0;
+              int j;
+              bool kill = false;
+
+              if (cleanblocks) // Fix for bug #3998, but don't do it too early, toa void a regression in diagnostics.
+                // Get rid of computations in unreachable blocks early, so we don't leave dead defs/uses for iTemps, that might confuse other optimizations.
+                if (ebbs[i]->noPath && (IS_ITEMP (ic->result) || IS_ITEMP (ic->left) || IS_ITEMP (ic->right)))
+                  {
+                    kill = true;
+                    goto kill;
+                  }
 
               if (SKIP_IC (ic) && ic->op != RECEIVE &&
                 !(ic->op == CALL && IS_SYMOP (ic->left) && OP_SYMBOL (ic->left)->funcPure && optimize.purity) ||
@@ -2139,7 +2170,7 @@ killDeadCode (ebbIndex * ebbi)
               /* valid. */
 
               /* if the result is volatile then continue */
-              if (IC_RESULT (ic) && isOperandVolatile (IC_RESULT (ic), FALSE))
+              if (IC_RESULT (ic) && isOperandVolatile (IC_RESULT (ic), false))
                 continue;
 
               /* if the result is a temp & isaddr then skip */
@@ -2162,7 +2193,7 @@ killDeadCode (ebbIndex * ebbi)
               /* does this definition reach the end of the block
                  or the usage is zero then we can kill */
               if (!bitVectBitValue (ebbs[i]->outDefs, ic->key))
-                kill = 1;       /* if not we can kill it */
+                kill = true;       // if not we can kill it
               else
                 {
                   /* if this is a global variable or function parameter */
@@ -2175,7 +2206,7 @@ killDeadCode (ebbIndex * ebbi)
                   /* if we are sure there are no usages */
                   if (bitVectIsZero (OP_USES (IC_RESULT (ic))))
                     {
-                      kill = 1;
+                      kill = true;
                       goto kill;
                     }
 
@@ -2186,11 +2217,10 @@ killDeadCode (ebbIndex * ebbi)
                   if (applyToSet (ebbs[i]->succList, isDefAlive, ic))
                     continue;
 
-                  kill = 1;
+                  kill = true;
                 }
 
-            kill:
-              /* kill this one if required */
+            kill: // kill this one if required
               if (kill)
                 {
                   if (ic->op == CALL) // Also kill parameter passing iCodes
@@ -2248,25 +2278,6 @@ checkStaticArrayParams (ebbIndex *ebbi)
   for (int i = 0; i < count; i++)
     for (iCode *ic = ebbs[i]->sch; ic; ic = ic->next)
       {
-        if (ic->left && ic->left->isSemDeref)
-          {
-            const struct valinfo v = getOperandValinfo (ic, ic->left);
-            if ((v.anything || !v.nonnull) && ic->left->isSemDeref)
-              werrorfl (ic->filename, ic->lineno, W_OPTIONAL_PTR_DEREF);
-          }
-        if (ic->right && ic->right->isSemDeref)
-          {
-            const struct valinfo v = getOperandValinfo (ic, ic->right);
-            if ((v.anything || !v.nonnull) && ic->right->isSemDeref)
-              werrorfl (ic->filename, ic->lineno, W_OPTIONAL_PTR_DEREF);
-          }
-        if (ic->result && ic->result->isSemDeref)
-          {
-            const struct valinfo v = getOperandValinfo (ic, ic->right);
-            if ((v.anything || !v.nonnull) && ic->result->isSemDeref)
-              werrorfl (ic->filename, ic->lineno, W_OPTIONAL_PTR_DEREF);
-          }
-          
         if ((ic->op == IPUSH || ic->op == SEND) &&
           ic->right || // variable arguments lack type information (and so do some arguments to builtin functions).
           ic->op == '=' && IS_PARM (ic->result))
@@ -2318,7 +2329,7 @@ checkStaticArrayParams (ebbIndex *ebbi)
                       sym = AST_SYMBOL (ast);
                     else
                       continue;
-                    
+
                     // Find called function
                     iCode *cic;
                     for (cic = ic->next; cic && cic->op != CALL  && cic->op != PCALL; cic = cic->next);
@@ -2361,18 +2372,18 @@ checkStaticArrayParams (ebbIndex *ebbi)
                       continue;
 
                     // Deduce bound
-                    const struct valinfo vi = getOperandValinfo (pic, pargop);
+                    const struct valinfo vi = getOperandValinfo (pic, pargop, false);
                     long long pargv = (vi.anything || vi.min < 0 || vi.min > ULONG_MAX) ? 0 : vi.min;
                     pargv *= pscale;
                     pargv += poffset;
-                    if (pargv < 1) // Array size expression 
+                    if (pargv < 1) // Array size expression
                       pargv = 0;
                     paramsize = pargv * getSize (paramtype->next);
                   }
                 else
                   continue;
 
-                const struct valinfo vi = getOperandValinfo (ic, argop);
+                const struct valinfo vi = getOperandValinfo (ic, argop, false);
                 if (!vi.anything && vi.maxsize < paramsize && DCL_STATIC_ARRAY_PARAM (paramtype))
                   werrorfl (ic->filename, ic->lineno, W_STATIC_ARRAY_PARAM_LENGTH);
                 else if (!vi.anything && vi.maybemaxsize < paramsize)
@@ -2381,7 +2392,7 @@ checkStaticArrayParams (ebbIndex *ebbi)
           }
         else if (ic->op == GET_VALUE_AT_ADDRESS)
           {
-            const struct valinfo v = getOperandValinfo (ic, ic->left);
+            const struct valinfo v = getOperandValinfo (ic, ic->left, false);
             wassert (IS_OP_LITERAL (ic->right));
             long long roff = operandLitValue (ic->right);
             int size = getSize (operandType (ic->result));
@@ -2389,39 +2400,47 @@ checkStaticArrayParams (ebbIndex *ebbi)
               werrorfl (ic->filename, ic->lineno, W_INVALID_PTR_DEREF);
             else if (!v.anything && roff + size > (long long)v.maybemaxsize)
               werrorfl (ic->filename, ic->lineno, W_MAYBE_INVALID_PTR_DEREF);
-            if ((v.anything || !v.nonnull) &&
-              (isOptional (operandType (ic->left)->next) && !ic->left->isOptionalEliminated || ic->left->isSemDeref))
-              werrorfl (ic->filename, ic->lineno, W_OPTIONAL_PTR_DEREF);
           }
         else if (POINTER_SET (ic))
           {
-            const struct valinfo v = getOperandValinfo (ic, ic->result);
+            const struct valinfo v = getOperandValinfo (ic, ic->result, false);
             int size = getSize (operandType (ic->right));
             if (!v.anything && size > (long long)v.maxsize)
               werrorfl (ic->filename, ic->lineno, W_INVALID_PTR_DEREF);
             else if (!v.anything && size > (long long)v.maybemaxsize)
               werrorfl (ic->filename, ic->lineno, W_MAYBE_INVALID_PTR_DEREF);
-            if ((v.anything || !v.nonnull) &&
-              (isOptional(operandType (ic->result)->next) && !ic->result->isOptionalEliminated || ic->result->isSemDeref))
-              werrorfl (ic->filename, ic->lineno, W_OPTIONAL_PTR_DEREF);
           }
-        else if (ic->op == '<' || ic->op == '>' || ic->op == LE_OP || ic->op == GE_OP)
+        else if (ic->op == POINTER_NONNULL_CHECK)
           {
-            bool left_optional_maybenull = false;
-            bool right_optional_maybenull = false;
-            if (IS_PTR (operandType (ic->left)) && isOptional (operandType (ic->left)->next) && !ic->left->isOptionalEliminated)
-              left_optional_maybenull = !getOperandValinfo (ic, ic->left).nonnull;
-            if (IS_PTR (operandType (ic->right)) && isOptional (operandType (ic->right)->next) && !ic->right->isOptionalEliminated)
-              right_optional_maybenull = !getOperandValinfo (ic, ic->right).nonnull;
-            if (left_optional_maybenull || right_optional_maybenull)
-              werrorfl (ic->filename, ic->lineno, W_OPTIONAL_RELATIONAL);
+            if (ic->left && !getOperandValinfo (ic, ic->left, false).nonnull ||
+                ic->right && !getOperandValinfo (ic, ic->right, false).nonnull)
+              werrorfl (ic->filename, ic->lineno,
+                        ic->pointerCheck == POINTER_ARITHMETIC ?
+                          W_OPTIONAL_ARITHMETIC :
+                        ic->pointerCheck == POINTER_RELATIONAL ?
+                          W_OPTIONAL_RELATIONAL : W_OPTIONAL_PTR_DEREF);
           }
-        else if (ic->op == '+' || ic->op == '-')
-          if (IS_PTR (operandType (ic->left)) && isOptional (operandType (ic->left)->next) && !ic->left->isOptionalEliminated && !getOperandValinfo (ic, ic->left).nonnull)
-            werrorfl (ic->filename, ic->lineno, W_OPTIONAL_ARITHMETIC);
-          else if (IS_PTR (operandType (ic->right)) && isOptional (operandType (ic->right)->next) && !ic->left->isOptionalEliminated && !getOperandValinfo (ic, ic->right).nonnull)
-            werrorfl (ic->filename, ic->lineno, W_OPTIONAL_ARITHMETIC);
       }
+}
+
+/* Remove diagnostic uses before optimisations for code generation. */
+static bool
+removePointerChecks (ebbIndex *ebbi)
+{
+  bool removed = false;
+  for (int i = 0; i < ebbi->count; ++i)
+    for (iCode *ic = ebbi->bbOrder[i]->sch; ic; )
+      {
+        iCode *next = ic->next;
+        if (ic->op == POINTER_NONNULL_CHECK)
+          {
+            unsetDefsAndUses (ic);
+            remiCodeFromeBBlock (ebbi->bbOrder[i], ic);
+            removed = true;
+          }
+        ic = next;
+      }
+  return removed;
 }
 
 /*-----------------------------------------------------------------*/
@@ -3195,12 +3214,12 @@ optimizeFinalCast (ebbIndex *ebbi)
             continue;
 
           // Not all backends can handle multiple global operands in all operations well.
-          if (IS_OP_GLOBAL (uic->result) && IS_OP_GLOBAL (ic->right) && 
+          if (IS_OP_GLOBAL (uic->result) && IS_OP_GLOBAL (ic->right) &&
             !TARGET_Z80_LIKE && !TARGET_IS_STM8 && !TARGET_F8_LIKE)
             continue;
 
           if (ic->op == CAST)
-            {    
+            {
               sym_link *type1 = operandType (ic->right);
               sym_link *type2 = operandType (ic->left);
 
@@ -3211,10 +3230,14 @@ optimizeFinalCast (ebbIndex *ebbi)
                 sclsFromPtr (type1) == sclsFromPtr (type2) &&
                 getAddrspace (type1) == getAddrspace (type2))
                 ;
-             else 
+             else
                 continue;
 
              if (!IS_PTR (type1) || IS_BITFIELD(type1->next) || !IS_PTR (type2) || IS_BITFIELD(type2->next))
+               continue;
+
+             /* The access must retain the volatility specified by the cast. */
+             if (isVolatile (type1->next) != isVolatile (type2->next))
                continue;
             }
 
@@ -3309,7 +3332,7 @@ optimizeNegation (eBBlock **ebbs, int count)
                   bitVectUnSetBit (OP_USES (uic->left), uic->key);
                   uic->left = ic->left;
                   bitVectSetBit (OP_USES (uic->left), uic->key);
-                  
+
                   // Make ic assignment to self, which will be optimized out.
                   bitVectUnSetBit (OP_USES (ic->left), ic->key);
                   ic->left = 0;
@@ -3505,11 +3528,11 @@ void guessCounts (iCode *start_ic, ebbIndex *ebbi)
   for (ic = start_ic; ic; ic = ic->next)
     ic->count = 0;
   start_ic->pcount = 1.0f;
-  needprop = TRUE;
+  needprop = true;
 
   for(i = 0; needprop && i < 24; i++) // 24 is an arbitrary limit to reduce runtime at the cost of accuracy.
     {
-      needprop = FALSE;
+      needprop = false;
       for (ic = start_ic; ic; ic = ic->next)
         {
           if(ic->pcount <= 0.01) // 0.01 is an arbitrary limit to reduce runtime at the cost of accuracy.
@@ -3521,7 +3544,7 @@ void guessCounts (iCode *start_ic, ebbIndex *ebbi)
             {
               iCode *target = hTabItemWithKey (labelDef, IC_LABEL (ic)->key);
               target->pcount += ic->pcount;
-              needprop = TRUE;
+              needprop = true;
             }
           else if(ic->op == IFX) // Use a classic, simple branch prediction. Works well for typical loops.
             {
@@ -3538,7 +3561,7 @@ void guessCounts (iCode *start_ic, ebbIndex *ebbi)
                   if(ic->next)
                     ic->next->pcount += ic->pcount / 4;
                 }
-              needprop = TRUE;
+              needprop = true;
             }
           else if(ic->op == JUMPTABLE)
             {
@@ -3550,7 +3573,7 @@ void guessCounts (iCode *start_ic, ebbIndex *ebbi)
                   iCode *target = hTabItemWithKey (labelDef, label->key);
                   target->pcount += ic->pcount / n;
                 }
-              needprop = TRUE;
+              needprop = true;
             }
             else if(ic->op == CALL && IS_SYMOP (IC_LEFT (ic)) && IFFUNC_ISNORETURN (OP_SYMBOL (IC_LEFT (ic))->type))
               ;
@@ -3721,7 +3744,6 @@ checkPurity (const iCode *ic)
 
   if (currFunc)
     {
-      currFunc->funcUsesVolatile = uses_volatile;
       currFunc->funcPure = pure;
     }
 }
@@ -3734,29 +3756,32 @@ checkPurity (const iCode *ic)
 static void
 fixParamPassing (iCode *ic)
 {
-  bool change = false;
+  bool change;
   do
-    for (iCode *pic = ic; pic; pic = pic->next)
-      {
-        if (pic->op == CALL || pic->op == PCALL ||
-          pic->op == SEND || pic->op == IPUSH && pic->parmPush || pic->op == IPUSH_VALUE_AT_ADDRESS) 
-          continue;
-        if (!isiCodeInFunctionCall (pic))
-          continue;
-        if (!pic->prev || !(pic->prev->op == CALL || pic->prev->op == PCALL ||
-          pic->prev->op == SEND || pic->prev->op == IPUSH && pic->prev->parmPush || pic->prev->op == IPUSH_VALUE_AT_ADDRESS)) 
-          continue;
+    {
+      change = false;
+      for (iCode *pic = ic; pic; pic = pic->next)
+        {
+          if (pic->op == CALL || pic->op == PCALL || pic->op == SEND ||
+              pic->op == IPUSH && pic->parmPush || pic->op == IPUSH_VALUE_AT_ADDRESS)
+            continue;
+          if (!isiCodeInFunctionCall (pic))
+            continue;
+          if (!pic->prev || !(pic->prev->op == CALL || pic->prev->op == PCALL || pic->prev->op == SEND ||
+              pic->prev->op == IPUSH && pic->prev->parmPush || pic->prev->op == IPUSH_VALUE_AT_ADDRESS))
+            continue;
 
-        // Found some iCode directly after a parameter passing iCodes. swap them.
-        pic->prev->next = pic->next;
-        pic->next->prev = pic->prev;
-        pic->next = pic->prev;
-        pic->prev = pic->prev->prev;
-        pic->prev->next = pic;
-        pic->next->prev = pic;
-        change = true;
-      }
-  while (change--);
+          // Found some iCode directly after a parameter passing iCodes. swap them.
+          pic->prev->next = pic->next;
+          pic->next->prev = pic->prev;
+          pic->next = pic->prev;
+          pic->prev = pic->prev->prev;
+          pic->prev->next = pic;
+          pic->next->prev = pic;
+          change = true;
+        }
+    }
+  while (change);
 }
 
 /*-----------------------------------------------------------------*/
@@ -3823,10 +3848,10 @@ eBBlockFromiCode (iCode *ic)
   /* Burn the corpses, so the dead may rest in peace,
      safe from cse necromancy */
   computeDataFlow (ebbi);
-  killDeadCode (ebbi);
+  killDeadCode (ebbi, false);
 
   /* do common subexpression elimination for each block */
-  change = cseAllBlocks (ebbi, FALSE);
+  change = cseAllBlocks (ebbi, false);
 
   /* dumpraw if asked for */
   if (options.dump_i_code)
@@ -3844,18 +3869,18 @@ eBBlockFromiCode (iCode *ic)
   /* global common subexpression elimination  */
   if (optimize.global_cse)
     {
-      change += cseAllBlocks (ebbi, FALSE);
+      change += cseAllBlocks (ebbi, false);
       if (options.dump_i_code)
         dumpEbbsToFileExt (DUMP_GCSE, ebbi);
     }
   else
     {
       // compute the dataflow only
-      assert(cseAllBlocks (ebbi, TRUE)==0);
+      assert(cseAllBlocks (ebbi, true)==0);
     }
 
   /* kill dead code */
-  kchange = killDeadCode (ebbi);
+  kchange = killDeadCode (ebbi, false);
 
   if (options.dump_i_code)
     dumpEbbsToFileExt (DUMP_DEADCODE, ebbi);
@@ -3876,9 +3901,15 @@ eBBlockFromiCode (iCode *ic)
       computeControlFlow (ebbi);
       loops = createLoopRegions (ebbi);
       computeDataFlow (ebbi);
-      killDeadCode (ebbi);
+      killDeadCode (ebbi, false);
       // Check before loop optimizations, but after dead code elimination and generalized constant propagation, so we can avoid false positives in dead branches, and have the necessary information.
       checkStaticArrayParams (ebbi);
+    }
+
+  if (removePointerChecks (ebbi))
+    {
+      computeDataFlow (ebbi);
+      kchange += killDeadCode (ebbi, false);
     }
 
   /* do loop optimizations */
@@ -3896,7 +3927,7 @@ eBBlockFromiCode (iCode *ic)
   if (lchange || kchange)
     {
       computeDataFlow (ebbi);
-      change += cseAllBlocks (ebbi, FALSE);
+      change += cseAllBlocks (ebbi, false);
       if (options.dump_i_code)
         dumpEbbsToFileExt (DUMP_LOOPG, ebbi);
 
@@ -3904,7 +3935,7 @@ eBBlockFromiCode (iCode *ic)
          dead code elimination once more : this will
          get rid of the extra assignments to the induction
          variables created during loop optimizations */
-      killDeadCode (ebbi);
+      killDeadCode (ebbi, false);
 
       if (options.dump_i_code)
         dumpEbbsToFileExt (DUMP_LOOPD, ebbi);
@@ -3921,7 +3952,7 @@ eBBlockFromiCode (iCode *ic)
       computeControlFlow (ebbi);
       loops = createLoopRegions (ebbi);
       computeDataFlow (ebbi);
-      killDeadCode (ebbi);
+      killDeadCode (ebbi, true);
       if (options.dump_i_code)
         dumpEbbsToFileExt (DUMP_GENCONSTPROP1, ebbi);
     }
@@ -3940,7 +3971,7 @@ eBBlockFromiCode (iCode *ic)
     optimizeCastCast (ebbi->bbOrder, ebbi->count);
   computeDataFlow (ebbi);                                  // Apparently needed here, since otherwise we get some cases of killDeadCode below killing code not actually dead.
   recomputeLiveRanges (ebbi->bbOrder, ebbi->count, false); // Recompute again before killing dead code, since dead code elimination needs updated ic->seq - the old ones might have been invalidated in optimizeOpWidth above.
-  killDeadCode (ebbi);                                     // Ensure lospre doesn't resurrect dead code.
+  killDeadCode (ebbi, false);                               // Ensure lospre doesn't resurrect dead code.
   adjustIChain (ebbi->bbOrder, ebbi->count);
   ic = iCodeLabelOptimize (iCodeFromeBBlock (ebbi->bbOrder, ebbi->count));
   checkPurity (ic);                                        // Check purity - dead code elimination had a chance to eliminate any calls to impure functions by now.
@@ -3972,9 +4003,9 @@ eBBlockFromiCode (iCode *ic)
   computeControlFlow (ebbi);
   loops = createLoopRegions (ebbi);
   computeDataFlow (ebbi);
-  killDeadCode (ebbi);
+  killDeadCode (ebbi, false);
   offsetFoldUse (ebbi->bbOrder, ebbi->count);
-  killDeadCode (ebbi);
+  killDeadCode (ebbi, true);
 
   /* sort it back by block number */
   //qsort (ebbs, saveCount, sizeof (eBBlock *), bbNumCompare);
@@ -4041,6 +4072,7 @@ eBBlockFromiCode (iCode *ic)
       computeControlFlow (ebbi);
       loops = createLoopRegions (ebbi);
       computeDataFlow (ebbi);
+      killDeadCode (ebbi, true);
       recomputeLiveRanges (ebbi->bbOrder, ebbi->count, false);
       ic = iCodeLabelOptimize (iCodeFromeBBlock (ebbi->bbOrder, ebbi->count));
       recomputeValinfos (ic, ebbi, "_2");
@@ -4050,7 +4082,7 @@ eBBlockFromiCode (iCode *ic)
       computeControlFlow (ebbi);
       loops = createLoopRegions (ebbi);
       computeDataFlow (ebbi);
-      killDeadCode (ebbi);
+      killDeadCode (ebbi, true);
       if (options.dump_i_code)
         dumpEbbsToFileExt (DUMP_GENCONSTPROP2, ebbi);
     }
@@ -4071,7 +4103,7 @@ eBBlockFromiCode (iCode *ic)
     computeControlFlow (ebbi);
     loops = createLoopRegions (ebbi);
     computeDataFlow (ebbi);
-    killDeadCode (ebbi); /* iCodeLabelOptimize() above might result in dead code, when both branches of an ifx go to the same destination. */
+    killDeadCode (ebbi, true); // iCodeLabelOptimize() above might result in dead code, when both branches of an ifx go to the same destination.
   }
   while (change);
 

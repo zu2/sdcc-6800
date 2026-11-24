@@ -595,12 +595,12 @@ newAsmop (short type)
 }
 
 /*-----------------------------------------------------------------*/
-/* pointerCode - returns the code for a pointer type               */
+/* pointerCode - returns the code for a pointer operand            */
 /*-----------------------------------------------------------------*/
 static int
-pointerCode (sym_link * etype)
+pointerCode (operand * pointer)
 {
-  return PTR_TYPE (SPEC_OCLS (etype));
+  return PTR_TYPE (SPEC_OCLS (getSpec (operandType (pointer))));
 }
 
 /*-----------------------------------------------------------------*/
@@ -669,6 +669,24 @@ leftRightUseAcc (iCode * ic)
 }
 
 /*-----------------------------------------------------------------*/
+/* stackoffset - stack offset for symbol                           */
+/*-----------------------------------------------------------------*/
+static int
+stackoffset (const symbol * sym)
+{
+  int offset = sym->stack;
+
+  if (offset < 0)
+    {
+      offset -= _G.nRegsSaved;
+      if (IS_STRUCT (currFunc->type->next))
+        offset -= GPTRSIZE;
+    }
+
+  return offset;
+}
+
+/*-----------------------------------------------------------------*/
 /* aopForSym - for a true symbol                                   */
 /*-----------------------------------------------------------------*/
 static asmop *
@@ -713,12 +731,11 @@ aopForSym (iCode * ic, symbol * sym, bool result, bool useDP2)
         {
           if (sym->onStack)
             {
-              signed char offset = ((sym->stack < 0) ?
-                                    ((signed char) (sym->stack - _G.nRegsSaved)) : ((signed char) sym->stack)) & 0xff;
+              int offset = stackoffset (sym);
 
-              if ((abs (offset) <= 3) || (accuse && (abs (offset) <= 7)))
+              if ((abs (offset) < 3) || (accuse && (abs (offset) < 4)))
                 {
-                  emitcode ("mov", "%s,_bp", aop->aopu.aop_ptr->name);
+                  emitcode ("mov", "%s,bp", aop->aopu.aop_ptr->name);
                   while (offset < 0)
                     {
                       emitcode ("dec", aop->aopu.aop_ptr->name);
@@ -733,12 +750,18 @@ aopForSym (iCode * ic, symbol * sym, bool result, bool useDP2)
               else
                 {
                   if (accuse)
-                    emitcode ("push", "acc");
-                  emitcode ("mov", "a,_bp");
-                  emitcode ("add", "a,#!constbyte", (unsigned)offset);
-                  emitcode ("mov", "%s,a", aop->aopu.aop_ptr->name);
-                  if (accuse)
-                    emitcode ("pop", "acc");
+                    {
+                      emitcode ("xch", "a,%s", aop->aopu.aop_ptr->name);
+                      emitcode ("mov", "a,bp");
+                      emitcode ("add", "a,#0x%02x", offset & 0xff);
+                      emitcode ("xch", "a,%s", aop->aopu.aop_ptr->name);
+                    }
+                  else
+                    {
+                      emitcode ("mov", "a,bp");
+                      emitcode ("add", "a,#0x%02x", offset & 0xff);
+                      emitcode ("mov", "%s,a", aop->aopu.aop_ptr->name);
+                    }
                 }
             }
           else
@@ -754,7 +777,7 @@ aopForSym (iCode * ic, symbol * sym, bool result, bool useDP2)
 
   if (sym->onStack && options.stack10bit)
     {
-      short stack_val = -((sym->stack < 0) ? ((short) (sym->stack - _G.nRegsSaved)) : ((short) sym->stack));
+      int offset = stackoffset (sym);
       if (_G.dptrInUse)
         {
           emitcode ("push", dpl);
@@ -764,48 +787,39 @@ aopForSym (iCode * ic, symbol * sym, bool result, bool useDP2)
       /* It's on the 10 bit stack, which is located in
        * far data space.
        */
-      if (stack_val < 0 && stack_val > -5)
-        {
-          /* between -5 & -1 */
-          if (options.model == MODEL_FLAT24)
-            {
-              emitcode ("mov", "%s,#!constbyte", dpx, (unsigned)((options.stack_loc >> 16) & 0xff));
-            }
-          emitcode ("mov", "%s,_bpx+1", dph);
-          emitcode ("mov", "%s,_bpx", dpl);
+      if (offset > 0 && (6 + (useDP2 ? 6 : 0) + offset < 12 + (accuse ? 4 : 0)))
+        {// 6 + useDP2*6 + offset bytes
           if (useDP2)
-            {
-              emitcode ("mov", "dps,#1");
-            }
-          stack_val = -stack_val;
-          while (stack_val--)
+            emitcode ("mov", "dps,#1");
+
+          emitcode ("mov", "%s,bpx", dpl);
+          emitcode ("mov", "%s,bpx+1", dph);
+          while (offset--)
             {
               emitcode ("inc", "dptr");
             }
+
           if (useDP2)
-            {
-              emitcode ("mov", "dps,#0");
-            }
+            emitcode ("mov", "dps,#0");
         }
       else
-        {
+        {// 12 + accuse*4 bytes
           if (accuse)
             emitcode ("push", "acc");
 
-          emitcode ("mov", "a,_bpx");
-          emitcode ("clr", "c");
-          emitcode ("subb", "a,#!constbyte", (unsigned)(stack_val & 0xff));
+          emitcode ("mov", "a,bpx");
+          emitcode ("add", "a,#!constbyte", (unsigned)(offset & 0xff));
           emitcode ("mov", "%s,a", dpl);
-          emitcode ("mov", "a,_bpx+1");
-          emitcode ("subb", "a,#!constbyte", (unsigned)((stack_val >> 8) & 0xff));
+          emitcode ("mov", "a,bpx+1");
+          emitcode ("addc", "a,#!constbyte", (unsigned)((offset >> 8) & 0xff));
           emitcode ("mov", "%s,a", dph);
-          if (options.model == MODEL_FLAT24)
-            {
-              emitcode ("mov", "%s,#!constbyte", dpx, (unsigned)((options.stack_loc >> 16) & 0xff));
-            }
 
           if (accuse)
             emitcode ("pop", "acc");
+        }
+      if (options.model == MODEL_FLAT24)
+        {
+          emitcode ("mov", "%s,#!constbyte", dpx, (unsigned)((options.stack_loc >> 16) & 0xff));
         }
       sym->aop = aop = newAsmop ((short) (useDP2 ? AOP_DPTR2 : AOP_DPTR));
       aop->size = getSize (sym->type);
@@ -871,27 +885,33 @@ aopForRemat (symbol * sym)
   asmop *aop = newAsmop (AOP_IMMD);
   int ptr_type = 0;
   int val = 0;
+  sym_link *from_type = NULL;
+  const char *from_name = NULL;
   struct dbuf_s dbuf;
 
   for (;;)
     {
       if (ic->op == '+')
-        val += (int) operandLitValue (IC_RIGHT (ic));
+        {
+          val += (int) operandLitValue (IC_RIGHT (ic));
+          ic = OP_SYMBOL (IC_LEFT (ic))->rematiCode;
+        }
       else if (ic->op == '-')
-        val -= (int) operandLitValue (IC_RIGHT (ic));
+        {
+          val -= (int) operandLitValue (IC_RIGHT (ic));
+          ic = OP_SYMBOL (IC_LEFT (ic))->rematiCode;
+        }
       else if (IS_CAST_ICODE (ic))
         {
-          sym_link *from_type = operandType (IC_RIGHT (ic));
+          from_type = operandType (IC_RIGHT (ic));
+          from_name = IS_SYMOP (IC_RIGHT (ic)) ? OP_SYMBOL (IC_RIGHT (ic))->name : NULL;
           aop->aopu.aop_immd.from_cast_remat = 1;
           ic = OP_SYMBOL (IC_RIGHT (ic))->rematiCode;
-          ptr_type = pointerTypeToGPByte (DCL_TYPE (from_type),
-                                          IS_SYMOP (IC_RIGHT (ic)) ? OP_SYMBOL (IC_RIGHT (ic))->name : NULL, sym->name);
-          continue;
         }
       else
-        break;
-
-      ic = OP_SYMBOL (IC_LEFT (ic))->rematiCode;
+        {
+          break;
+        }
     }
 
   dbuf_init (&dbuf, 128);
@@ -913,6 +933,7 @@ aopForRemat (symbol * sym)
   /* set immd2 field if required */
   if (aop->aopu.aop_immd.from_cast_remat)
     {
+      ptr_type = pointerTypeToGPByte (DCL_TYPE (from_type), from_name, sym->name);
       dbuf_init (&dbuf, 128);
       dbuf_tprintf (&dbuf, "#!constbyte", (unsigned)ptr_type);
       aop->aopu.aop_immd.aop_immd2 = dbuf_detach_c_str (&dbuf);
@@ -1095,7 +1116,7 @@ aopOp (operand * op, iCode * ic, bool result, bool useDP2)
       op->aop = aop = newAsmop (AOP_LIT);
       aop->aopu.aop_lit = OP_VALUE (op);
       aop->size = getSize (operandType (op));
-      aop->valinfo = getOperandValinfo (ic, op);
+      aop->valinfo = getOperandValinfo (ic, op, false);
       return;
     }
 
@@ -1129,7 +1150,7 @@ aopOp (operand * op, iCode * ic, bool result, bool useDP2)
     {
       op->aop = aopForSym (ic, OP_SYMBOL (op), result, useDP2);
       if (!result)
-        op->aop->valinfo = getOperandValinfo (ic, op);
+        op->aop->valinfo = getOperandValinfo (ic, op, false);
       return;
     }
 
@@ -1214,7 +1235,7 @@ aopOp (operand * op, iCode * ic, bool result, bool useDP2)
             }
           sym->aop = op->aop = aop = aopForSym (ic, sym->usl.spillLoc, result, useDP2);
           if (!result)
-            aop->valinfo = getOperandValinfo (ic, op);
+            aop->valinfo = getOperandValinfo (ic, op, false);
           if (getSize (sym->type) != getSize (sym->usl.spillLoc->type))
             {
               /* Don't reuse the new aop, go with the last one */
@@ -1314,13 +1335,13 @@ freeAsmop (operand * op, asmop * aaop, iCode * ic, bool pop)
 
       if (stk)
         {
-          emitcode ("mov", "a,_bp");
+          emitcode ("mov", "a,bp");
           emitcode ("add", "a,#!constbyte", (unsigned)((char)stk & 0xff));
           emitcode ("mov", "%s,a", aop->aopu.aop_ptr->name);
         }
       else
         {
-          emitcode ("mov", "%s,_bp", aop->aopu.aop_ptr->name);
+          emitcode ("mov", "%s,bp", aop->aopu.aop_ptr->name);
         }
 
       while (sz--)
@@ -2330,9 +2351,10 @@ release:
   freeAsmop (IC_LEFT (ic), NULL, ic, (RESULTONSTACK (ic) ? 0 : 1));
 }
 
+#if 0
 /*-----------------------------------------------------------------*/
 /* genCpl - generate code for complement                           */
-/* no longer used; todo: chekc if something from here could still  */
+/* no longer used; todo: check if something from here could still  */
 /* be useful in genXor for AOP_CRY, then remove genCpl!            */
 /*-----------------------------------------------------------------*/
 static void
@@ -2396,6 +2418,7 @@ release:
   freeAsmop (IC_RESULT (ic), NULL, ic, TRUE);
   freeAsmop (IC_LEFT (ic), NULL, ic, (RESULTONSTACK (ic) ? 0 : 1));
 }
+#endif
 
 /*-----------------------------------------------------------------*/
 /* genUminusFloat - unary minus for floating points                */
@@ -2784,17 +2807,17 @@ genXpush (iCode * ic)
   if (size == 1)
     {
       MOVA (aopGet (IC_LEFT (ic), 0, FALSE, FALSE, NULL));
-      emitcode ("mov", "%s,_spx", r->name);
-      emitcode ("inc", "_spx"); // allocate space first
+      emitcode ("mov", "%s,spx", r->name);
+      emitcode ("inc", "spx"); // allocate space first
       emitcode ("movx", "@%s,a", r->name);
     }
   else
     {
       // allocate space first
-      emitcode ("mov", "%s,_spx", r->name);
+      emitcode ("mov", "%s,spx", r->name);
       MOVA (r->name);
       emitcode ("add", "a,#%d", size);
-      emitcode ("mov", "_spx,a");
+      emitcode ("mov", "spx,a");
 
       _startLazyDPSEvaluation ();
       while (size--)
@@ -2902,6 +2925,8 @@ genPointerPush (iCode *ic)
   wassertl (IC_RIGHT (ic), "IPUSH_VALUE_AT_ADDRESS without right operand");
   wassertl (IS_OP_LITERAL (IC_RIGHT (ic)), "IPUSH_VALUE_AT_ADDRESS with non-literal right operand");
   wassertl (!operandLitValue (IC_RIGHT(ic)), "IPUSH_VALUE_AT_ADDRESS with non-zero right operand");
+
+  saveRegisters (ic);
 
   /* depending on the type of pointer we need to
      move it to the correct pointer register */
@@ -3047,10 +3072,10 @@ saveRBank (int bank, iCode * ic, bool pushPsw)
           r = getFreePtr (ic, &aop, FALSE);
         }
       // allocate space first
-      emitcode ("mov", "%s,_spx", r->name);
+      emitcode ("mov", "%s,spx", r->name);
       MOVA (r->name);
       emitcode ("add", "a,#!constbyte", (unsigned)count);
-      emitcode ("mov", "_spx,a");
+      emitcode ("mov", "spx,a");
     }
 
   for (i = 0; i < 8; i++)       /* only R0-R7 needs saving */
@@ -3130,7 +3155,7 @@ unsaveRBank (int bank, iCode * ic, bool popPsw)
           aop = newAsmop (0);
           r = getFreePtr (ic, &aop, FALSE);
         }
-      emitcode ("mov", "%s,_spx", r->name);
+      emitcode ("mov", "%s,spx", r->name);
     }
 
   if (popPsw)
@@ -3179,7 +3204,7 @@ unsaveRBank (int bank, iCode * ic, bool popPsw)
 
   if (options.useXstack)
     {
-      emitcode ("mov", "_spx,%s", r->name);
+      emitcode ("mov", "spx,%s", r->name);
     }
 
   if (aop)
@@ -3337,6 +3362,100 @@ selectRegBank (short bank, bool keepFlags)
 }
 
 /*-----------------------------------------------------------------*/
+/* stackAdjust - remove bytes from the stack                       */
+/*-----------------------------------------------------------------*/
+static void
+stackAdjust (int n)
+{
+  int i;
+
+  wassert (n >= 0);
+
+  if (options.stack10bit)
+    {
+      if (n <= 10)
+        {
+          for (i = 0; i < n; i++)
+            emitpop ("acc");
+        }
+      else
+        {
+          PROTECT_SP;
+          emitcode ("clr", "c");
+          emitcode ("mov", "a,sp");
+          emitcode ("subb", "a,#!constbyte", (unsigned)(n & 0xffu));
+          emitcode ("mov", "sp,a");
+          emitcode ("mov", "a,esp");
+          adjustEsp ("a");
+          emitcode ("subb", "a,#!constbyte", (unsigned)((n >> 8) & 0xffu));
+          emitcode ("mov", "esp,a");
+          UNPROTECT_SP;
+        }
+    }
+  else if (n > 3)
+    {
+      emitcode ("mov", "a,%s", spname);
+      emitcode ("add", "a,#!constbyte", (unsigned)((-n) & 0xffu));
+      emitcode ("mov", "%s,a", spname);
+    }
+  else
+    for (i = 0; i < n; i++)
+      emitcode ("dec", "%s", spname);
+}
+
+/*-----------------------------------------------------------------*/
+/* emitPassStructReturnPointer - load the result address            */
+/*-----------------------------------------------------------------*/
+static void
+emitPassStructReturnPointer (operand * result)
+{
+  symbol *sym = OP_SYMBOL (result);
+  int spaceTag;
+  const unsigned stackPage = (unsigned)((options.stack_loc >> 16) & 0xffu);
+
+  if (sym->onStack)
+    spaceTag = GPTYPE_FAR;
+  else
+    spaceTag = pointerTypeToGPByte (pointerCode (result), NULL, NULL);
+
+  if (!sym->onStack)
+    {
+      /* Address of a static result. */
+      emitcode ("mov", "dpl,#%s", sym->rname);
+      emitcode ("mov", "dph,#(%s >> 8)", sym->rname);
+      emitcode ("mov", "dpx,#(%s >> 16)", sym->rname);
+    }
+  else
+    {
+      /* Address of a stack result. */
+      if (options.stack10bit)
+        {
+          emitcode ("mov", "dpl,bpx");
+          emitcode ("mov", "a,dpl");
+          emitcode ("add", "a,#!constbyte", (unsigned)(sym->stack & 0xffu));
+          emitcode ("mov", "dpl,a");
+          emitcode ("mov", "dph,bpx+1");
+          emitcode ("mov", "a,dph");
+          emitcode ("addc", "a,#!constbyte", (unsigned)((sym->stack >> 8) & 0xffu));
+          emitcode ("mov", "dph,a");
+        }
+      else
+        {
+          emitcode ("mov", "dpl,bp");
+          if (sym->stack)
+            {
+              emitcode ("mov", "a,dpl");
+              emitcode ("add", "a,#!constbyte", (unsigned)(sym->stack & 0xffu));
+              emitcode ("mov", "dpl,a");
+            }
+          emitcode ("mov", "dph,#0");
+        }
+      emitcode ("mov", "dpx,#!constbyte", stackPage);
+    }
+  emitcode ("mov", "b,#0x%02x", spaceTag);
+}
+
+/*-----------------------------------------------------------------*/
 /* genCall - generates a call statement                            */
 /*-----------------------------------------------------------------*/
 static void
@@ -3350,6 +3469,7 @@ genCall (iCode * ic)
   bool accPushed = FALSE;
   bool resultInF0 = FALSE;
   bool assignResultGenerated = FALSE;
+  bool returnsStruct;
 
   D (emitcode (";", "genCall"));
 
@@ -3357,6 +3477,7 @@ genCall (iCode * ic)
      the same register bank then we need to save the
      destination registers on the stack */
   dtype = operandType (IC_LEFT (ic));
+  returnsStruct = IS_STRUCT (dtype->next);
   etype = getSpec (dtype);
   if (currFunc && dtype && (!IFFUNC_ISNAKED (dtype) || TARGET_IS_DS400) &&
       (FUNC_REGBANK (currFunc->type) != FUNC_REGBANK (dtype)) && IFFUNC_ISISR (currFunc->type))
@@ -3396,6 +3517,12 @@ genCall (iCode * ic)
       _G.sendSet = NULL;
     }
 
+  if (returnsStruct)
+    {
+      emitPassStructReturnPointer (IC_RESULT (ic));
+      assignResultGenerated = TRUE;
+    }
+
   if (swapBanks)
     {
       emitcode ("mov", "psw,#!constbyte", (unsigned)(((FUNC_REGBANK (dtype)) << 3) & 0xffu));
@@ -3421,10 +3548,10 @@ genCall (iCode * ic)
     }
 
   /* if we need assign a result value */
-  if ((IS_ITEMP (IC_RESULT (ic)) &&
+  if (!assignResultGenerated && ((IS_ITEMP (IC_RESULT (ic)) &&
        !IS_BIT (OP_SYM_ETYPE (IC_RESULT (ic))) &&
        (OP_SYMBOL (IC_RESULT (ic))->nRegs ||
-        OP_SYMBOL (IC_RESULT (ic))->accuse || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic)))
+        OP_SYMBOL (IC_RESULT (ic))->accuse || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic))))
     {
       if (isOperandInFarSpace (IC_RESULT (ic)) && getSize (operandType (IC_RESULT (ic))) <= 2)
         {
@@ -3466,64 +3593,28 @@ genCall (iCode * ic)
         }
     }
 
-  /* adjust the stack for parameters if required */
+  /* Remove stack parameters. */
   if (ic->parmBytes)
     {
-      int i;
-      if (options.stack10bit)
+      if (accuse && !options.stack10bit && ic->parmBytes > 3)
         {
-          if (ic->parmBytes <= 10)
-            {
-              emitcode (";", "stack adjustment for parms");
-              for (i = 0; i < ic->parmBytes; i++)
-                {
-                  emitpop ("acc");
-                }
-            }
-          else
-            {
-              PROTECT_SP;
-              emitcode ("clr", "c");
-              emitcode ("mov", "a,sp");
-              emitcode ("subb", "a,#!constbyte", (unsigned)(ic->parmBytes & 0xffu));
-              emitcode ("mov", "sp,a");
-              emitcode ("mov", "a,esp");
-              adjustEsp ("a");
-              emitcode ("subb", "a,#!constbyte", (unsigned)((ic->parmBytes >> 8) & 0xffu));
-              emitcode ("mov", "esp,a");
-              UNPROTECT_SP;
-            }
+          emitpush ("acc");
+          accPushed = TRUE;
         }
-      else
+      if (IS_BIT (OP_SYM_ETYPE (IC_LEFT (ic))) && IS_BIT (OP_SYM_ETYPE (IC_RESULT (ic))) &&
+          !assignResultGenerated && !options.stack10bit && ic->parmBytes > 3)
         {
-          if (ic->parmBytes > 3)
-            {
-              if (accuse)
-                {
-                  emitcode ("push", "acc");
-                  accPushed = TRUE;
-                }
-              if (IS_BIT (OP_SYM_ETYPE (IC_LEFT (ic))) && IS_BIT (OP_SYM_ETYPE (IC_RESULT (ic))) && !assignResultGenerated)
-                {
-                  emitcode ("mov", "F0,c");
-                  resultInF0 = TRUE;
-                }
+          emitcode ("mov", "F0,c");
+          resultInF0 = TRUE;
+        }
 
-              emitcode ("mov", "a,%s", spname);
-              emitcode ("add", "a,#!constbyte", (unsigned)((-ic->parmBytes) & 0xffu));
-              emitcode ("mov", "%s,a", spname);
+      stackAdjust (ic->parmBytes);
 
-              /* unsaveRegisters from xstack needs acc, but */
-              /* unsaveRegisters from stack needs this popped */
-              if (accPushed && !options.useXstack)
-                {
-                  emitpop ("acc");
-                  accPushed = FALSE;
-                }
-            }
-          else
-            for (i = 0; i < ic->parmBytes; i++)
-              emitcode ("dec", "%s", spname);
+      /* The accumulator save is on the same stack only without xstack. */
+      if (accPushed && !options.useXstack)
+        {
+          emitpop ("acc");
+          accPushed = FALSE;
         }
     }
 
@@ -3567,10 +3658,12 @@ genPcall (iCode * ic)
   symbol *rlbl = newiTempLabel (NULL);
   bool restoreBank = FALSE;
   bool resultInF0 = FALSE;
+  bool returnsStruct;
 
   D (emitcode (";", "genPcall"));
 
   dtype = operandType (IC_LEFT (ic))->next;
+  returnsStruct = IS_STRUCT (dtype->next);
   /* if caller saves & we have not saved then */
   if (!ic->regsSaved)
     saveRegisters (ic);
@@ -3607,14 +3700,17 @@ genPcall (iCode * ic)
       _G.sendSet = NULL;
     }
 
+  if (returnsStruct)
+    emitPassStructReturnPointer (IC_RESULT (ic));
+
   /* make the call */
   emitcode ("ret", "");
   emitLabel (rlbl);
 
   /* if we need assign a result value */
-  if ((IS_ITEMP (IC_RESULT (ic)) &&
+  if (!returnsStruct && ((IS_ITEMP (IC_RESULT (ic)) &&
        !IS_BIT (OP_SYM_ETYPE (IC_RESULT (ic))) &&
-       (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic)))
+       (OP_SYMBOL (IC_RESULT (ic))->nRegs || OP_SYMBOL (IC_RESULT (ic))->spildir)) || IS_TRUE_SYMOP (IC_RESULT (ic))))
     {
       _G.accInUse++;
       aopOp (IC_RESULT (ic), ic, FALSE, TRUE);
@@ -3625,58 +3721,17 @@ genPcall (iCode * ic)
       freeAsmop (IC_RESULT (ic), NULL, ic, TRUE);
     }
 
-  /* adjust the stack for parameters if required */
+  /* Remove stack parameters. */
   if (ic->parmBytes)
     {
-      int i;
-      if (options.stack10bit)
+      if (IS_BIT (OP_SYM_ETYPE (IC_LEFT (ic))) && IS_BIT (OP_SYM_ETYPE (IC_RESULT (ic))) &&
+          ((options.stack10bit && ic->parmBytes > 10) || (!options.stack10bit && ic->parmBytes > 3)))
         {
-          if (ic->parmBytes <= 10)
-            {
-              emitcode (";", "stack adjustment for parms");
-              for (i = 0; i < ic->parmBytes; i++)
-                {
-                  emitpop ("acc");
-                }
-            }
-          else
-            {
-              if (IS_BIT (OP_SYM_ETYPE (IC_LEFT (ic))) && IS_BIT (OP_SYM_ETYPE (IC_RESULT (ic))))
-                {
-                  emitcode ("mov", "F0,c");
-                  resultInF0 = TRUE;
-                }
-
-              PROTECT_SP;
-              emitcode ("clr", "c");
-              emitcode ("mov", "a,sp");
-              emitcode ("subb", "a,#!constbyte", (unsigned)(ic->parmBytes & 0xffu));
-              emitcode ("mov", "sp,a");
-              emitcode ("mov", "a,esp");
-              adjustEsp ("a");
-              emitcode ("subb", "a,#!constbyte", (unsigned)((ic->parmBytes >> 8) & 0xffu));
-              emitcode ("mov", "esp,a");
-              UNPROTECT_SP;
-            }
+          emitcode ("mov", "F0,c");
+          resultInF0 = TRUE;
         }
-      else
-        {
-          if (ic->parmBytes > 3)
-            {
-              if (IS_BIT (OP_SYM_ETYPE (IC_LEFT (ic))) && IS_BIT (OP_SYM_ETYPE (IC_RESULT (ic))))
-                {
-                  emitcode ("mov", "F0,c");
-                  resultInF0 = TRUE;
-                }
 
-              emitcode ("mov", "a,%s", spname);
-              emitcode ("add", "a,#!constbyte", (unsigned)((-ic->parmBytes) & 0xffu));
-              emitcode ("mov", "%s,a", spname);
-            }
-          else
-            for (i = 0; i < ic->parmBytes; i++)
-              emitcode ("dec", "%s", spname);
-        }
+      stackAdjust (ic->parmBytes);
     }
   /* if register bank was saved then unsave them */
   if (restoreBank)
@@ -3743,7 +3798,7 @@ static void
 genFunction (iCode * ic)
 {
   symbol *sym = OP_SYMBOL (IC_LEFT (ic));
-  sym_link *ftype;
+  sym_link *ftype = operandType (IC_LEFT (ic));
   bool switchedPSW = FALSE;
   bool fReentrant = (IFFUNC_ISREENT (sym->type) || options.stackAuto);
 
@@ -3757,13 +3812,21 @@ genFunction (iCode * ic)
 
   emitcode ("", "%s:", sym->rname);
   genLine.lineCurr->isLabel = 1;
-  ftype = operandType (IC_LEFT (ic));
   _G.currentFunc = sym;
 
   if (IFFUNC_ISNAKED (ftype))
     {
       emitcode (";", "naked function: no prologue.");
       return;
+    }
+
+  if (IS_STRUCT (ftype->next))
+    {
+      /* Save the hidden struct return address. */
+      emitpush ("dpl");
+      emitpush ("dph");
+      emitpush ("dpx");
+      emitpush ("b");
     }
 
   if (options.stack_probe)
@@ -3790,7 +3853,7 @@ genFunction (iCode * ic)
 
   /* if this is an interrupt service routine then
      save acc, b, dpl, dph  */
-  if (IFFUNC_ISISR (sym->type))
+  if (IFFUNC_ISISR (ftype))
     {
       if (!inExcludeList ("acc"))
         emitpush ("acc");
@@ -3818,14 +3881,14 @@ genFunction (iCode * ic)
       /* if this isr has no bank i.e. is going to
          run with bank 0 , then we need to save more
          registers :-) */
-      if (!FUNC_REGBANK (sym->type))
+      if (!FUNC_REGBANK (ftype))
         {
           int i;
 
           /* if this function does not call any other
              function then we can be economical and
              save only those registers that are used */
-          if (!IFFUNC_HASFCALL (sym->type))
+          if (!IFFUNC_HASFCALL (ftype))
             {
               /* if any registers used */
               if (!bitVectIsZero (sym->regsUsed))
@@ -3866,7 +3929,7 @@ genFunction (iCode * ic)
            */
           unsigned long banksToSave = 0;
 
-          if (IFFUNC_HASFCALL (sym->type))
+          if (IFFUNC_HASFCALL (ftype))
             {
 
 #define MAX_REGISTER_BANKS 4
@@ -3900,7 +3963,7 @@ genFunction (iCode * ic)
 //                      werror (W_FUNCPTR_IN_USING_ISR);
                       dtype = operandType (IC_LEFT (i))->next;
                     }
-                  if (dtype && FUNC_REGBANK (dtype) != FUNC_REGBANK (sym->type))
+                  if (dtype && FUNC_REGBANK (dtype) != FUNC_REGBANK (ftype))
                     {
                       /* Mark this bank for saving. */
                       if (FUNC_REGBANK (dtype) >= MAX_REGISTER_BANKS)
@@ -3912,9 +3975,7 @@ genFunction (iCode * ic)
                           banksToSave |= (1 << FUNC_REGBANK (dtype));
                         }
 
-                      /* And note that we don't need to do it in
-                       * genCall.
-                       */
+                      /* And note that we don't need to do it in genCall. */
                       i->bankSaved = 1;
                     }
                 }
@@ -3928,7 +3989,7 @@ genFunction (iCode * ic)
                    * the caller's R0 isn't trashed.
                    */
                   emitpush ("psw");
-                  emitcode ("mov", "psw,#!constbyte", (unsigned)((FUNC_REGBANK (sym->type) << 3) & 0x00ffu));
+                  emitcode ("mov", "psw,#!constbyte", (FUNC_REGBANK (ftype) << 3) & 0x00ffu);
                   switchedPSW = TRUE;
                 }
 
@@ -3948,7 +4009,7 @@ genFunction (iCode * ic)
     {
       /* if callee-save to be used for this function
          then save the registers being used in this function */
-      if (IFFUNC_CALLEESAVES (sym->type))
+      if (IFFUNC_CALLEESAVES (ftype))
         {
           int i;
 
@@ -3980,73 +4041,73 @@ genFunction (iCode * ic)
     {
       if (options.stack10bit)
         {
-          emitcode ("push", "_bpx");
-          emitcode ("push", "_bpx+1");
-          emitcode ("mov", "_bpx,%s", spname);
-          emitcode ("mov", "_bpx+1,esp");
-          adjustEsp ("_bpx+1");
+          emitcode ("push", "bpx");
+          emitcode ("push", "bpx+1");
+          emitcode ("mov", "bpx,%s", spname);
+          emitcode ("mov", "bpx+1,esp");
+          adjustEsp ("bpx+1");
         }
       else
         {
           if (options.useXstack)
             {
               emitcode ("mov", "r0,%s", spname);
-              emitcode ("mov", "a,_bp");
+              emitcode ("mov", "a,bp");
               emitcode ("movx", "@r0,a");
               emitcode ("inc", "%s", spname);
             }
           else
             {
               /* set up the stack */
-              emitcode ("push", "_bp"); /* save the callers stack  */
+              emitcode ("push", "bp"); /* save the callers stack  */
             }
-          emitcode ("mov", "_bp,%s", spname);
+          emitcode ("mov", "bp,%s", spname);
         }
     }
 
   /* adjust the stack for the function */
   if (sym->stack)
     {
-      int i = sym->stack;
+      unsigned int adjust = sym->stack;
       if (options.stack10bit)
         {
-          if (i > 1024)
+          if (adjust > 1024)
             werror (W_STACK_OVERFLOW, sym->name);
           assert (sym->recvSize <= 4);
-          if (sym->stack <= 8)
+          if (adjust <= 8)
             {
-              while (i--)
+              while (adjust--)
                 emitcode ("push", "acc");
             }
           else
             {
               PROTECT_SP;
               emitcode ("mov", "a,sp");
-              emitcode ("add", "a,#!constbyte", (unsigned)((short) sym->stack & 0xff));
+              emitcode ("add", "a,#!constbyte", adjust & 0xff);
               emitcode ("mov", "sp,a");
               emitcode ("mov", "a,esp");
               adjustEsp ("a");
-              emitcode ("addc", "a,#!constbyte", (unsigned)(((short) sym->stack) >> 8) & 0xff);
+              emitcode ("addc", "a,#!constbyte", (adjust >> 8) & 0xff);
               emitcode ("mov", "esp,a");
               UNPROTECT_SP;
             }
         }
       else
         {
-          if (i > 256)
+          if (adjust > 256)
             werror (W_STACK_OVERFLOW, sym->name);
 
-          if (i > 3 && sym->recvSize < 4)
+          if (adjust > 3 && sym->recvSize < 4)
             {
 
               emitcode ("mov", "a,sp");
-              emitcode ("add", "a,#!constbyte", (unsigned)((char) sym->stack & 0xff));
+              emitcode ("add", "a,#!constbyte", adjust & 0xff);
               emitcode ("mov", "sp,a");
 
             }
           else
             {
-              while (i--)
+              while (adjust--)
                 emitcode ("inc", "sp");
             }
         }
@@ -4054,10 +4115,13 @@ genFunction (iCode * ic)
 
   if (sym->xstack)
     {
+      unsigned int xadjust = sym->xstack & 0xff;
+      if (sym->xstack > 256)
+        werror (W_STACK_OVERFLOW, sym->name);
 
-      emitcode ("mov", "a,_spx");
-      emitcode ("add", "a,#!constbyte", (unsigned)((char) sym->xstack & 0xff));
-      emitcode ("mov", "_spx,a");
+      emitcode ("mov", "a,spx");
+      emitcode ("add", "a,#!constbyte", xadjust);
+      emitcode ("mov", "spx,a");
     }
 
   /* if critical function then turn interrupts off */
@@ -4079,6 +4143,7 @@ static void
 genEndFunction (iCode * ic)
 {
   symbol *sym = OP_SYMBOL (IC_LEFT (ic));
+  sym_link *ftype = operandType (IC_LEFT (ic));
   lineNode *lnp = genLine.lineCurr;
   bitVect *regsUsed;
   bitVect *regsUsedPrologue;
@@ -4088,9 +4153,9 @@ genEndFunction (iCode * ic)
   D (emitcode (";", "genEndFunction"));
 
   _G.currentFunc = NULL;
-  if (IFFUNC_ISNAKED (sym->type))
+  if (IFFUNC_ISNAKED (ftype) || IFFUNC_ISNORETURN (ftype))
     {
-      emitcode (";", "naked function: no epilogue.");
+      emitcode (";", IFFUNC_ISNAKED (ftype) ? "naked function: no epilogue." : "noreturn function: no epilogue.");
       if (options.debug && currFunc)
         debugFile->writeEndFunction (currFunc, ic, 0);
       return;
@@ -4118,13 +4183,13 @@ genEndFunction (iCode * ic)
       if (options.stack10bit)
         {
           PROTECT_SP;
-          emitcode ("mov", "sp,_bpx", spname);
-          emitcode ("mov", "esp,_bpx+1", spname);
+          emitcode ("mov", "sp,bpx", spname);
+          emitcode ("mov", "esp,bpx+1", spname);
           UNPROTECT_SP;
         }
       else
         {
-          emitcode ("mov", "%s,_bp", spname);
+          emitcode ("mov", "%s,bp", spname);
         }
     }
 
@@ -4146,27 +4211,27 @@ genEndFunction (iCode * ic)
         {
           emitcode ("mov", "r0,%s", spname);
           emitcode ("movx", "a,@r0");
-          emitcode ("mov", "_bp,a");
+          emitcode ("mov", "bp,a");
           emitcode ("dec", "%s", spname);
         }
       else
         {
           if (options.stack10bit)
             {
-              emitcode ("pop", "_bpx+1");
-              emitcode ("pop", "_bpx");
+              emitcode ("pop", "bpx+1");
+              emitcode ("pop", "bpx");
             }
           else
             {
-              emitcode ("pop", "_bp");
+              emitcode ("pop", "bp");
             }
         }
     }
 
   /* restore the register bank  */
-  if (FUNC_REGBANK (sym->type) || IFFUNC_ISISR (sym->type))
+  if (FUNC_REGBANK (ftype) || IFFUNC_ISISR (ftype))
     {
-      if (!FUNC_REGBANK (sym->type) || !IFFUNC_ISISR (sym->type) || !options.useXstack)
+      if (!FUNC_REGBANK (ftype) || !IFFUNC_ISISR (ftype) || !options.useXstack)
         {
           /* Special case of ISR using non-zero bank with useXstack
            * is handled below.
@@ -4175,20 +4240,20 @@ genEndFunction (iCode * ic)
         }
     }
 
-  if (IFFUNC_ISISR (sym->type))
+  if (IFFUNC_ISISR (ftype))
     {
 
       /* now we need to restore the registers */
       /* if this isr has no bank i.e. is going to
          run with bank 0 , then we need to save more
          registers :-) */
-      if (!FUNC_REGBANK (sym->type))
+      if (!FUNC_REGBANK (ftype))
         {
           int i;
           /* if this function does not call any other
              function then we can be economical and
              save only those registers that are used */
-          if (!IFFUNC_HASFCALL (sym->type))
+          if (!IFFUNC_HASFCALL (ftype))
             {
               /* if any registers used */
               if (sym->regsUsed)
@@ -4265,17 +4330,24 @@ genEndFunction (iCode * ic)
       if (!inExcludeList ("acc"))
         emitpop ("acc");
 
+      if (IS_STRUCT (ftype->next))
+        stackAdjust (GPTRSIZE);
+
       /* if debug then send end of function */
       if (options.debug && currFunc)
         {
           debugFile->writeEndFunction (currFunc, ic, 1);
         }
 
+      wassert (currFunc);
+      if (currFunc->funcRestartAtomicSupport)
+        emitcode (options.acall_ajmp ? "ajmp" : "ljmp", "sdcc_atomic_maybe_rollback");
+      else
       emitcode ("reti", "");
     }
   else
     {
-      if (IFFUNC_CALLEESAVES (sym->type))
+      if (IFFUNC_CALLEESAVES (ftype))
         {
           int i;
 
@@ -4291,6 +4363,9 @@ genEndFunction (iCode * ic)
             }
         }
 
+      if (IS_STRUCT (ftype->next))
+        stackAdjust (GPTRSIZE);
+
       /* if debug then send end of function */
       if (options.debug && currFunc)
         {
@@ -4305,16 +4380,16 @@ genEndFunction (iCode * ic)
 
   /* If this was an interrupt handler using bank 0 that called another */
   /* function, then all registers must be saved; nothing to optimize.  */
-  if (IFFUNC_ISISR (sym->type) && IFFUNC_HASFCALL (sym->type) && !FUNC_REGBANK (sym->type))
+  if (IFFUNC_ISISR (ftype) && IFFUNC_HASFCALL (ftype) && !FUNC_REGBANK (ftype))
     return;
 
   /* There are no push/pops to optimize if not callee-saves or ISR */
-  if (!(FUNC_CALLEESAVES (sym->type) || FUNC_ISISR (sym->type)))
+  if (!(FUNC_CALLEESAVES (ftype) || FUNC_ISISR (ftype)))
     return;
 
   /* If there were stack parameters, we cannot optimize without also    */
   /* fixing all of the stack offsets; this is too difficult to consider. */
-  if (FUNC_HASSTACKPARM (sym->type))
+  if (FUNC_HASSTACKPARM (ftype))
     return;
 
   /* Compute the registers actually used */
@@ -4438,6 +4513,130 @@ genJavaNativeRet (iCode * ic)
 }
 
 /*-----------------------------------------------------------------*/
+/* emitLoadStructReturnPointer - read return pointer from stack     */
+/*-----------------------------------------------------------------*/
+static void
+emitLoadStructReturnPointer (int pointerOffset)
+{
+  int i;
+
+  /* SP includes saved bpx and local variables. */
+  emitcode ("mov", "dpx,#!constbyte", (unsigned)((options.stack_loc >> 16) & 0xffu));
+  emitcode ("mov", "a,sp");
+  emitcode ("add", "a,#0x%02x", pointerOffset & 0xffu);
+  emitcode ("mov", "dpl,a");
+  emitcode ("mov", "a,esp");
+  adjustEsp ("a");
+  emitcode ("addc", "a,#!constbyte", (unsigned)(((unsigned)pointerOffset >> 8) & 0xffu));
+  emitcode ("mov", "dph,a");
+  for (i = 0; i < GPTRSIZE; i++)
+    {
+      emitcode ("movx", "a,@dptr");
+      emitpush ("acc");
+      if (i + 1 < GPTRSIZE)
+        emitcode ("inc", "dptr");
+    }
+  emitpop ("b");
+  emitpop ("dpx");
+  emitpop ("dph");
+  emitpop ("dpl");
+}
+
+/*-----------------------------------------------------------------*/
+/* emitStructReturnFromDptr - copy struct from DPTR                  */
+/*-----------------------------------------------------------------*/
+static void
+emitStructReturnFromDptr (iCode * ic, int size, int pointerOffset)
+{
+  operand *source = IC_LEFT (ic);
+  const bool usesPrimaryDptr = AOP_TYPE (source) == AOP_DPTR;
+  const int savedSourceBytes = usesPrimaryDptr ? 4 : 0;
+  int i, j;
+
+  /* __gptrput uses DPTR. Save the source DPTR before each write. */
+  for (i = 0; i < size; i++)
+    {
+      MOVA (aopGet (source, i, FALSE, FALSE, NULL));
+
+      if (usesPrimaryDptr)
+        {
+          /* Save the new DPTR position set by aopGet. */
+          emitpush ("dpl");
+          emitpush ("dph");
+          emitpush ("dpx");
+          emitpush ("acc");
+        }
+      else
+        emitcode ("mov", "acc1,a");
+
+      emitLoadStructReturnPointer (pointerOffset - savedSourceBytes);
+      for (j = 0; j < i; j++)
+        emitcode ("inc", "dptr");
+
+      if (usesPrimaryDptr)
+        emitpop ("acc");
+      else
+        emitcode ("mov", "a,acc1");
+      emitcode ("lcall", "__gptrput");
+
+      if (usesPrimaryDptr)
+        {
+          emitpop ("dpx");
+          emitpop ("dph");
+          emitpop ("dpl");
+        }
+    }
+}
+
+/*-----------------------------------------------------------------*/
+/* genStructReturn - write struct to the return address             */
+/*-----------------------------------------------------------------*/
+static void
+genStructReturn (iCode * ic, int size)
+{
+  const bool usesFramePointer =
+    (IFFUNC_ISREENT (currFunc->type) || options.stackAuto) &&
+    (currFunc->stack || FUNC_HASSTACKPARM (currFunc->type));
+  /* SP points to the last used byte. */
+  int pointerOffset;
+  int i;
+
+  pointerOffset = -(GPTRSIZE - 1);
+
+  /* Count saved registers and PSW when finding the return pointer. */
+  pointerOffset -= _G.nRegsSaved;
+  if (FUNC_REGBANK (currFunc->type))
+    pointerOffset--;
+
+  /* Critical functions save PSW after the frame. Count it for SP. */
+  if (IFFUNC_ISCRITICAL (currFunc->type))
+    pointerOffset--;
+
+  /* Count both bpx bytes and local variables. */
+  if (usesFramePointer)
+    pointerOffset -= 2;
+  pointerOffset -= currFunc->stack;
+
+  if (AOP_TYPE (IC_LEFT (ic)) == AOP_DPTR ||
+      AOP_TYPE (IC_LEFT (ic)) == AOP_DPTRn ||
+      AOP_TYPE (IC_LEFT (ic)) == AOP_DPTR2 ||
+      AOP_TYPE (IC_LEFT (ic)) == AOP_STR)
+    emitStructReturnFromDptr (ic, size, pointerOffset);
+  else
+    {
+      emitLoadStructReturnPointer (pointerOffset);
+      for (i = 0; i < size; i++)
+        {
+          MOVA (aopGet (IC_LEFT (ic), i, FALSE, FALSE, NULL));
+          emitcode ("lcall", "__gptrput");
+          if (i + 1 < size)
+            emitcode ("inc", "dptr");
+        }
+    }
+
+  freeAsmop (IC_LEFT (ic), NULL, ic, TRUE);
+}
+
 /* genRet - generate code for return statement                     */
 /*-----------------------------------------------------------------*/
 static void
@@ -4464,6 +4663,11 @@ genRet (iCode * ic)
      move the return value into place */
   aopOp (IC_LEFT (ic), ic, FALSE, (IS_OP_RUONLY (IC_LEFT (ic)) ? FALSE : TRUE));
   size = AOP_SIZE (IC_LEFT (ic));
+  if (IS_STRUCT (operandType (IC_LEFT (ic))))
+    {
+      genStructReturn (ic, size);
+      goto jumpret;
+    }
 
   _startLazyDPSEvaluation ();
 
@@ -4616,7 +4820,8 @@ genPlusIncr (iCode *ic)
   /* if increment 16 bits in register */
   if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG &&
       AOP_TYPE (IC_RESULT (ic)) == AOP_REG &&
-      sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))) && (size > 1) && (icount == 1))
+      sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))) &&
+      (size > 1) && (icount == 1))
     {
       symbol *tlbl;
       int emitTlbl;
@@ -4627,8 +4832,9 @@ genPlusIncr (iCode *ic)
        * is <= 5 instructions previous to this, we can generate
        * jumps straight to that target.
        */
-      if (ic->next && ic->next->op == GOTO
-          && (labelRange = findLabelBackwards (ic, IC_LABEL (ic->next)->key)) != 0 && labelRange <= 5)
+      if (ic->next && ic->next->op == GOTO &&
+          (labelRange = findLabelBackwards (ic, IC_LABEL (ic->next)->key)) != 0 &&
+          labelRange <= 5)
         {
           D (emitcode (";", "tail increment optimized (range %d)", labelRange));
           tlbl = IC_LABEL (ic->next);
@@ -4653,6 +4859,7 @@ genPlusIncr (iCode *ic)
 
       l = aopGet (IC_RESULT (ic), MSB16, FALSE, FALSE, NULL);
       emitcode ("inc", "%s", l);
+
       for(offset = 2; size > 2; size--, offset++)
         {
           if (EQ (l, "acc"))
@@ -4717,15 +4924,15 @@ genPlusIncr (iCode *ic)
     return FALSE;
 
   /* we can if the aops of the left & result match or
-     if they are in registers and the registers are the
-     same */
+     if they are in registers and the registers are the same */
   if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG &&
-      AOP_TYPE (IC_RESULT (ic)) == AOP_REG && sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))))
+      AOP_TYPE (IC_RESULT (ic)) == AOP_REG &&
+      sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))))
     {
       if (icount > 3)
         {
           MOVA (aopGet (IC_LEFT (ic), 0, FALSE, FALSE, NULL));
-          emitcode ("add", "a,#!constbyte", (unsigned)(((char) icount) & 0xff));
+          emitcode ("add", "a,#!constbyte", icount & 0xffu);
           aopPut (IC_RESULT (ic), "a", 0);
         }
       else
@@ -4808,12 +5015,13 @@ adjustArithmeticResult (iCode * ic)
   if (opIsGptr (IC_RESULT (ic)) &&
       IC_LEFT (ic) && AOP_SIZE (IC_LEFT (ic)) < GPTRSIZE &&
       IC_RIGHT (ic) && AOP_SIZE (IC_RIGHT (ic)) < GPTRSIZE &&
-      !sameRegs (AOP (IC_RESULT (ic)), AOP (IC_LEFT (ic))) && !sameRegs (AOP (IC_RESULT (ic)), AOP (IC_RIGHT (ic))))
+      !sameRegs (AOP (IC_RESULT (ic)), AOP (IC_LEFT (ic))) &&
+      !sameRegs (AOP (IC_RESULT (ic)), AOP (IC_RIGHT (ic))))
     {
       struct dbuf_s dbuf;
 
       dbuf_init (&dbuf, 128);
-      dbuf_printf (&dbuf, "#%02x", pointerTypeToGPByte (pointerCode (getSpec (operandType (IC_LEFT (ic)))), NULL, NULL));
+      dbuf_printf (&dbuf, "#%02x", pointerTypeToGPByte (pointerCode (IC_LEFT (ic)), NULL, NULL));
       aopPut (IC_RESULT (ic), dbuf_c_str (&dbuf), GPTRSIZE - 1);
       dbuf_destroy (&dbuf);
     }
@@ -5051,8 +5259,8 @@ genPlus (iCode * ic)
 
   sym_link *resulttype = operandType (IC_RESULT (ic));
   unsigned topbytemask = (IS_BITINT (resulttype) && SPEC_USIGN (resulttype) && (SPEC_BITINTWIDTH (resulttype) % 8)) ?
-    (0xff >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xff;
-  bool maskedtopbyte = (topbytemask != 0xff);
+    (0xffu >> (8 - SPEC_BITINTWIDTH (resulttype) % 8)) : 0xffu;
+  bool maskedtopbyte = (topbytemask != 0xffu);
 
   if (pushResult)
     {
@@ -5235,7 +5443,8 @@ genMinusDec (iCode * ic)
   /* if decrement 16 bits in register */
   if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG &&
       AOP_TYPE (IC_RESULT (ic)) == AOP_REG &&
-      sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))) && (size > 1) && (icount == 1))
+      sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))) &&
+      (size > 1) && (icount == 1))
     {
       symbol *tlbl;
       int emitTlbl;
@@ -5282,7 +5491,8 @@ genMinusDec (iCode * ic)
               emitcode ("jnz", "!tlabel", labelKey2num (tlbl->key));
             }
           else if (AOP_TYPE (IC_RESULT (ic)) == AOP_REG ||
-                   AOP_TYPE (IC_RESULT (ic)) == AOP_DPTR || IS_AOP_PREG (IC_RESULT (ic)))
+                   AOP_TYPE (IC_RESULT (ic)) == AOP_DPTR ||
+                   IS_AOP_PREG (IC_RESULT (ic)))
             {
               emitcode ("cjne", "%s,#!constbyte,!tlabel", l, 0xffu, labelKey2num (tlbl->key));
             }
@@ -5309,7 +5519,8 @@ genMinusDec (iCode * ic)
      if they are in registers and the registers are the
      same */
   if (AOP_TYPE (IC_LEFT (ic)) == AOP_REG &&
-      AOP_TYPE (IC_RESULT (ic)) == AOP_REG && sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))))
+      AOP_TYPE (IC_RESULT (ic)) == AOP_REG &&
+      sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))))
     {
       const char *l;
 
@@ -5391,7 +5602,7 @@ genMinusBits (iCode * ic)
     {
       emitcode ("mov", "c,%s", AOP (IC_RIGHT (ic))->aopu.aop_dir);
       emitcode ("subb", "a,acc");
-      emitcode ("jnb", "%s,!tlabel", AOP (IC_LEFT (ic))->aopu.aop_dir, labelKey2num ((lbl->key)));
+      emitcode ("jnb", "%s,!tlabel", AOP (IC_LEFT (ic))->aopu.aop_dir, labelKey2num (lbl->key));
       emitcode ("inc", "a");
       emitLabel (lbl);
       aopPut (IC_RESULT (ic), "a", 0);
@@ -5556,6 +5767,8 @@ genMultOneByte (operand * left, operand * right, operand * result, iCode * ic)
   bool runtimeSign, compiletimeSign;
   bool lUnsigned, rUnsigned, pushedB;
 
+  D (emitcode (";", "genMultOneByte"));
+
   /* (if two literals: the value is computed before) */
   /* if one literal, literal on the right */
   if (AOP_TYPE (left) == AOP_LIT)
@@ -5578,13 +5791,12 @@ genMultOneByte (operand * left, operand * right, operand * result, iCode * ic)
 
   pushedB = pushB ();
 
-  if ((lUnsigned && rUnsigned)
-      /* sorry, I don't know how to get size
-         without calling aopOp (result,...);
-         see Feature Request  */
-      /* || size == 1 */ )
-    /* no, this is not a bug; with a 1 byte result there's
-       no need to take care about the signedness! */
+  if (/* size == 1 || */        /* no, this is not a bug; with a 1 byte result there's
+                                   no need to take care about the signedness! */
+                                /* sorry, I don't know how to get size
+                                   without calling aopOp (result,...);
+                                   see Feature Request  */
+      (lUnsigned && rUnsigned))
     {
       /* just an unsigned 8 * 8 = 8 multiply
          or 8u * 8u = 16u */
@@ -6094,7 +6306,7 @@ genDivOneByte (operand * left, operand * right, operand * result, iCode * ic)
       if (compiletimeSign)
         emitcode ("setb", "F0");        /* set sign flag */
       else
-        emitcode ("clr", "F0"); /* reset sign flag */
+        emitcode ("clr", "F0");         /* reset sign flag */
     }
 
   /* save the signs of the operands */
@@ -6777,7 +6989,7 @@ genCmp (operand * left, operand * right, iCode * ic, iCode * ifx, int sign)
           emitpush (aopGet (left, offset++, FALSE, TRUE, NULL));
         }
       loadDptrFromOperand (right, TRUE);
-      emitcode ("lcall", "___gptr_cmp");
+      emitcode ("lcall", "sdcc_gptr_cmp");
       for (offset = 0; offset < GPTRSIZE; offset++)
         emitpop (NULL);
     }
@@ -7010,7 +7222,7 @@ gencjneshort (operand * left, operand * right, symbol * lbl)
           emitpush (aopGet (left, offset++, FALSE, TRUE, NULL));
         }
       loadDptrFromOperand (right, TRUE);
-      emitcode ("lcall", "___gptr_cmp");
+      emitcode ("lcall", "sdcc_gptr_cmp");
       for (offset = 0; offset < GPTRSIZE; offset++)
         emitpop (NULL);
       emitcode ("jnz", "!tlabel", labelKey2num (lbl->key));
@@ -11927,34 +12139,22 @@ genAddrOf (iCode * ic)
      variable */
   if (sym->onStack)
     {
+      const int stack_offset = stackoffset (sym);
+
       /* if 10 bit stack */
       if (options.stack10bit)
         {
           struct dbuf_s dbuf;
-          int offset;
 
           dbuf_init (&dbuf, 128);
           dbuf_tprintf (&dbuf, "#!constbyte", (unsigned)((options.stack_loc >> 16) & 0xffu));
-          /* if it has an offset then we need to compute it */
-          /*        emitcode ("subb", "a,#!constbyte", */
-          /*                  -((sym->stack < 0) ? */
-          /*                    ((short) (sym->stack - _G.nRegsSaved)) : */
-          /*                    ((short) sym->stack)) & 0xff); */
-          /*        emitcode ("mov","b,a"); */
-          /*        emitcode ("mov","a,#!constbyte",(-((sym->stack < 0) ? */
-          /*                                       ((short) (sym->stack - _G.nRegsSaved)) : */
-          /*                                       ((short) sym->stack)) >> 8) & 0xff); */
-          if (sym->stack)
+          if (stack_offset)
             {
-              emitcode ("mov", "a,_bpx");
-              emitcode ("add", "a,#!constbyte", (unsigned)(((sym->stack < 0) ?
-                                                 ((char) (sym->stack - _G.nRegsSaved)) : ((char) sym->stack)) & 0xffu));
+              emitcode ("mov", "a,bpx");
+              emitcode ("add", "a,#!constbyte", (unsigned)(stack_offset & 0xffu));
               emitcode ("mov", "b,a");
-              emitcode ("mov", "a,_bpx+1");
-
-              offset = (((sym->stack < 0) ? ((short) (sym->stack - _G.nRegsSaved)) : ((short) sym->stack)) >> 8) & 0xff;
-
-              emitcode ("addc", "a,#!constbyte", (unsigned)offset);
+              emitcode ("mov", "a,bpx+1");
+              emitcode ("addc", "a,#!constbyte", (unsigned)((stack_offset >> 8) & 0xff));
 
               if (aopPutUsesAcc (IC_RESULT (ic), "b", 0))
                 {
@@ -11969,9 +12169,9 @@ genAddrOf (iCode * ic)
             }
           else
             {
-              /* we can just move _bp */
-              aopPut (IC_RESULT (ic), "_bpx", 0);
-              aopPut (IC_RESULT (ic), "_bpx+1", 1);
+              /* we can just move bp */
+              aopPut (IC_RESULT (ic), "bpx", 0);
+              aopPut (IC_RESULT (ic), "bpx+1", 1);
               aopPut (IC_RESULT (ic), dbuf_c_str (&dbuf), 2);
             }
           dbuf_destroy (&dbuf);
@@ -11979,16 +12179,16 @@ genAddrOf (iCode * ic)
       else
         {
           /* if it has an offset then we need to compute it */
-          if (sym->stack)
+          if (stack_offset)
             {
-              emitcode ("mov", "a,_bp");
-              emitcode ("add", "a,#!constbyte", (unsigned)((char) sym->stack & 0xff));
+              emitcode ("mov", "a,bp");
+              emitcode ("add", "a,#!constbyte", (unsigned)(stack_offset & 0xff));
               aopPut (IC_RESULT (ic), "a", 0);
             }
           else
             {
-              /* we can just move _bp */
-              aopPut (IC_RESULT (ic), "_bp", 0);
+              /* we can just move bp */
+              aopPut (IC_RESULT (ic), "bp", 0);
             }
           /* fill the result with zero */
           size = AOP_SIZE (IC_RESULT (ic)) - 1;
@@ -12046,7 +12246,7 @@ genAddrOf (iCode * ic)
       struct dbuf_s dbuf;
 
       dbuf_init (&dbuf, 128);
-      dbuf_printf (&dbuf, "#0x%02x", pointerTypeToGPByte (pointerCode (getSpec (operandType (IC_LEFT (ic)))), NULL, NULL));
+      dbuf_printf (&dbuf, "#0x%02x", pointerTypeToGPByte (pointerCode (IC_LEFT (ic)), NULL, NULL));
       aopPut (IC_RESULT (ic), dbuf_c_str (&dbuf), GPTRSIZE - 1);
       dbuf_destroy (&dbuf);
     }
@@ -14400,7 +14600,7 @@ gen390Code (iCode * lic)
     }
   /* stack pointer name */
   if (options.useXstack)
-    spname = "_spx";
+    spname = "spx";
   else
     spname = "sp";
 

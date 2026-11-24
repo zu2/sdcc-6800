@@ -82,9 +82,7 @@ typedef struct operand
   unsigned int isParm:1;            /* is a parameter        */
   unsigned int isLiteral:1;         /* operand is literal    */
   bool isConstEliminated:1;         // if original const casted to non-const
-  bool isRestrictEliminated:1;      // if original restrict casted to non-restrict
   bool isOptionalEliminated:1;      // if original _Optional casted to non-_Optional
-  bool isSemDeref:1;                // if original _Optional removed via semantic dereference (&*)
 
   int key;
   union
@@ -135,9 +133,17 @@ extern const operand *validateOpTypeConst (const operand * op,
 
 struct valinfos;
 
+enum pointerCheckKind
+{
+  POINTER_ARITHMETIC,
+  POINTER_RELATIONAL,
+  POINTER_DEREFERENCE
+};
+
 typedef struct iCode
 {
   unsigned int op;              /* operation defined */
+  enum pointerCheckKind pointerCheck; /* reason for POINTER_NONNULL_CHECK */
   int key;                      /* running key for this iCode */
   int seq;                      /* sequence number within routine */
   int seqPoint;                 /* sequence point */
@@ -240,7 +246,8 @@ iCodeTable;
                       SKIP_IC1(x)           ||    \
                       x->op == CRITICAL     ||    \
                       x->op == ENDCRITICAL  ||    \
-                      x->op == SEND         )
+                      x->op == SEND         ||    \
+                      x->op == POINTER_NONNULL_CHECK )
 
 #define SKIP_IC3(x) (SKIP_IC2(x)            ||    \
                      x->op == JUMPTABLE )
@@ -315,22 +322,22 @@ iCodeTable;
 iCode *reverseiCChain ();
 bool isOperandOnStack (operand *);
 bool isOperandVolatile (const operand *, bool);
-int isOperandGlobal (const operand *);
+bool isOperandGlobal (const operand *);
 void printiCChain (iCode *, FILE *);
 operand *ast2iCode (ast *, int);
 operand *geniCodePtrPtrSubtract (operand *, operand *);
 void initiCode ();
 iCode *iCodeFromAst (ast *);
-int isiCodeEqual (iCode *, iCode *);
-int isOperandEqual (const operand *, const operand *);
+bool isiCodeEqual (iCode *, iCode *);
+bool isOperandEqual (const operand *, const operand *);
 iCodeTable *getTableEntry (int);
-int isOperandLiteral (const operand * const);
+bool isOperandLiteral (const operand * const);
 operand *operandOperation (operand *, operand *, int, sym_link *);
 double operandLitValue (const operand *);
 unsigned long long operandLitValueUll (const operand *);
 operand *operandFromLit (double);
 operand *operandFromOperand (operand *);
-int isParameterToCall (value *, operand *);
+bool isParameterToCall (value *, operand *);
 iCode *newiCodeLabelGoto (int, symbol *);
 symbol *newiTemp (const char *);
 symbol *newiTempLabel (const char *);
@@ -360,7 +367,7 @@ iCode *copyiCode (iCode *);
 operand *newiTempOperand (sym_link *, char);
 operand *newiTempFromOp (operand *);
 iCode *getBuiltinParms (iCode *, int *, operand **);
-int isiCodeInFunctionCall (const iCode *);
+bool isiCodeInFunctionCall (const iCode *);
 operand *detachiCodeOperand (operand **, iCode *);
 void attachiCodeOperand (operand *, operand **, iCode *);
 

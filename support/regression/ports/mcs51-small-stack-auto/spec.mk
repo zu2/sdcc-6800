@@ -2,8 +2,8 @@
 #
 # model small stack-auto
 
-SDCCFLAGS +=--stack-auto
+SDCCFLAGS +=--model-small --stack-auto
 
 include $(PORTS_DIR)/mcs51-common/spec.mk
 
-LIBDIR = $(top_builddir)/device/lib/build/small-stack-auto
+LIBDIR = $(top_builddir)/device/lib/build/mcs51-small-stack-auto

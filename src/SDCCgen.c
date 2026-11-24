@@ -181,6 +181,55 @@ emitcode (const char *inst, const char *fmt, ...)
   va_end (ap);
 }
 
+/**************************************************************************
+ * Set the level for comments and debug messages
+ *
+ * @param level  bitfield based on enum debug_messages
+ *************************************************************************/
+static unsigned int DEBUG_LEVEL;
+
+void
+setCommentLevel (unsigned int level)
+{
+  DEBUG_LEVEL=level;
+}
+/**************************************************************************
+ * Emits comments and debug messages
+ *
+ * @param level  bitfield based on enum debug_messages
+ * @param fmt string constant or printf style format string
+ *************************************************************************/
+void
+emitComment (unsigned int level, const char *fmt, ...)
+{
+  bool print=false;
+  va_list ap;
+
+  va_start (ap, fmt);
+
+  if (level & DEBUG_LEVEL )
+    {
+      if (!(level & VVDBG))
+        print=true;
+      else if (DEBUG_LEVEL & VVDBG)
+        print=true;
+    }
+
+  if (level==VASM && options.verboseAsm)
+    print=true;
+
+  if (level==ALWAYS && DEBUG_LEVEL!=NEVER)
+    print=true;
+
+//  if (regalloc_dry_run)
+//    print=false;
+
+  if (print)
+    va_emitcode (";", fmt, ap);
+
+  va_end (ap);
+}
+
 void
 emitLabel (const symbol *tlbl)
 {
@@ -197,9 +246,9 @@ void
 genInline (iCode * ic)
 {
   char *buf, *bp, *begin;
-  bool inComment = FALSE;
-  bool inLiteral = FALSE;
-  bool inLiteralString = FALSE;
+  bool inComment = false;
+  bool inLiteral = false;
+  bool inLiteralString = false;
 
   D (emitcode (";", "genInline"));
 
@@ -225,7 +274,7 @@ genInline (iCode * ic)
         case ';':
           if (!inLiteral && !inLiteralString)
             {
-              inComment = TRUE;
+              inComment = true;
             }
           ++bp;
           break;
@@ -252,9 +301,9 @@ genInline (iCode * ic)
 
         case '\x87':
         case '\n':
-          inLiteral = FALSE;
-          inLiteralString = FALSE;
-          inComment = FALSE;
+          inLiteral = false;
+          inLiteralString = false;
+          inComment = false;
           *bp++ = '\0';
 
           /* Don't emit leading whitespaces */

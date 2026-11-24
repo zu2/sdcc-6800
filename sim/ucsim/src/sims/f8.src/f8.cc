@@ -2,7 +2,7 @@
  * Simulator of microcontrollers (i8080.cc)
  *
  * Copyright (C) 2022 Drotos Daniel
- * 
+ *
  * To contact author send email to dr.dkdb@gmail.com
  *
  */
@@ -31,16 +31,20 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 #include "dregcl.h"
 
+#include "wdcl.h"
+#include "timercl.h"
+
 #include "f8cl.h"
 
 
-/* 
+/*
  * CPU
  */
 
-cl_f8::cl_f8(class cl_sim *asim):
+cl_f8::cl_f8(struct cpu_entry *Itype, class cl_sim *asim):
   cl_uc(asim)
 {
+  type= Itype;
 }
 
 int
@@ -59,13 +63,13 @@ cl_f8::init(void)
 #undef RCV
   sp_limit= 0;
   prefixes= P_NONE;
-  
+
   cF.W(urnd());
   cX.W(urnd());
   cY.W(urnd());
   cZ.W(urnd());
   cSP.W(urnd());
-  
+
   reset();
   return 0;
 }
@@ -73,7 +77,13 @@ cl_f8::init(void)
 const char *
 cl_f8::id_string(void)
 {
-  return "F8";
+   switch (type->type)
+    {
+    case CPU_F8L:
+      return "f8l";
+    default:
+      return "f8";
+    }
 }
 
 void
@@ -82,6 +92,8 @@ cl_f8::reset(void)
   cl_uc::reset();
   clear_prefixes();
   PC= 0x4000;
+  rom->write(0x10, 0);
+  rom->write(0x12, 0);
 }
 
 void
@@ -91,6 +103,57 @@ cl_f8::set_PC(t_addr addr)
 }
 
 
+/*
+NUM_IRQ = 2,
+IRQCTRLADDRBASE = 16'h0010,
+TIMER0ADDRBASE = 16'h0018,
+WATCHDOGADDRBASE = 16'h0020,
+GPIO0ADDDRBASE = 16'h0028,
+GPIO1ADDDRBASE = 16'h0030, -- not implemented in hw
+GPIO2ADDDRBASE = 16'h0038
+
+	// Interrupt controller
+	localparam IRQCTRL_ENABLE_ADDR = IRQCTRLADDRBASE + 0;
+	localparam IRQCTRL_ACTIVE_ADDR = IRQCTRLADDRBASE + 2;
+	
+	logic [1:0] irqctrl_enable_dread, irqctrl_active_dread;
+	
+		IRQCTRL_ENABLE_ADDR / 2:
+			read_data_even = {'x, irqctrl_enable_dread[NUM_IRQ-1:0]};
+		IRQCTRL_ACTIVE_ADDR / 2:
+			read_data_even = {'x, irqctrl_active_dread[NUM_IRQ-1:0]};
+	
+
+	// GPIO0
+	localparam GPIO0_DDR_ADDR = GPIO0ADDDRBASE + 0;
+	localparam GPIO0_ODR_ADDR = GPIO0ADDDRBASE + 2;
+	localparam GPIO0_IDR_ADDR = GPIO0ADDDRBASE + 4;
+	localparam GPIO0_PR_ADDR = GPIO0ADDDRBASE + 6;
+	
+	logic [7:0] gpio0_ddr_dread, gpio0_odr_dread, gpio0_idr_dread, gpio0_pr_dread;
+	
+			GPIO0_DDR_ADDR / 2:
+			read_data_even = gpio0_ddr_dread[7:0];
+		GPIO0_ODR_ADDR / 2:
+			read_data_even = gpio0_odr_dread[7:0];
+		GPIO0_IDR_ADDR / 2:
+			read_data_even = gpio0_idr_dread[7:0];
+		GPIO0_PR_ADDR / 2:
+			read_data_even = gpio0_pr_dread[7:0];
+
+	// GPIO1
+	localparam GPIO1_DDR_ADDR = GPIO1ADDDRBASE + 0;
+	localparam GPIO1_ODR_ADDR = GPIO1ADDDRBASE + 2;
+	localparam GPIO1_IDR_ADDR = GPIO1ADDDRBASE + 4;
+	localparam GPIO1_PR_ADDR = GPIO1ADDDRBASE + 6;
+	
+	// GPIO2
+	localparam GPIO2_DDR_ADDR = GPIO2ADDDRBASE + 0;
+	localparam GPIO2_ODR_ADDR = GPIO2ADDDRBASE + 2;
+	localparam GPIO2_IDR_ADDR = GPIO2ADDDRBASE + 4;
+	localparam GPIO2_PR_ADDR = GPIO2ADDDRBASE + 6;
+ */
+
 void
 cl_f8::mk_hw_elements(void)
 {
@@ -98,6 +161,12 @@ cl_f8::mk_hw_elements(void)
   cl_uc::mk_hw_elements();
 
   add_hw(h= new cl_dreg(this, 0, "dreg"));
+  h->init();
+
+  add_hw(h= new cl_timer(this, 0x0018, "timer"));
+  h->init();
+
+  add_hw(h= new cl_wd(this, 0x0020, "wd"));
   h->init();
 }
 
@@ -114,13 +183,23 @@ cl_f8::make_memories(void)
 {
   class cl_address_space *as;
   class cl_address_decoder *ad;
-  class cl_memory_chip *ram_chip, *prom_chip;
+  class cl_memory_chip *io_chip, *ram_chip, *prom_chip;
 
   // Flat address space
   rom= as= new cl_address_space("rom", 0, 0x10000, 8);
   as->init();
   address_spaces->add(as);
 
+  // IO
+  io_chip= new cl_chip8("io_chip", 0x2000, 8);
+  io_chip->init();
+  memchips->add(io_chip);
+  ad= new cl_address_decoder(as= rom,
+			     io_chip, 0x0000, 0x1fff, 0);
+  ad->init();
+  as->decoders->add(ad);
+  ad->activate(0);
+  
   // RAM
   ram_chip= new cl_chip8("ram_chip", 0x2000, 8);
   ram_chip->init();
@@ -148,7 +227,7 @@ void
 cl_f8::print_regs(class cl_console_base *con)
 {
   con->dd_color("answer");
-  con->dd_printf("---HCNZO  Flags= 0x%02x\n", rF);
+  con->dd_printf("---HCZNO  Flags= 0x%02x\n", rF);
   con->dd_printf("%s\n", cbin(rF, 8).c_str());
   con->dd_printf("X= 0x%04x [X]= 0x%02x %3d %c\n",
                  rX, rom->get(rX), rom->get(rX),
@@ -171,7 +250,7 @@ cl_f8::print_regs(class cl_console_base *con)
 		      (u8_t)(rom->read(al)));
     }
   con->dd_printf("\n");
-  
+
   print_disass(PC, con);
 }
 
@@ -452,6 +531,8 @@ cl_f8::exec_inst(void)
       return resNOT_DONE;
     }
   tick(1);
+  if (type->type == CPU_F8L && (!f8l_instructions[code] || (f8l_instructions[code] == 2 && (prefixes & P_SWAP))))
+    return resINV_INST;
   res= itab[code](this, code);
   if (res == resNOT_DONE)
     {
@@ -482,7 +563,7 @@ cl_f8_cpu::init(void)
   uc->vars->add(v= new cl_var("sp_limit", cfg, f8cpu_sp_limit,
 			      cfg_help(f8cpu_sp_limit)));
   v->init();
-  
+
   return 0;
 }
 

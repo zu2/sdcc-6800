@@ -45,6 +45,8 @@
 
 #define HASHTAB_SIZE 256
 
+#define N_PRESREGS 11
+
 /* hash table bucket */
 typedef struct bucket
 {
@@ -65,8 +67,9 @@ typedef struct structdef
   struct symbol *fields;        /* pointer to fields          */
   unsigned size;                /* sizeof the table in bytes  */
   int type;                     /* STRUCT or UNION            */
-  bool b_flexArrayMember;       /* has got a flexible array member,
-                                   only needed for syntax checks */
+  bool b_flexArrayMember;       /* has a flexible array member, or is a union
+                                   recursively containing such a structure */
+  bool being_defined;           /* member list is currently being parsed */
   bool redefinition;            /* is a redefinition only needed for syntax checks */
   struct symbol *tagsym;        /* tag symbol (NULL if no tag) */
 }
@@ -145,6 +148,9 @@ typedef struct specifier
   unsigned b_absadr:1;              /* absolute address specfied  */
   unsigned b_const:1;               /* is a constant              */
   unsigned b_constexpr:1;           /* is a constant expression   */
+  unsigned b_implicit_constexpr:1;  /* constexpr inferred by the compiler rather
+                                       than written, so it must not change the
+                                       type the program sees */
   bool     b_restrict:1;                // is restricted
   bool     b_volatile:1;                // is marked as volatile
   bool     b_atomic:1;                  // is qualified as _Atomic
@@ -152,6 +158,7 @@ typedef struct specifier
   struct symbol *addrspace;             // is in named address space
   unsigned b_typedef:1;             /* is typedefed               */
   unsigned b_isregparm:1;           /* is the first parameter     */
+  unsigned b_enum_fixed:1;          /* has a fixed underlying type */
   unsigned b_isenum:1;              /* is an enumerated type      */
   unsigned b_bitUnnamed:1;          /* is an unnamed bit-field    */
   unsigned b_needspar:1;            /* has to be a parameter      */
@@ -291,7 +298,7 @@ typedef struct sym_link
     unsigned javaNative;                // is a JavaNative Function (TININative ONLY)
     unsigned overlay;                   // force parameters & locals into overlay segment
     unsigned hasStackParms;             // function has parameters on stack
-    bool preserved_regs[11];            // Registers preserved by the function - may be an underestimate
+    bool preserved_regs[N_PRESREGS];    // Registers preserved by the function - may be an underestimate
     unsigned char z88dk_shortcall_rst;  // Rst for a short call
     unsigned short z88dk_shortcall_val; // Value for a short call
     unsigned short z88dk_params_offset; // Additional offset from for arguments
@@ -322,6 +329,7 @@ typedef struct symbol
   unsigned _isparm:1;               /* is a parameter          */
   unsigned ismyparm:1;              /* is parameter of the function being generated */
   unsigned isitmp:1;                /* is an intermediate temp */
+  bool istmp:1;                     // is a temporary introduced in ast handling - don't warn is not used */
   unsigned islbl:1;                 /* is a temporary label */
   unsigned isref:1;                 /* has been referenced  */
   unsigned isind:1;                 /* is an induction variable */
@@ -332,6 +340,10 @@ typedef struct symbol
   unsigned udChked:1;               /* use def checking has been already done */
   unsigned generated:1;             /* code generated (function symbols only) */
   unsigned isinscope:1;             /* is in scope */
+  unsigned anonunionalias:1;        /* promoted out of an anonymous union, but not part of
+                                       its first alternative: aliases storage initialized
+                                       through that alternative (set in promoteAnonStructs,
+                                       read by createIvalStruct and printIvalStruct) */
 
   /* following flags are used by the backend
      for code generation and can be changed
@@ -354,7 +366,6 @@ typedef struct symbol
   unsigned ptrreg:1;                /* this symbol assigned to a ptr reg */
   unsigned noSpilLoc:1;             /* cannot be assigned a spil location */
   bool funcDivFlagSafe:1;           // We know this function is safe to call with undocumented stm8 flag bit 6 set
-  bool funcUsesVolatile:1;          // The function potentially accesses a volatile variable
   bool funcRestartAtomicSupport:1;  /* The function uses (directly or indirectly) restartable atomic support routines. */
   bool funcPure:1;                  // The function is pure (i.e. it has no side-effects, and the return value only depends on the parameters) - roughly equivalent to GCC __attribute__((const)) and Keil __pure.
   unsigned isstrlit;                /* is a string literal and it's usage count  */
@@ -508,6 +519,7 @@ extern sym_link *validateLink (sym_link * l,
 #define SPEC_IMPLICIT_SIGN(x) validateLink(x, "SPEC_IMPLICIT_SIGN", #x, SPECIFIER, __FILE__, __LINE__)->select.s.b_implicit_sign
 #define SPEC_SCLS(x) validateLink(x, "SPEC_SCLS", #x, SPECIFIER, __FILE__, __LINE__)->select.s.sclass
 #define SPEC_SCLS_IMPLICITINTRINSIC(x) validateLink(x, "SPEC_SCLS", #x, SPECIFIER, __FILE__, __LINE__)->select.s.sclass_implicitintrinsic
+#define SPEC_ENUM_FIXED(x) ((x)->select.s.b_enum_fixed)
 #define SPEC_ENUM(x) validateLink(x, "SPEC_ENUM", #x, SPECIFIER, __FILE__, __LINE__)->select.s.b_isenum
 #define SPEC_OCLS(x) validateLink(x, "SPEC_OCLS", #x, SPECIFIER, __FILE__, __LINE__)->select.s.oclass
 #define SPEC_STAT(x) validateLink(x, "SPEC_STAT", #x, SPECIFIER, __FILE__, __LINE__)->select.s.b_static
@@ -532,6 +544,7 @@ extern sym_link *validateLink (sym_link * l,
 #define SPEC_ISR_SAVED_BANKS(x) validateLink(x, "SPEC_NOUN", #x, SPECIFIER, __FILE__, __LINE__)->select.s._bitStart
 #define SPEC_CONST(x) validateLink(x, "SPEC_NOUN", #x, SPECIFIER, __FILE__, __LINE__)->select.s.b_const
 #define SPEC_CONSTEXPR(x) validateLink(x, "SPEC_NOUN", #x, SPECIFIER, __FILE__, __LINE__)->select.s.b_constexpr
+#define SPEC_IMPLICIT_CONSTEXPR(x) validateLink(x, "SPEC_NOUN", #x, SPECIFIER, __FILE__, __LINE__)->select.s.b_implicit_constexpr
 #define SPEC_RESTRICT(x) validateLink(x, "SPEC_NOUN", #x, SPECIFIER, __FILE__, __LINE__)->select.s.b_restrict
 #define SPEC_VOLATILE(x) validateLink(x, "SPEC_NOUN", #x, SPECIFIER, __FILE__, __LINE__)->select.s.b_volatile
 #define SPEC_ATOMIC(x) validateLink(x, "SPEC_NOUN", #x, SPECIFIER, __FILE__, __LINE__)->select.s.b_atomic
@@ -676,9 +689,6 @@ extern symbol *fp16x16conv[2][5][2];
 /* Dims: shift left/shift right, BYTE/WORD/DWORD/QWORD, SIGNED/UNSIGNED */
 extern symbol *rlrr[2][4][2];
 
-extern symbol *builtin_memcpy;
-extern symbol *nonbuiltin_memcpy;
-
 #define SCHARTYPE       multypes[0][1]
 #define UCHARTYPE       multypes[0][0]
 #define INTTYPE         multypes[1][1]
@@ -720,7 +730,7 @@ symbol *copySymbol (const symbol *);
 symbol *copySymbolChain (const symbol *);
 char *genSymName (long);
 sym_link *getSpec (sym_link *);
-int compStructSize (int, structdef *);
+int compStructSize (structdef *);
 sym_link *copyLinkChain (const sym_link *);
 int checkDecl (symbol *, int);
 value *checkPointerIval (sym_link *, value *);
@@ -739,20 +749,26 @@ sym_link *newBoolLink ();
 sym_link *newPtrDiffLink ();
 sym_link *newVoidLink ();
 int compareType (sym_link *, sym_link *, bool ignoreimplicitintrinsic);
+bool compatibleTypes (sym_link *, sym_link *);
+bool similarTypes (sym_link *, sym_link *);
+sym_link *pointerTargetType (sym_link *);
+bool needsPtrTargetTypeWarning (sym_link *, sym_link *);
+bool diagnoseDissimilarPtrTargetTypes (sym_link *, sym_link *, const char *, int);
 int compareTypeExact (sym_link *, sym_link *, long level, bool check_top_std_qual);
 int compareTypeInexact (sym_link *, sym_link *);
 int checkFunction (symbol *, symbol *);
 void cleanUpLevel (bucket **, long);
 void cleanUpBlock (bucket **, int);
 symbol *getAddrspace (sym_link *type);
-int funcInChain (sym_link *);
+bool funcInChain (sym_link *);
 void addSymChain (symbol **);
 sym_link *structElemType (sym_link *, value *);
 symbol *getStructElement (structdef *, symbol *);
 sym_link *computeType (sym_link *, sym_link *, RESULT_TYPE, int);
+void removeQualifiers (sym_link *type);
 void processFuncPtr (sym_link *);
 void processFunc (symbol *, sym_link *);
-int isSymbolEqual (const symbol *, const symbol *);
+bool isSymbolEqual (const symbol *, const symbol *);
 int powof2 (TYPE_TARGET_ULONGLONG);
 void dbuf_printTypeChain (sym_link *, struct dbuf_s *);
 void printTypeChain (sym_link *, FILE *);
@@ -774,19 +790,25 @@ void checkQualifiers (symbol *sym, sym_link *type, bool check_vla_unspec, bool d
 sym_link *typeFromStr (const char *);
 STORAGE_CLASS sclsFromPtr (sym_link * ptr);
 sym_link *newEnumType (symbol *enumlist, sym_link *userRequestedType);
-void promoteAnonStructs (int, structdef *);
+void promoteAnonStructs (structdef *);
+sym_link *argumentTypeAfterDecay (sym_link *, value **);
+void checkPtrTargetQualifiers (sym_link *, sym_link *);
+void checkPtrTargetQualifiersAfterDecay (sym_link *, sym_link *);
 bool isConst (sym_link *type);
 bool isVolatile (sym_link *type);
 bool isRestrict (sym_link *type);
 bool isAtomic (sym_link *type);
 bool isOptional (sym_link *type);
+void removeOptionalQualifier (sym_link *type);
 value *aggregateToPointer (value *);
+void convertArrayToPointerType (sym_link *);
 void leaveBlockScope (int block);
 void mergeKRDeclListIntoFuncDecl (symbol *funcDecl, symbol *kr_decls);
 symbol *prepareDeclarationSymbol (attribute *attr, sym_link *declSpecs, symbol *initDeclList);
 
 extern const char *nounName (sym_link *);     /* noun strings */
 extern void printFromToType (sym_link *, sym_link *);
+extern void printWithTypes (sym_link *, sym_link *);
 
 #endif
 

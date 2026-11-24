@@ -1,8 +1,8 @@
-/* stm8pst.c */
+/* f8pst.c */
 
 /*
- *  Copyright (C) 1010  Alan R. Baldwin
- *  Copyright (C) 2022  Philipp K. Krause
+ *  Copyright (C) 2012-2026  Alan R. Baldwin
+ *  Copyright (C) 2022-2026  Philipp K. Krause
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
  * Alan R. Baldwin
  * 721 Berkeley St.
  * Kent, Ohio  44240
- * 
  */
 
 #include "asxxxx.h"
@@ -74,7 +73,6 @@ char	mode1[32] = {	/* R_BITS */
 	'\030',	'\031',	'\032',	'\033',	'\034',	'\035',	'\036',	'\037'
 };
 
-
 /*
  *     *m_def is a pointer to the bit relocation definition.
  *	m_flag indicates that bit position swapping is required.
@@ -112,12 +110,12 @@ struct	mne	mne[] = {
 
 	/* machine */
 
-  //{	NULL,	"CSEG",		S_ATYP,		0,	A_CSEG|A_1BYTE	},
-  //{	NULL,	"DSEG",		S_ATYP,		0,	A_DSEG|A_1BYTE	},
+/*    {	NULL,	"CSEG",		S_ATYP,		0,	A_CSEG|A_1BYTE	},	*/
+/*    {	NULL,	"DSEG",		S_ATYP,		0,	A_DSEG|A_1BYTE	},	*/
 
 	/* system */
 
-  //{	NULL,	"BANK",		S_ATYP,		0,	A_BNK	},
+/*    {	NULL,	"BANK",		S_ATYP,		0,	A_BNK	},	*/
     {	NULL,	"CON",		S_ATYP,		0,	A_CON	},
     {	NULL,	"OVR",		S_ATYP,		0,	A_OVR	},
     {	NULL,	"REL",		S_ATYP,		0,	A_REL	},
@@ -132,6 +130,11 @@ struct	mne	mne[] = {
     {	NULL,	"MAP",		S_BTYP,		0,	B_MAP	},
 #endif
     {	NULL,	"NOLOAD",	S_ATYP,		0,	A_NOLOAD},
+
+	/* assembler */
+
+/*    {	NULL,	".enabl",	S_OPTN,		0,	O_ENBL	},	*/
+/*    {	NULL,	".dsabl",	S_OPTN,		0,	O_DSBL	},	*/
     {	NULL,	".page",	S_PAGE,		0,	0	},
     {	NULL,	".title",	S_HEADER,	0,	O_TITLE	},
     {	NULL,	".sbttl",	S_HEADER,	0,	O_SBTTL	},
@@ -139,7 +142,9 @@ struct	mne	mne[] = {
     {	NULL,	".include",	S_INCL,		0,	I_CODE	},
     {	NULL,	".incbin",	S_INCL,		0,	I_BNRY	},
     {	NULL,	".area",	S_AREA,		0,	0	},
-    //{	NULL,	".bank",	S_BANK,		0,	0	},
+    {	NULL,	".psharea",	S_AREA,		0,	O_PSH	},
+    {	NULL,	".poparea",	S_AREA,		0,	O_POP	},
+/*    {	NULL,	".bank",	S_BANK,		0,	0	},	*/
     {	NULL,	".org",		S_ORG,		0,	0	},
     {	NULL,	".radix",	S_RADIX,	0,	0	},
     {	NULL,	".globl",	S_GLOBL,	0,	0	},
@@ -180,8 +185,6 @@ struct	mne	mne[] = {
     {	NULL,	".endif",	S_CONDITIONAL,	0,	O_ENDIF	},
     {	NULL,	".list",	S_LISTING,	0,	O_LIST	},
     {	NULL,	".nlist",	S_LISTING,	0,	O_NLIST	},
-    {	NULL,	".uleb128",	S_ULEB128,	0,	0	},
-    {	NULL,	".sleb128",	S_SLEB128,	0,	0	},
     {	NULL,	".equ",		S_EQU,		0,	O_EQU	},
     {	NULL,	".gblequ",	S_EQU,		0,	O_GBLEQU},
     {	NULL,	".lclequ",	S_EQU,		0,	O_LCLEQU},
@@ -193,8 +196,10 @@ struct	mne	mne[] = {
     {	NULL,	".fdb",		S_DATA,		0,	O_2BYTE	},
     {	NULL,	".3byte",	S_DATA,		0,	O_3BYTE	},
     {	NULL,	".triple",	S_DATA,		0,	O_3BYTE	},
+/*    {	NULL,	".dl",		S_DATA,		0,	O_4BYTE	},	*/
 /*    {	NULL,	".4byte",	S_DATA,		0,	O_4BYTE	},	*/
 /*    {	NULL,	".quad",	S_DATA,		0,	O_4BYTE	},	*/
+/*    {	NULL,	".long",	S_DATA,		0,	O_4BYTE	},	*/
     {	NULL,	".blkb",	S_BLK,		0,	O_1BYTE	},
     {	NULL,	".ds",		S_BLK,		0,	O_1BYTE	},
     {	NULL,	".rmb",		S_BLK,		0,	O_1BYTE	},
@@ -202,6 +207,7 @@ struct	mne	mne[] = {
     {	NULL,	".blkw",	S_BLK,		0,	O_2BYTE	},
     {	NULL,	".blk3",	S_BLK,		0,	O_3BYTE	},
 /*    {	NULL,	".blk4",	S_BLK,		0,	O_4BYTE	},	*/
+/*    {	NULL,	".blkl",	S_BLK,		0,	O_4BYTE	},	*/
     {	NULL,	".ascii",	S_ASCIX,	0,	O_ASCII	},
     {	NULL,	".ascis",	S_ASCIX,	0,	O_ASCIS	},
     {	NULL,	".asciz",	S_ASCIX,	0,	O_ASCIZ	},
@@ -217,15 +223,22 @@ struct	mne	mne[] = {
     {	NULL,	".msg"	,	S_MSG,		0,	0	},
     {	NULL,	".assume",	S_ERROR,	0,	O_ASSUME},
     {	NULL,	".error",	S_ERROR,	0,	O_ERROR	},
-    //{	NULL,	".msb",		S_MSB,		0,	0	},
+/*    {	NULL,	".msb",		S_MSB,		0,	0	},	*/
 /*    {	NULL,	".lohi",	S_MSB,		0,	O_LOHI	},	*/
 /*    {	NULL,	".hilo",	S_MSB,		0,	O_HILO	},	*/
 /*    {	NULL,	".8bit",	S_BITS,		0,	O_1BYTE	},	*/
 /*    {	NULL,	".16bit",	S_BITS,		0,	O_2BYTE	},	*/
 /*    {	NULL,	".24bit",	S_BITS,		0,	O_3BYTE	},	*/
 /*    {	NULL,	".32bit",	S_BITS,		0,	O_4BYTE	},	*/
-    {	NULL,	".end",		S_END,		0,	0	},
+/*    {	NULL,	".trace",	S_TRACE,	0,	O_TRC	},	*/
+/*    {	NULL,	".ntrace",	S_TRACE,	0,	O_NTRC	},	*/
+/*    {	NULL,	"_______",	S_CONST,	0,	VALUE	},	*/
+/*    {	NULL,	".end",		S_END,		0,	0	},	*/
+
 /* sdas specific */
+/*    {   NULL,   ".df",          S_FLOAT,        0,      0       },	*/
+    {   NULL,   ".uleb128",     S_ULEB128,      0,      0       },
+    {   NULL,   ".sleb128",     S_SLEB128,      0,      0       },
     {   NULL,   ".optsdcc",     S_OPTSDCC,      0,      0       },
 /* end sdas specific */
 
@@ -247,122 +260,121 @@ struct	mne	mne[] = {
 
     {	NULL,	".mdelete",	S_MACRO,	0,	O_MDEL	},
 
+
+        /* variants */
+    {	NULL,	".f8",		S_CPU,		0,	X_F8	},
+    {	NULL,	".f8l",		S_CPU,		0,	X_F8L	},
+
+
 	/* f8 instructions */
 
 	/* 8-bit 2-op-instrustions */
-    {	NULL,	"sub",		S_2OPSUB,	0,	0x00	},
-    {	NULL,	"sbc",		S_2OPSUB,	0,	0x08	},
-    {	NULL,	"add",		S_2OP,		0,	0x10	},
-    {	NULL,	"adc",		S_2OP,		0,	0x18	},
-    {	NULL,	"cp",		S_2OP,		0,	0x20	},
+    {	NULL,	"adc",		S_2OPADC,	0,	0x18	},
+    {	NULL,	"add",		S_2OPADD,	0,	0x10	},
+    {	NULL,	"and",		S_2OPAND,	0,	0x70	},
+    {	NULL,	"cp",		S_2OPCP,	0,	0x20	},
     {	NULL,	"or",		S_2OP,		0,	0x28	},
-    {	NULL,	"and",		S_2OP,		0,	0x30	},
-    {	NULL,	"xor",		S_2OP,		0,	0x38	},
+    {	NULL,	"sbc",		S_2OPSBC,	0,	0x08	},
+    {	NULL,	"sub",		S_2OPSUB,	0,	0x00	},
+    {	NULL,	"xor",		S_2OPXOR,	0,	0x78	},
 
 	/* 8-bit 1-op-instrustions */
-    {	NULL,	"srl",		S_1OP,		0,	0x40	},
-    {	NULL,	"sll",		S_1OP,		0,	0x44	},
-    {	NULL,	"rrc",		S_1OP,		0,	0x48	},
-    {	NULL,	"rlc",		S_1OP,		0,	0x4c	},
-    {	NULL,	"inc",		S_1OP,		0,	0x50	},
+    {	NULL,	"srl",		S_1OP,		0,	0xd0	},
+    {	NULL,	"sll",		S_1OP,		0,	0xd4	},
+    {	NULL,	"rrc",		S_1OP,		0,	0x58	},
+    {	NULL,	"rlc",		S_1OP,		0,	0x5c	},
+    {	NULL,	"inc",		S_1OPINC,	0,	0x50	},
     {	NULL,	"dec",		S_1OP,		0,	0x54	},
-    {	NULL,	"clr",		S_1OP,		0,	0x58	},
-    {	NULL,	"tst",		S_1OP,		0,	0x5c	},
+    {	NULL,	"clr",		S_1OP,		0,	0xd8	},
+    {	NULL,	"tst",		S_1OP,		0,	0xdc	},
     {	NULL,	"push",		S_1OPPUSH,	0,	0x60	},
 
 	/* 16-bit 2-op-instrustions */
-    {	NULL,	"subw",		S_2OPWSUB,	0,	0x70	},
-    {	NULL,	"sbcw",		S_2OPWSBC,	0,	0x74	},
-    {	NULL,	"addw",		S_2OPWADD,	0,	0x78	},
-    {	NULL,	"adcw",		S_2OPWADC,	0,	0x7c	},
-    {	NULL,	"orw",		S_2OPW,		0,	0xf0	},
-    {	NULL,	"xorw",		S_2OPW,		0,	0xfc	},
+    {	NULL,	"subw",		S_2OPWSUB,	0,	0x30	},
+    {	NULL,	"sbcw",		S_2OPWSBC,	0,	0x34	},
+    {	NULL,	"addw",		S_2OPWADD,	0,	0x38	},
+    {	NULL,	"adcw",		S_2OPWADC,	0,	0x3c	},
+    {	NULL,	"orw",		S_2OPW,		0,	0xe0	},
+    {	NULL,	"xorw",		S_2OPWXOR,	0,	0xfc	},
 
 	/* 16-bit 1-op-instrustions */
-    {	NULL,	"clrw",		S_1OPW,		0,	0xa0	},
-    {	NULL,	"incw",		S_1OPW,		0,	0xa4	},
+    {	NULL,	"clrw",		S_1OPW,		0,	0xf0	},
+    {	NULL,	"incw",		S_1OPWINC,		0,	0xa4	},
     //{	NULL,	"adcw",		S_1OPW,		0,	0xa8	},
     //{	NULL,	"sbcw",		S_1OPW,		0,	0xac	},
-    {	NULL,	"pushw",	S_1OPWPUSH,	0,	0xb0	},
-    {	NULL,	"tstw",		S_1OPW,		0,	0xb4	},
+    {	NULL,	"pushw",	S_1OPWPUSH,	0,	0x80	},
+    {	NULL,	"tstw",		S_1OPWTST,	0,	0x90	},
 
     /* 8-bit loads */
-    {	NULL,	"ld",		S_LD,		0,	0x80	},
-    {	NULL,	"ldi",		S_LDI,		0,	0xed	},
+    {	NULL,	"ld",		S_LD,		0,	0xc0	},
+    {	NULL,	"ldi",		S_LDI,		0,	0x8c	},
 
     /* 16-bit loads */
-    {	NULL,	"ldw",		S_LDW,		0,	0xc0	},
-    {	NULL,	"ldwi",		S_LDI,		0,	0xcf	},
+    {	NULL,	"ldw",		S_LDW,		0,	0xb0	},
+    {	NULL,	"ldwi",		S_LDI,		0,	0x8d	},
     
     /* 8-bit 0-op-instrustions */     
-    {	NULL,	"bool",		S_0OP,		0,	0x98	},
-    {	NULL,	"sra",		S_0OP,		0,	0x96	},
-    {	NULL,	"daa",		S_0OP,		0,	0x97	},
-    {	NULL,	"pop",		S_0OP,		0,	0x99	},
-    {	NULL,	"xch",		S_0OPXCH,	0,	0x90	},
-    {	NULL,	"msk",		S_0OPMSK,	0,	0xb8	},
-    {	NULL,	"cax",		S_0OP,		0,	0x9b	},
-    {	NULL,	"mad",		S_0OPMAD,	0,	0xbc	},
-    {	NULL,	"rot",		S_0OPROT,	0,	0x95	},
-    {	NULL,	"thrd",		S_0OP,		0,	0x9a	},
-	{	NULL,	"cax",		S_0OPCAX,	0,	0x9b	},
+    {	NULL,	"bool",		S_0OP,		0,	0xcf	},
+    {	NULL,	"sra",		S_0OP,		0,	0xf6	},
+    {	NULL,	"da",		S_0OP,		0,	0xf7	},
+    {	NULL,	"pop",		S_0OP,		0,	0x6d	},
+    {	NULL,	"xch",		S_0OPXCH,	0,	0xa3	},
+    {	NULL,	"msk",		S_0OPMSK,	0,	0x99	},
+    {	NULL,	"cax",		S_0OP,		0,	0xeb	},
+    {	NULL,	"mad",		S_0OPMAD,	0,	0x9d	},
+    {	NULL,	"rot",		S_0OPROT,	0,	0xf4	},
+    {	NULL,	"thrd",		S_0OP,		0,	0x68	},
+    {	NULL,	"cax",		S_0OPCAX,	0,	0xeb	},
     //{	NULL,	"push",		S_0OP,		0,	0x90	},
     
     /* 16-bit 0-op-instrustions */
-    {	NULL,	"negw",		S_0OPW,		0,	0xfa	},
+    {	NULL,	"negw",		S_0OPW,		0,	0x9c	},
     {	NULL,	"boolw",	S_0OPW,		0,	0xfb	},
-    {	NULL,	"srlw",		S_0OPW,		0,	0xe0	},
-    {	NULL,	"sllw",		S_0OPWSLL,	0,	0xe1	},
-    {	NULL,	"rrcw",		S_0OPWRLC,	0,	0xe2	},
-    {	NULL,	"rlcw",		S_0OPWRLC,	0,	0xe3	},
-    {	NULL,	"sraw",		S_0OPW,		0,	0xe4	},
-    {	NULL,	"mul",		S_0OPW,		0,	0xb9	},
-    {	NULL,	"popw",		S_0OPW,		0,	0xe9	},
-    {	NULL,	"xchw",		S_0OPWXCH,	0,	0xf4	},
-    {	NULL,	"caxw",		S_0OPW,		0,	0xf9	},
+    {	NULL,	"srlw",		S_0OPW,		0,	0x69	},
+    {	NULL,	"sllw",		S_0OPWSLL,	0,	0x40	},
+    {	NULL,	"rrcw",		S_0OPWRRC,	0,	0x42	},
+    {	NULL,	"rlcw",		S_0OPWRLC,	0,	0xef	},
+    {	NULL,	"sraw",		S_0OPW,		0,	0x45	},
+    {	NULL,	"mul",		S_0OPW,		0,	0x98	},
+    {	NULL,	"popw",		S_0OPWPOP,	0,	0xbe	},
+    {	NULL,	"xchw",		S_0OPWXCH,	0,	0xe5	},
+    {	NULL,	"caxw",		S_0OPW,		0,	0xf8	},
 //    {	NULL,	"addw",		S_0OPW,		0,	0xea	},
-    {	NULL,	"cpw",		S_0OPWCP,	0,	0xf8	},
-    {	NULL,	"incnw",	S_0OPW,		0,	0xf6	},
-    {	NULL,	"decw",		S_0OPWDEC,	0,	0xf3	},
+    {	NULL,	"cpw",		S_0OPWCP,	0,	0xbc	},
+    {	NULL,	"incnw",	S_0OPW,		0,	0x46	},
+    {	NULL,	"decw",		S_0OPWDEC,	0,	0x47	},
 //    {	NULL,	"pushw",	S_0OPW,		0,	0xe8	},
 //    {	NULL,	"sllw",		S_0OPW,		0,	0xe5	},
 //    {	NULL,	"rlcw",		S_0OPW,		0,	0xe6	},
 //    {	NULL,	"rrcw",		S_0OPW,		0,	0xe7	},
-	{	NULL,	"cltz",		S_0OPW,		0,	0xed	},
-    {	NULL,	"sex",		S_0OPWSEX,	0,	0xee	},
-    {	NULL,	"zex",		S_0OPWSEX,	0,	0xef	},
+    {	NULL,	"sex",		S_0OPWSEX,	0,	0x8e	},
+    {	NULL,	"zex",		S_0OPWSEX,	0,	0x8f	},
 //    {	NULL,	"addw",		S_0OPW,		0,	0xec	},
-	{	NULL,	"caxw",		S_0OPWCAX,	0,	0xf9	},
-
-    /* bit instructions */
-    {	NULL,	"xchb",		S_BIT,		0,	0x68	},
+    {	NULL,	"caxw",		S_0OPWCAX,	0,	0xf8	},
 
 	/* relative jumps */
-    {	NULL,	"jr",		S_JR,		0,	0xd0	},
-    {	NULL,	"jrz",		S_JR,		0,	0xd2	},
-    {	NULL,	"jrnz",		S_JR,		0,	0xd3	},
-    {	NULL,	"jrc",		S_JR,		0,	0xd4	},
-    {	NULL,	"jrnc",		S_JR,		0,	0xd5	},
-    {	NULL,	"jrn",		S_JR,		0,	0xd6	},
-    {	NULL,	"jrnn",		S_JR,		0,	0xd7	},
-    {	NULL,	"jrno",		S_JR,		0,	0xd9	},
-    {	NULL,	"jro",		S_JR2,		0,	0xd9	},
-    {	NULL,	"jrsge",	S_JR,		0,	0xda	},
-    {	NULL,	"jrslt",	S_JR,		0,	0xdb	},
-    {	NULL,	"jrsle",	S_JR,		0,	0xdd	},
-    {	NULL,	"jrsgt",	S_JR2,		0,	0xdd	},
-    {	NULL,	"jrle",		S_JR,		0,	0xdf	},
-    {	NULL,	"jrgt",		S_JR2,		0,	0xdf	},
-    {	NULL,	"dnjnz",	S_DNJNZ,	0,	0xd1	},
+    {	NULL,	"jr",		S_JR,		0,	0xbd	},
+    {	NULL,	"jrz",		S_JR,		0,	0x95	},
+    {	NULL,	"jrnz",		S_JR,		0,	0x93	},
+    {	NULL,	"jrc",		S_JR,		0,	0x65	},
+    {	NULL,	"jrnc",		S_JR,		0,	0x64	},
+    {	NULL,	"jrn",		S_JR,		0,	0x96	},
+    {	NULL,	"jrnn",		S_JR,		0,	0x97	},
+    {	NULL,	"jrno",		S_JR,		0,	0x48	},
+    {	NULL,	"jro",		S_JR2,		0,	0x48	},
+    {	NULL,	"jrsge",	S_JR,		0,	0x94	},
+    {	NULL,	"jrslt",	S_JR,		0,	0x92	},
+    {	NULL,	"jrsle",	S_JR,		0,	0x4a	},
+    {	NULL,	"jrsgt",	S_JR2,		0,	0x4a	},
+    {	NULL,	"jrle",		S_JR,		0,	0x41	},
+    {	NULL,	"jrgt",		S_JR2,		0,	0x41	},
+    {	NULL,	"dnjnz",	S_DNJNZ,	0,	0xea	},
 
     /* other instructions */
-	{	NULL,	"call",		S_JP,		0,	0x66	},
-	{	NULL,	"jp",		S_JP,		0,	0x64	},
-	{	NULL,	"ret",		S_RET,		0,	0xba	},
-	{	NULL,	"reti",		S_RET,		0,	0xbb	},
-
-	/* nop */
-    {	NULL,	"nop",		S_TRAP,		0,	0x08	},
+	{	NULL,	"call",		S_CALL,		0,	0x4e	},
+	{	NULL,	"jp",		S_JP,		0,	0x4d	},
+	{	NULL,	"ret",		S_RET,		0,	0x9a	},
+	{	NULL,	"reti",		S_RET,		0,	0x9b	},
     
     /* trap */
     {	NULL,	"trap",		S_TRAP,	S_EOL,	0x00	}

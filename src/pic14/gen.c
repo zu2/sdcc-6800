@@ -1596,10 +1596,10 @@ release:
   pic14FreeAsmop (ic->result, NULL, ic, true);
 }
 
-
+#if 0
 /*-----------------------------------------------------------------*/
 /* genCpl - generate code for complement                           */
-/* no longer used; todo: chekc if something from here could still  */
+/* no longer used; todo: check if something from here could still  */
 /* be useful in genXor, then remove genCpl!                        */
 /*-----------------------------------------------------------------*/
 static void
@@ -1642,6 +1642,7 @@ release:
   pic14FreeAsmop (left, NULL, ic, !RESULTONSTACK (ic));
   pic14FreeAsmop (result, NULL, ic, true);
 }
+#endif
 
 /*-----------------------------------------------------------------*/
 /* genUminusFloat - unary minus for floating points                */
@@ -2851,7 +2852,7 @@ genMultbits (operand * left, operand * right, operand * result)
 static void
 genMultOneByte (operand * left, operand * right, operand * result)
 {
-  char *func[] = { NULL, "__mulchar", "__mulint", NULL, "__mullong" };
+  char *func[] = { NULL, "___mulchar", "___mulint", NULL, "___mullong" };
 
   // symbol *lbl ;
   int size, offset, i;
@@ -3004,7 +3005,7 @@ genDivOneByte (operand * left, operand * right, operand * result)
       mov2w (AOP (right), 0);
       emitpcode (POC_MOVWF, popRegFromIdx (Gstack_base_addr));
       mov2w (AOP (left), 0);
-      call_libraryfunc ("__divuchar");
+      call_libraryfunc ("___divuchar");
       movwf (AOP (result), 0);
 #else
       pCodeOp *temp;
@@ -3062,7 +3063,7 @@ genDivOneByte (operand * left, operand * right, operand * result)
       mov2w (AOP (right), 0);
       emitpcode (POC_MOVWF, popRegFromIdx (Gstack_base_addr));
       mov2w (AOP (left), 0);
-      call_libraryfunc ("__divschar");
+      call_libraryfunc ("___divschar");
       movwf (AOP (result), 0);
     }
 
@@ -3138,7 +3139,7 @@ genModOneByte (operand * left, operand * right, operand * result)
       mov2w (AOP (right), 0);
       emitpcode (POC_MOVWF, popRegFromIdx (Gstack_base_addr));
       mov2w (AOP (left), 0);
-      call_libraryfunc ("__moduchar");
+      call_libraryfunc ("___moduchar");
       movwf (AOP (result), 0);
 #else
       pCodeOp *temp;
@@ -3195,7 +3196,7 @@ genModOneByte (operand * left, operand * right, operand * result)
       mov2w (AOP (right), 0);
       emitpcode (POC_MOVWF, popRegFromIdx (Gstack_base_addr));
       mov2w (AOP (left), 0);
-      call_libraryfunc ("__modschar");
+      call_libraryfunc ("___modschar");
       movwf (AOP (result), 0);
     }
 

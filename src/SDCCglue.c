@@ -238,7 +238,7 @@ emitRegularMap (memmap *map, bool addPublics, bool arFlag)
                   // No point trying to initialize by something that doesn't even make sense.
                   if (astErrors (ival))
                     continue;
-                  
+
                   // set ival's lineno to where the symbol was defined
                   setAstFileLine (ival, filename = tsym->fileDef, lineno = tsym->lineDef);
                   // check if this is not a constant expression
@@ -286,7 +286,7 @@ emitRegularMap (memmap *map, bool addPublics, bool arFlag)
                   ++noAlloc;
                   resolveIvalSym (sym->ival, sym->type);
                   ++noInit;
-                  printIval (sym, sym->type, sym->ival, &tmpBuf, TRUE);
+                  printIval (sym, sym->type, sym->ival, &tmpBuf, true);
                   --noInit;
                   --noAlloc;
 
@@ -560,7 +560,7 @@ initPointer (initList *ilist, sym_link *toType, int showError)
     }
 
   /* try it the old way first */
-  if ((val = constExprValue (expr, FALSE)))
+  if ((val = constExprValue (expr, false)))
     return val;
 
   /* ( ptr + constant ) */
@@ -691,11 +691,6 @@ printChar16 (struct dbuf_s *oBuf, const TYPE_TARGET_UINT *s, int plen)
       s++;
       pplen++;
     }
-  while (pplen < plen)
-    {
-      dbuf_tprintf (oBuf, "\t!db !constbyte\n", 0);
-      pplen++;
-    }
 }
 
 /*-----------------------------------------------------------------*/
@@ -721,11 +716,6 @@ printChar32 (struct dbuf_s *oBuf, const TYPE_TARGET_ULONG *s, int plen)
         dbuf_printf (oBuf, "\t.byte %d,%d,%d,%d\n", (*s >> 24) & 0xff, (*s >> 16) & 0xff, (*s >> 8) & 0xff,(*s >> 0) & 0xff);
 
       s++;
-      pplen++;
-    }
-  while (pplen < plen)
-    {
-      dbuf_tprintf (oBuf, "\t!db !constbyte\n", 0);
       pplen++;
     }
 }
@@ -858,27 +848,33 @@ printIvalType (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *o
   value *val;
   unsigned long ulVal = 0;
 
+  if (IS_CONSTEXPR (sym->etype) && !SPEC_IMPLICIT_CONSTEXPR (sym->etype))
+    {
+      checkConstexprIntegerInitialiser (type, ilist);
+      checkConstexprBoolInitialiser (type, ilist);
+    }
+
   /* if initList is deep */
   if (ilist && (ilist->type == INIT_DEEP))
     ilist = ilist->init.deep;
 
-  if (!(val = list2val (ilist, FALSE)))
+  if (!(val = list2val (ilist, false)))
     {
       if (!!(val = initPointer (ilist, type, 0)))
         {
           int i, size = getSize (type), le = port->little_endian, top = (options.model == MODEL_FLAT24) ? 3 : 2;;
-          dbuf_printf (oBuf, "\t.byte ");
+          dbuf_tprintf (oBuf, "\t!db ");
           for (i = (le ? 0 : size - 1); le ? (i < size) : (i > -1); i += (le ? 1 : -1))
             {
               if (i == 0)
-			    if (val->name && strlen (val->name) > 0)
+                if (strlen (val->name) > 0)
                   dbuf_printf (oBuf, "%s", val->name);
-				else
+                else
                   dbuf_printf (oBuf, "#0x00");
               else if (0 < i && i < top)
-			    if (val->name && strlen (val->name) > 0)
+                if (strlen (val->name) > 0)
                   dbuf_printf (oBuf, "(%s >> %d)", val->name, i * 8);
-				else
+                else
                   dbuf_printf (oBuf, "#0x00");
               else
                 dbuf_printf (oBuf, "#0x00");
@@ -903,7 +899,7 @@ printIvalType (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *o
     }
 
   /* check if the literal value is within bounds */
-  if (checkConstantRange (type, val->etype, '=', FALSE) == CCR_OVL)
+  if (checkConstantRange (type, val->etype, '=', false) == CCR_OVL)
     {
       werror (W_LIT_OVERFLOW);
     }
@@ -929,7 +925,7 @@ printIvalType (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *o
             }
           else
             {
-              dbuf_tprintf (oBuf, "\t!dbs\t; % d", aopLiteral (val, 0), (int) ulVal);
+              dbuf_tprintf (oBuf, "\t!dbs\t; %d", aopLiteral (val, 0), (int) ulVal);
             }
           if (isalnum ((int) ulVal))
             dbuf_tprintf (oBuf, "\t'%c'\n", (int) ulVal);
@@ -948,7 +944,7 @@ printIvalType (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *o
       if (IS_UNSIGNED (val->type))
         dbuf_printf (oBuf, "\t; %u\n", (unsigned int) ulVal);
       else
-        dbuf_printf (oBuf, "\t; % d\n", (int) ulVal);
+        dbuf_printf (oBuf, "\t; %d\n", (int) ulVal);
       break;
 
     case 4:
@@ -970,7 +966,7 @@ printIvalType (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *o
               if (IS_UNSIGNED (val->type))
                 dbuf_printf (oBuf, "\t; %u\n", (unsigned int) ulVal);
               else
-                dbuf_printf (oBuf, "\t; % d\n", (int) ulVal);
+                dbuf_printf (oBuf, "\t; %d\n", (int) ulVal);
             }
         }
       break;
@@ -985,14 +981,14 @@ printIvalType (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *o
 /* return the number of bytes written                              */
 /*-----------------------------------------------------------------*/
 static unsigned int
-printIvalBitFields (symbol ** sym, initList ** ilist, struct dbuf_s *oBuf)
+printIvalBitFields (symbol *root, symbol ** sym, initList ** ilist, struct dbuf_s *oBuf)
 {
   symbol *lsym = *sym;
   initList *lilist = *ilist;
   unsigned long long ival = 0;
   unsigned size = 0;
   unsigned bit_start = 0;
-  unsigned long int bytes_written = 0;
+  unsigned int bytes_written = 0;
 
   while (lsym && IS_BITFIELD (lsym->type))
     {
@@ -1006,7 +1002,12 @@ printIvalBitFields (symbol ** sym, initList ** ilist, struct dbuf_s *oBuf)
       else if (!SPEC_BUNNAMED (lsym->etype))
         {
           /* not an unnamed bit-field structure member */
-          value *val = list2val (lilist, TRUE);
+          if (IS_CONSTEXPR (root->etype) && !SPEC_IMPLICIT_CONSTEXPR (root->etype))
+            {
+              checkConstexprIntegerInitialiser (lsym->type, lilist);
+              checkConstexprBoolInitialiser (lsym->type, lilist);
+            }
+          value *val = list2val (lilist, true);
 
           if (val && val->etype && SPEC_SCLS (val->etype) != S_LITERAL)
             {
@@ -1022,7 +1023,7 @@ printIvalBitFields (symbol ** sym, initList ** ilist, struct dbuf_s *oBuf)
             size = (bit_length + 7) / 8;
 
           /* check if the literal value is within bounds */
-          if (val && checkConstantRange (lsym->etype, val->etype, '=', FALSE) == CCR_OVL)
+          if (val && checkConstantRange (lsym->etype, val->etype, '=', false) == CCR_OVL)
             {
               werror (W_LIT_OVERFLOW);
             }
@@ -1055,6 +1056,72 @@ printIvalBitFields (symbol ** sym, initList ** ilist, struct dbuf_s *oBuf)
 }
 
 /*-----------------------------------------------------------------*/
+/* printIvalPad - one byte of storage that got no initializer      */
+/*-----------------------------------------------------------------*/
+static void
+printIvalPad (struct dbuf_s *oBuf)
+{
+  dbuf_tprintf (oBuf, "\t!db !constbyte\n", 0);
+}
+
+/*-----------------------------------------------------------------*/
+/* fieldHasIval - does this member consume an entry of the         */
+/*                initializer list?  Unnamed bitfields do not.     */
+/*-----------------------------------------------------------------*/
+static bool
+fieldHasIval (symbol *field)
+{
+  return !(IS_BITFIELD (field->type) && SPEC_BUNNAMED (field->etype));
+}
+
+/*-----------------------------------------------------------------*/
+/* designatedAlternative - an anonymous union is initialized       */
+/*   through its first alternative, which is what the walk in      */
+/*   printIvalStruct() emits. A designated initializer can pick    */
+/*   another one instead ({.d = 5}), and reorderIlistIval() fills  */
+/*   a promoted member's slot only in that case. If the union      */
+/*   starting at SFLDS has one, return that member, its            */
+/*   initializer, and the field the union ends before.             */
+/*-----------------------------------------------------------------*/
+static symbol *
+designatedAlternative (symbol *sflds, initList *iloop, initList **ilist, symbol **after)
+{
+  symbol *f, *desig = NULL;
+  initList *desigilist = NULL;
+  int base = -1;
+
+  for (f = sflds; f; f = f->next)
+    {
+      if (!f->anonunionalias)
+        {
+          if (base >= 0)
+            break;              /* the first member past the union */
+        }
+      else
+        {
+          if (base < 0 || (int) f->offset < base)
+            base = (int) f->offset;
+          /* only a member whose bytes can be emitted on their own */
+          if (iloop && iloop->type != INIT_HOLE && !IS_BITFIELD (f->type))
+            {
+              desig = f;
+              desigilist = iloop;
+            }
+        }
+      if (fieldHasIval (f))
+        iloop = iloop ? iloop->next : NULL;
+    }
+
+  /* only when sflds is where that union starts */
+  if (!desig || base != (int) sflds->offset)
+    return NULL;
+
+  *ilist = desigilist;
+  *after = f;
+  return desig;
+}
+
+/*-----------------------------------------------------------------*/
 /* printIvalStruct - generates initial value for structures        */
 /*-----------------------------------------------------------------*/
 static void
@@ -1080,6 +1147,10 @@ printIvalStruct (symbol *sym, sym_link *type, initList *ilist, struct dbuf_s *oB
       iloop = ilist->init.deep;
     }
 
+  // An incomplete structure or union has no members to initialize. WE dont make this an assertion, since we might still reach here for such a struct / union after emitting the error message.
+  if (!sflds)
+    return;
+
   if (SPEC_STRUCT (type)->type == UNION)
     {
       int size;
@@ -1089,12 +1160,18 @@ printIvalStruct (symbol *sym, sym_link *type, initList *ilist, struct dbuf_s *oB
           iloop = iloop->next;
           sflds = sflds->next;
         }
+      /* a member promoted out of an anonymous struct sits at an offset of
+         its own, so the bytes before it get no initializer */
+      for (size = sflds->offset; size > 0; size--)
+        {
+          printIvalPad (oBuf);
+        }
       printIval (sym, sflds->type, iloop, oBuf, 1);
       /* pad out with zeros if necessary */
-      size = getSize(type) - getSize(sflds->type);
+      size = getSize(type) - sflds->offset - getSize(sflds->type);
       for ( ; size > 0 ; size-- )
         {
-          dbuf_tprintf (oBuf, "\t!db !constbyte\n", 0);
+          printIvalPad (oBuf);
         }
       /* advance past holes to find out if there were excess initializers */
       do
@@ -1107,28 +1184,67 @@ printIvalStruct (symbol *sym, sym_link *type, initList *ilist, struct dbuf_s *oB
   else
     {
       // Hack to avoid the hack below (the one that fixed bug #2643) breaking zero-length bit-fields as first member of a struct (bug #3542).
-      if(IS_BITFIELD (sflds->type) && !SPEC_BLEN (sflds->etype))
+      //FIXME: shouldn't this be a while ?
+      if (IS_BITFIELD (sflds->type) && !SPEC_BLEN (sflds->etype))
         sflds = sflds->next;
+
+      unsigned int written = 0;     /* bytes emitted = offset of the next byte */
 
       while (sflds)
         {
           unsigned int oldoffset = sflds->offset;
+          initList *desigilist = NULL;
+          symbol *after = NULL;
+          symbol *desig = designatedAlternative (sflds, iloop, &desigilist, &after);
 
-          if (IS_BITFIELD (sflds->type))
-            printIvalBitFields (&sflds, &iloop, oBuf);
+          if (desig)
+            {
+              // A designator picked an alternative of this anonymous union
+              // other than the first one, so emit the union through that
+              // member: the bytes before it get no initializer, and the ones
+              // after it are left to the padding below.
+              for ( ; written < (unsigned int) desig->offset; written++)
+                printIvalPad (oBuf);
+              printIval (sym, desig->type, desigilist, oBuf, 1);
+              written += getSize (desig->type);
+              for ( ; sflds != after; sflds = sflds->next)
+                if (fieldHasIval (sflds))
+                  iloop = iloop ? iloop->next : NULL;
+            }
+          else if (IS_BITFIELD (sflds->type))
+            {
+              written += printIvalBitFields (sym, &sflds, &iloop, oBuf);
+            }
           else
             {
               printIval (sym, sflds->type, iloop, oBuf, 1);
+              written += getSize (sflds->type);
               sflds = sflds->next;
               iloop = iloop ? iloop->next : NULL;
             }
 
-          // Handle members from anonymous unions. Just a hack to fix bug #2643.
-          while (sflds && sflds->offset == oldoffset)
+          // Handle members from anonymous unions. The offset test is the hack
+          // that fixed bug #2643; anonunionalias additionally catches an
+          // alternative that is a struct larger than the one written above,
+          // whose later members carry offsets of their own. A promoted member
+          // has an initializer of its own only when a designator named it,
+          // which the branch above dealt with, so consume its slot here
+          // rather than counting on a hole turning up at the end.
+          while (sflds && (sflds->anonunionalias || sflds->offset == oldoffset))
             {
+              if (!sflds->anonunionalias)
+                skip_holes++;
+              else if (fieldHasIval (sflds))
+                iloop = iloop ? iloop->next : NULL;
               sflds = sflds->next;
-              skip_holes++;
             }
+
+          // A skipped alternative can be bigger than the one written above,
+          // so pad up to the next field - or to the end of the struct - and
+          // keep the following members at their own offsets.
+          unsigned int nextoffset = sflds ? (unsigned int) sflds->offset : (unsigned int) getSize (type);
+          for ( ; written < nextoffset; written++)
+            printIvalPad (oBuf);
         }
 
       while (skip_holes && iloop && iloop->type == INIT_HOLE)
@@ -1155,7 +1271,7 @@ printIvalChar (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *o
 
   if (!s)
     {
-      val = list2val (ilist, TRUE);
+      val = list2val (ilist, true);
       /* if the value is a character string  */
       if (IS_ARRAY (val->type) && IS_CHAR (val->etype))
         {
@@ -1218,7 +1334,7 @@ printIvalChar16 (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s 
 
   if (!s)
     {
-      val = list2val (ilist, TRUE);
+      val = list2val (ilist, true);
       /* if the value is a character string  */
       if (IS_ARRAY (val->type) && IS_INT (val->etype) && IS_UNSIGNED (val->etype) && !IS_LONG (val->etype))
         {
@@ -1280,7 +1396,7 @@ printIvalChar32 (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s 
 
   if (!s)
     {
-      val = list2val (ilist, TRUE);
+      val = list2val (ilist, true);
       /* if the value is a character string  */
       if (IS_ARRAY (val->type) && IS_INT (val->etype) && IS_UNSIGNED (val->etype) && IS_LONG (val->etype))
         {
@@ -1331,6 +1447,18 @@ printIvalArray (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *
   initList *iloop;
   unsigned int size = 0;
 
+  initList *string = ilist && ilist->type == INIT_DEEP ? ilist->init.deep : ilist;
+  if ((IS_CHAR (type->next) || IS_INT (type->next)) &&
+      string && string->type == INIT_NODE && !string->next)
+    {
+      value *val = list2val (string, false);
+      if (val && IS_ARRAY (val->type) && !stringInitializerTypesMatch (type, val->type))
+        {
+          werrorfl (string->filename, string->lineno, E_TYPE_MISMATCH, "initialisation", "");
+          return;
+        }
+    }
+
   if (ilist)
     {
       /* take care of the special   case  */
@@ -1339,7 +1467,7 @@ printIvalArray (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *
       /* char *p = "abc";                 */
       if ((IS_CHAR (type->next) || IS_INT (type->next)) && ilist->type == INIT_NODE)
         {
-          val = list2val (ilist, TRUE);
+          val = list2val (ilist, true);
           if (!val)
             {
               werrorfl (ilist->filename, ilist->lineno, E_INIT_STRUCT, sym->name);
@@ -1363,7 +1491,7 @@ printIvalArray (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *
       /* char *p = {"abc"}; */
       if ((IS_CHAR (type->next) || IS_INT (type->next)) && ilist->type == INIT_DEEP && ilist->init.deep && ilist->init.deep->type == INIT_NODE)
         {
-          val = list2val (ilist->init.deep, TRUE);
+          val = list2val (ilist->init.deep, true);
           if (!val)
             {
               werrorfl (ilist->init.deep->filename, ilist->init.deep->lineno, E_INIT_STRUCT, sym->name);
@@ -1399,7 +1527,7 @@ printIvalArray (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *
               werrorfl (sym->fileDef, sym->lineDef, W_EXCESS_INITIALIZERS, "array", sym->name);
               break;
             }
-          printIval (sym, type->next, iloop, oBuf, TRUE);
+          printIval (sym, type->next, iloop, oBuf, true);
         }
     }
 
@@ -1442,7 +1570,7 @@ printIvalFuncPtr (sym_link * type, initList * ilist, struct dbuf_s *oBuf)
   int size;
 
   if (ilist)
-    val = list2val (ilist, TRUE);
+    val = list2val (ilist, true);
   else
     val = valCastLiteral (type, 0.0, 0);
 
@@ -1529,7 +1657,7 @@ printIvalCharPtr (symbol *sym, sym_link *type, value *val, struct dbuf_s *oBuf)
    */
   size = getSize (type);
 
-  if (val->name && strlen (val->name))
+  if (strlen (val->name))
     {
       if (size == 1)            /* This appears to be Z80 specific?? */
         {
@@ -1802,7 +1930,7 @@ printIval (symbol * sym, sym_link * type, initList * ilist, struct dbuf_s *oBuf,
 {
   /* Handle designated initializers */
   if (ilist && ilist->type==INIT_DEEP)
-    ilist = reorderIlist (type, ilist);
+    ilist = reorderIlistIval (type, ilist);
 
   /* If this is a hole, substitute an appropriate initializer. */
   if (ilist && ilist->type == INIT_HOLE)
@@ -1932,9 +2060,9 @@ emitStaticSeg (memmap *map, struct dbuf_s *oBuf)
               /* if sym is a simple string and sym->ival is a string,
                  WE don't need it anymore */
               if (IS_ARRAY (sym->type) && IS_CHAR (sym->type->next) &&
-                  IS_AST_SYM_VALUE (list2expr (sym->ival)) && list2val (sym->ival, TRUE)->sym->isstrlit)
+                  IS_AST_SYM_VALUE (list2expr (sym->ival)) && list2val (sym->ival, true)->sym->isstrlit)
                 {
-                  freeStringSymbol (list2val (sym->ival, TRUE)->sym);
+                  freeStringSymbol (list2val (sym->ival, true)->sym);
                 }
               if (!SPEC_ABSA (sym->etype) && options.const_seg && map != xinit && map != initializer)
                 dbuf_tprintf(oBuf, "\t!areacode\n", options.code_seg);
@@ -2001,8 +2129,8 @@ emitMaps (void)
   inInitMode++;
   /* no special considerations for the following
      data, idata & bit & xdata */
-  emitRegularMap (data, TRUE, TRUE);
-  emitRegularMap (initialized, TRUE, TRUE);
+  emitRegularMap (data, true, true);
+  emitRegularMap (initialized, true, true);
   for (nm = namedspacemaps; nm; nm = nm->next)
     if (nm->is_const)
       {
@@ -2010,27 +2138,27 @@ emitMaps (void)
         emitStaticSeg (nm->map, &nm->map->oBuf);
       }
     else
-      emitRegularMap (nm->map, TRUE, TRUE);
-  emitRegularMap (idata, TRUE, TRUE);
-  emitRegularMap (d_abs, TRUE, TRUE);
-  emitRegularMap (i_abs, TRUE, TRUE);
-  emitRegularMap (bit, TRUE, TRUE);
-  emitRegularMap (pdata, TRUE, TRUE);
-  emitRegularMap (xdata, TRUE, TRUE);
-  emitRegularMap (x_abs, TRUE, TRUE);
+      emitRegularMap (nm->map, true, true);
+  emitRegularMap (idata, true, true);
+  emitRegularMap (d_abs, true, true);
+  emitRegularMap (i_abs, true, true);
+  emitRegularMap (bit, true, true);
+  emitRegularMap (pdata, true, true);
+  emitRegularMap (xdata, true, true);
+  emitRegularMap (x_abs, true, true);
   if (port->genXINIT)
     {
-      emitRegularMap (xidata, TRUE, TRUE);
+      emitRegularMap (xidata, true, true);
     }
   if (xconst)
     {
       dbuf_tprintf (&xconst->oBuf, "\t!areacode\n", xconst->sname);
       emitStaticSeg (xconst, &xconst->oBuf);
     }
-  emitRegularMap (sfr, publicsfr, FALSE);
-  emitRegularMap (sfrbit, publicsfr, FALSE);
-  emitRegularMap (home, TRUE, FALSE);
-  emitRegularMap (code, TRUE, FALSE);
+  emitRegularMap (sfr, publicsfr, false);
+  emitRegularMap (sfrbit, publicsfr, false);
+  emitRegularMap (home, true, false);
+  emitRegularMap (code, true, false);
 
   if (options.const_seg)
     dbuf_tprintf (&code->oBuf, "\t!area\n", options.const_seg);
@@ -2313,10 +2441,6 @@ glue (void)
   /* print module name */
   tfprintf (asmFile, "\t!module\n", moduleName);
 
-  // TODO: Move this from here to port-specific genAssemblerStart (like we did for the z80-related ports already)?
-  if (TARGET_IS_S08)
-    fprintf (asmFile, "\t.cs08\n");
-
   tfprintf (asmFile, "\t!fileprelude\n");
 
   /* Let the port generate any global directives, etc. */
@@ -2354,13 +2478,13 @@ glue (void)
           fprintf (asmFile, "; overlayable register banks\n");
           fprintf (asmFile, "%s", iComments2);
           if (RegBankUsed[0])
-            fprintf (asmFile, "\t.area REG_BANK_0\t(REL,OVR,DATA)\n\t.ds 8\n");
+            fprintf (asmFile, "\t.area REG_BANK_0\t(REL,OVR,DATA)\nrbank0:\t.ds 8\n");
           if (RegBankUsed[1] || options.parms_in_bank1)
-            fprintf (asmFile, "\t.area REG_BANK_1\t(REL,OVR,DATA)\n\t.ds 8\n");
+            fprintf (asmFile, "\t.area REG_BANK_1\t(REL,OVR,DATA)\nrbank1:\t.ds 8\n");
           if (RegBankUsed[2])
-            fprintf (asmFile, "\t.area REG_BANK_2\t(REL,OVR,DATA)\n\t.ds 8\n");
+            fprintf (asmFile, "\t.area REG_BANK_2\t(REL,OVR,DATA)\nrbank2:\t.ds 8\n");
           if (RegBankUsed[3])
-            fprintf (asmFile, "\t.area REG_BANK_3\t(REL,OVR,DATA)\n\t.ds 8\n");
+            fprintf (asmFile, "\t.area REG_BANK_3\t(REL,OVR,DATA)\nrbank3:\t.ds 8\n");
         }
       if (BitBankUsed)
         {
@@ -2369,14 +2493,6 @@ glue (void)
           fprintf (asmFile, "%s", iComments2);
           fprintf (asmFile, "\t.area BIT_BANK\t(REL,OVR,DATA)\n");
           fprintf (asmFile, "bits:\n\t.ds 1\n");
-          fprintf (asmFile, "\tb0 = bits[0]\n");
-          fprintf (asmFile, "\tb1 = bits[1]\n");
-          fprintf (asmFile, "\tb2 = bits[2]\n");
-          fprintf (asmFile, "\tb3 = bits[3]\n");
-          fprintf (asmFile, "\tb4 = bits[4]\n");
-          fprintf (asmFile, "\tb5 = bits[5]\n");
-          fprintf (asmFile, "\tb6 = bits[6]\n");
-          fprintf (asmFile, "\tb7 = bits[7]\n");
         }
     }
 

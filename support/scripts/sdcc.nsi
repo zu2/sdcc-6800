@@ -558,38 +558,38 @@ ${SectionEnd}
 
 ${Section} "SDCC mcs51 small model library" SEC16
   SectionIn 1 2
-  SetOutPath "$INSTDIR\lib\small"
-  File "${DEV_ROOT}\lib\small\*.*"
+  SetOutPath "$INSTDIR\lib\mcs51-small"
+  File "${DEV_ROOT}\lib\mcs51-small\*.*"
 ${SectionEnd}
 
 ${Section} "SDCC mcs51 medium model library" SEC17
   SectionIn 1 2
-  SetOutPath "$INSTDIR\lib\medium"
-  File "${DEV_ROOT}\lib\medium\*.*"
+  SetOutPath "$INSTDIR\lib\mcs51-medium"
+  File "${DEV_ROOT}\lib\mcs51-medium\*.*"
 ${SectionEnd}
 
 ${Section} "SDCC mcs51 large model library" SEC18
   SectionIn 1 2
-  SetOutPath "$INSTDIR\lib\large"
-  File "${DEV_ROOT}\lib\large\*.*"
+  SetOutPath "$INSTDIR\lib\mcs51-large"
+  File "${DEV_ROOT}\lib\mcs51-large\*.*"
 ${SectionEnd}
 
 ${Section} "SDCC mcs51 huge model library" SEC19
   SectionIn 1 2
-  SetOutPath "$INSTDIR\lib\huge"
-  File "${DEV_ROOT}\lib\huge\*.*"
+  SetOutPath "$INSTDIR\lib\mcs51-huge"
+  File "${DEV_ROOT}\lib\mcs51-huge\*.*"
 ${SectionEnd}
 
 ${Section} "SDCC mcs51 small-stack-auto model library" SEC20
   SectionIn 1 2
-  SetOutPath "$INSTDIR\lib\small-stack-auto"
-  File "${DEV_ROOT}\lib\small-stack-auto\*.*"
+  SetOutPath "$INSTDIR\lib\mcs51-small-stack-auto"
+  File "${DEV_ROOT}\lib\mcs51-small-stack-auto\*.*"
 ${SectionEnd}
 
 ${Section} "SDCC mcs51 large-stack-auto model library" SEC21
   SectionIn 1 2
-  SetOutPath "$INSTDIR\lib\large-stack-auto"
-  File "${DEV_ROOT}\lib\large-stack-auto\*.*"
+  SetOutPath "$INSTDIR\lib\mcs51-large-stack-auto"
+  File "${DEV_ROOT}\lib\mcs51-large-stack-auto\*.*"
 ${SectionEnd}
 
 ${Section} "SDCC HC08 library" SEC22
@@ -703,21 +703,21 @@ ${Section} "SDCC library sources" SEC28
   File "${DEV_ROOT}\lib\src\mos6502\*.s"
 #  File "${DEV_ROOT}\lib\src\mos6502\Makefile"
 
-  SetOutPath "$INSTDIR\lib\src\mcs51"
-  File "${DEV_ROOT}\lib\src\mcs51\*.asm"
-#  File "${DEV_ROOT}\lib\src\mcs51\Makefile"
+  SetOutPath "$INSTDIR\lib\src\mcs51-common"
+  File "${DEV_ROOT}\lib\src\mcs51-common\*.s"
+#  File "${DEV_ROOT}\lib\src\mcs51-common\Makefile"
 
-  SetOutPath "$INSTDIR\lib\src\small"
-#  File "${DEV_ROOT}\lib\src\small\Makefile"
+  SetOutPath "$INSTDIR\lib\src\mcs51-small"
+#  File "${DEV_ROOT}\lib\src\mcs51-small\Makefile"
 
-  SetOutPath "$INSTDIR\lib\src\medium"
-#  File "${DEV_ROOT}\lib\src\medium\Makefile"
+  SetOutPath "$INSTDIR\lib\src\mcs51-medium"
+#  File "${DEV_ROOT}\lib\src\mcs51-medium\Makefile"
 
-  SetOutPath "$INSTDIR\lib\src\large"
-#  File "${DEV_ROOT}\lib\src\large\Makefile"
+  SetOutPath "$INSTDIR\lib\src\mcs51-large"
+#  File "${DEV_ROOT}\lib\src\mcs51-large\Makefile"
 
-  SetOutPath "$INSTDIR\lib\src\huge"
-#  File "${DEV_ROOT}\lib\src\huge\Makefile"
+  SetOutPath "$INSTDIR\lib\src\mcs51-huge"
+#  File "${DEV_ROOT}\lib\src\mcs51-huge\Makefile"
 
   SetOutPath "$INSTDIR\lib\src\pic14"
 #  File "${DEV_ROOT}\lib\src\pic14\configure"
@@ -953,6 +953,12 @@ ${Section} "SDCC f8l library" SEC43
   File "${DEV_ROOT}\lib\f8l\*.*"
 ${SectionEnd}
 
+${Section} "SDCC HuC6280 library" SEC44
+  SectionIn 1 2
+  SetOutPath "$INSTDIR\lib\huc6280"
+  File "${DEV_ROOT}\lib\huc6280\*.*"
+${SectionEnd}
+
 ;--------------------------------
 ;Descriptions
 
@@ -1000,6 +1006,7 @@ LangString DESC_SEC40 ${LANG_ENGLISH} "SDCC R800 library"
 LangString DESC_SEC41 ${LANG_ENGLISH} "SDCC S08 stack-auto library"
 LangString DESC_SEC42 ${LANG_ENGLISH} "SDCC f8 library"
 LangString DESC_SEC43 ${LANG_ENGLISH} "SDCC f8l library"
+LangString DESC_SEC44 ${LANG_ENGLISH} "SDCC HuC6280 library"
 
 ;Assign language strings to sections
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
@@ -1048,6 +1055,7 @@ LangString DESC_SEC43 ${LANG_ENGLISH} "SDCC f8l library"
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC41} $(DESC_SEC41)
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC42} $(DESC_SEC42)
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC43} $(DESC_SEC43)
+  !insertmacro MUI_DESCRIPTION_TEXT ${SEC44} $(DESC_SEC44)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 ;--------------------------------
 
@@ -1125,17 +1133,17 @@ ${Section} Uninstall SECUNINSTALL
 
   RMDir "$SMPROGRAMS\$MUI_STARTMENUPAGE_VARIABLE"
 
-  Delete "$INSTDIR\lib\src\huge\Makefile"
+  Delete "$INSTDIR\lib\src\mcs51-huge\Makefile"
 
-  Delete "$INSTDIR\lib\src\large\Makefile"
+  Delete "$INSTDIR\lib\src\mcs51-large\Makefile"
 
-  Delete "$INSTDIR\lib\src\medium\Makefile"
+  Delete "$INSTDIR\lib\src\mcs51-medium\Makefile"
 
-  Delete "$INSTDIR\lib\src\small\Makefile"
+  Delete "$INSTDIR\lib\src\mcs51-small\Makefile"
 
-  Delete "$INSTDIR\lib\src\mcs51\*.asm"
-  Delete "$INSTDIR\lib\src\mcs51\Makefile"
-  Delete "$INSTDIR\lib\src\mcs51\README"
+  Delete "$INSTDIR\lib\src\mcs51-common\*.s"
+  Delete "$INSTDIR\lib\src\mcs51-common\Makefile"
+  Delete "$INSTDIR\lib\src\mcs51-common\README"
 
   Delete "$INSTDIR\lib\src\hc08\*.c"
   Delete "$INSTDIR\lib\src\hc08\hc08.lib"
@@ -1169,6 +1177,8 @@ ${Section} Uninstall SECUNINSTALL
   Delete "$INSTDIR\lib\src\r2k\*.s"
 
   Delete "$INSTDIR\lib\src\r2ka\*.s"
+
+  Delete "$INSTDIR\lib\src\r3ka\*.s"
 
   Delete "$INSTDIR\lib\src\r4k\*.s"
 
@@ -1282,16 +1292,16 @@ ${Section} Uninstall SECUNINSTALL
   Delete "$INSTDIR\lib\ez80\*.rel"
   Delete "$INSTDIR\lib\ez80\*.lib"
 
-  Delete "$INSTDIR\lib\small\*.lib"
+  Delete "$INSTDIR\lib\mcs51-small\*.lib"
 
-  Delete "$INSTDIR\lib\medium\*.lib"
+  Delete "$INSTDIR\lib\mcs51-medium\*.lib"
 
-  Delete "$INSTDIR\lib\large\*.lib"
+  Delete "$INSTDIR\lib\mcs51-large\*.lib"
 
-  Delete "$INSTDIR\lib\huge\*.lib"
+  Delete "$INSTDIR\lib\mcs51-huge\*.lib"
 
-  Delete "$INSTDIR\lib\small-stack-auto\*.lib"
-  Delete "$INSTDIR\lib\large-stack-auto\*.lib"
+  Delete "$INSTDIR\lib\mcs51-small-stack-auto\*.lib"
+  Delete "$INSTDIR\lib\mcs51-large-stack-auto\*.lib"
 
   Delete "$INSTDIR\lib\sm83\*.rel"
   Delete "$INSTDIR\lib\sm83\*.lib"
@@ -1314,6 +1324,9 @@ ${Section} Uninstall SECUNINSTALL
   Delete "$INSTDIR\lib\mos6502\*.rel"
   Delete "$INSTDIR\lib\mos6502\*.lib"
 
+  Delete "$INSTDIR\lib\mos6502-stack-auto\*.rel"
+  Delete "$INSTDIR\lib\mos6502-stack-auto\*.lib"
+
   Delete "$INSTDIR\lib\z80n\*.rel"
   Delete "$INSTDIR\lib\z80n\*.lib"
 
@@ -1327,6 +1340,9 @@ ${Section} Uninstall SECUNINSTALL
 
   Delete "$INSTDIR\lib\f8\*.lib"
   Delete "$INSTDIR\lib\f8l\*.lib"
+
+  Delete "$INSTDIR\lib\huc6280\*.rel"
+  Delete "$INSTDIR\lib\huc6280\*.lib"
 
   Delete "$INSTDIR\include\asm\z80\*.h"
   Delete "$INSTDIR\include\asm\rab\*.h"
@@ -1423,10 +1439,10 @@ ${Section} Uninstall SECUNINSTALL
   RMDir /r "$INSTDIR\non-free\lib\src\pic14"
   RMDir /r "$INSTDIR\lib\src\pic16"
   RMDir /r "$INSTDIR\non-free\lib\src\pic16"
-  RMDir "$INSTDIR\lib\src\small"
-  RMDir "$INSTDIR\lib\src\medium"
-  RMDir "$INSTDIR\lib\src\large"
-  RMDir "$INSTDIR\lib\src\huge"
+  RMDir "$INSTDIR\lib\src\mcs51-small"
+  RMDir "$INSTDIR\lib\src\mcs51-medium"
+  RMDir "$INSTDIR\lib\src\mcs51-large"
+  RMDir "$INSTDIR\lib\src\mcs51-huge"
   RMDir "$INSTDIR\lib\src\mcs51"
   RMDir "$INSTDIR\lib\src\z80"
   RMDir "$INSTDIR\lib\src\z180"
@@ -1458,6 +1474,7 @@ ${Section} Uninstall SECUNINSTALL
   RMDir "$INSTDIR\lib\src\s08-stack-auto"
   RMDir "$INSTDIR\lib\src\f8"
   RMDir "$INSTDIR\lib\src\f8l"
+  RMDir "$INSTDIR\lib\src\huc6280"
   RMDir "$INSTDIR\lib\src"
   RMDir "$INSTDIR\non-free\lib\src"
 
@@ -1474,12 +1491,12 @@ ${Section} Uninstall SECUNINSTALL
   RMDir "$INSTDIR\lib\r5k"
   RMDir "$INSTDIR\lib\r6k"
   RMDir "$INSTDIR\lib\ez80"
-  RMDir "$INSTDIR\lib\small"
-  RMDir "$INSTDIR\lib\medium"
-  RMDir "$INSTDIR\lib\large"
-  RMDir "$INSTDIR\lib\huge"
-  RMDir "$INSTDIR\lib\small-stack-auto"
-  RMDir "$INSTDIR\lib\large-stack-auto"
+  RMDir "$INSTDIR\lib\mcs51-small"
+  RMDir "$INSTDIR\lib\mcs51-medium"
+  RMDir "$INSTDIR\lib\mcs51-large"
+  RMDir "$INSTDIR\lib\mcs51-huge"
+  RMDir "$INSTDIR\lib\mcs51-small-stack-auto"
+  RMDir "$INSTDIR\lib\mcs51-large-stack-auto"
   RMDir "$INSTDIR\lib\sm83"
   RMDir "$INSTDIR\lib\ds390"
   RMDir "$INSTDIR\lib\ds400"
@@ -1500,6 +1517,7 @@ ${Section} Uninstall SECUNINSTALL
   RMDir "$INSTDIR\lib\s08-stack-auto"
   RMDir "$INSTDIR\lib\f8"
   RMDir "$INSTDIR\lib\f8l"
+  RMDir "$INSTDIR\lib\huc6280"
   RMDir "$INSTDIR\lib"
   RMDir "$INSTDIR\non-free\lib"
 

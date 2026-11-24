@@ -39,6 +39,13 @@ typedef enum
   EX_OPERAND
 } ASTTYPE;
 
+enum
+{
+  ADDRESS_INTERNAL,
+  ADDRESS_DOT,
+  ADDRESS_EXPLICIT
+};
+
 /* expression tree   */
 typedef struct ast
 {
@@ -51,6 +58,7 @@ typedef struct ast
   unsigned initMode:1;
   unsigned reversed:1;
   unsigned inlined:1;
+  unsigned addressOrigin:2;
   long level;                   /* level for expr */
   int block;                    /* block number   */
   int seqPoint;                 /* sequence point */
@@ -99,7 +107,8 @@ typedef struct ast
                                          */
       unsigned removedCast:1;   /* true if the explicit cast has been removed */
       unsigned implicitCast:1;  /* true if compiler added this cast */
-      bool semDeref:1;          /* semantic dereference, i.e. a &* removing _Optional represented as cast - we just need to pass this flag from the parser to the iCode */
+      bool semDeref:1;          /* &* removes _Optional. Emit a non-null
+                                  check when lowering this cast. */
     } cast;
     int argreg;                 /* argreg number when operand type == EX_OPERAND */
   }
@@ -217,7 +226,6 @@ ast *forLoopOptForm (ast *);
 ast *argAst (ast *);
 ast *resolveSymbols (ast *);
 void checkCodePtrPointsToConst (sym_link *t, const char *filename, int lineno);
-void removeQualifiers (sym_link *type);
 sym_link *ptrTypeFromType (sym_link *type);
 void checkPtrCast (sym_link * newType, sym_link * orgType, bool implicit, bool orgIsNullPtrConstant);
 ast *decorateType (ast *, RESULT_TYPE, bool reduceTypeAllowed);

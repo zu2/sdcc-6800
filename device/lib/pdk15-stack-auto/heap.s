@@ -26,6 +26,9 @@
 ;   might be covered by the GNU General Public License.
 ;--------------------------------------------------------------------------
 
+	.module heap
+	.include "config.inc"
+
 	.globl ___sdcc_heap_init
 	.globl ___sdcc_heap
 	.globl ___sdcc_heap_end
@@ -34,8 +37,13 @@
 	call ___sdcc_heap_init
 
 	.area DATA
-	; For now just allocate 64 bytes for the heap.
+	; Allocate 16 bytes for pdk13, 64 bytes for all the other pdk
 ___sdcc_heap::
+.ifdef PDK13
+	.ds 15
+.else
 	.ds 63
+.endif
 ___sdcc_heap_end::
-	.ds 1 
+	.ds 1
+

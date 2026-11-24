@@ -1,7 +1,7 @@
 /* gbpst.c */
 
 /*
- *  Copyright (C) 1989-2023  Alan R. Baldwin
+ *  Copyright (C) 1989-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,8 +24,6 @@
 
 /* Gameboy mods by Roger Ivie (ivie at cc dot usu dot edu) see gb.h for more info */
 
-/* Extensions: P. Felber */
-
 #include "asxxxx.h"
 #include "gb.h"
 
@@ -46,6 +44,7 @@ struct	area	area[2] = {
     {	NULL,		&bank[0],	"_CODE",	0,	0,	0,	A_1BYTE|A_BNK|A_CSEG	},
     {	&area[0],	&bank[1],	"_DATA",	1,	0,	0,	A_1BYTE|A_BNK|A_DSEG	}
 };
+#endif
 
 /*
  * Basic Relocation Mode Definition
@@ -92,7 +91,6 @@ struct	mode	*modep[16] = {
 	NULL,		NULL,		NULL,		NULL,
 	NULL,		NULL,		NULL,		NULL
 };
-#endif
 
 /*
  * Mnemonic Structure
@@ -101,8 +99,12 @@ struct	mne	mne[] = {
 
         /* machine */
 
+/*    {	NULL,	"CSEG",		S_ATYP,		0,	A_CSEG|A_1BYTE	},	*/
+/*    {	NULL,	"DSEG",		S_ATYP,		0,	A_DSEG|A_1BYTE	},	*/
+
         /* system */
 
+/*    {	NULL,	"BANK",		S_ATYP,		0,	A_BNK	},	*/
     {   NULL,   "CON",          S_ATYP,         0,      A_CON   },
     {   NULL,   "OVR",          S_ATYP,         0,      A_OVR   },
     {   NULL,   "REL",          S_ATYP,         0,      A_REL   },
@@ -110,6 +112,10 @@ struct	mne	mne[] = {
     {   NULL,   "NOPAG",        S_ATYP,         0,      A_NOPAG },
     {   NULL,   "PAG",          S_ATYP,         0,      A_PAG   },
 
+	/* assembler */
+
+    {	NULL,	".enabl",	S_OPTN,		0,	O_ENBL	},
+    {	NULL,	".dsabl",	S_OPTN,		0,	O_DSBL	},
     {	NULL,	".page",	S_PAGE,		0,	0	},
     {	NULL,	".title",	S_HEADER,	0,	O_TITLE	},
     {	NULL,	".sbttl",	S_HEADER,	0,	O_SBTTL	},
@@ -117,7 +123,9 @@ struct	mne	mne[] = {
     {	NULL,	".include",	S_INCL,		0,	I_CODE	},
     {	NULL,	".incbin",	S_INCL,		0,	I_BNRY	},
     {	NULL,	".area",	S_AREA,		0,	0	},
-//    {	NULL,	".bank",	S_BANK,		0,	0	},
+    {	NULL,	".psharea",	S_AREA,		0,	O_PSH	},
+    {	NULL,	".poparea",	S_AREA,		0,	O_POP	},
+/*    {	NULL,	".bank",	S_BANK,		0,	0	},	*/
     {	NULL,	".org",		S_ORG,		0,	0	},
     {	NULL,	".radix",	S_RADIX,	0,	0	},
     {	NULL,	".globl",	S_GLOBL,	0,	0	},
@@ -169,9 +177,10 @@ struct	mne	mne[] = {
     {	NULL,	".fdb",		S_DATA,		0,	O_2BYTE	},
 /*    {	NULL,	".3byte",	S_DATA,		0,	O_3BYTE	},	*/
 /*    {	NULL,	".triple",	S_DATA,		0,	O_3BYTE	},	*/
+/*    {	NULL,	".dl",		S_DATA,		0,	O_4BYTE	},	*/
 /*    {	NULL,	".4byte",	S_DATA,		0,	O_4BYTE	},	*/
 /*    {	NULL,	".quad",	S_DATA,		0,	O_4BYTE	},	*/
-    {   NULL,   ".df",          S_FLOAT,        0,      0       },
+/*    {	NULL,	".long",	S_DATA,		0,	O_4BYTE	},	*/
     {	NULL,	".blkb",	S_BLK,		0,	O_1BYTE	},
     {	NULL,	".ds",		S_BLK,		0,	O_1BYTE	},
     {	NULL,	".rmb",		S_BLK,		0,	O_1BYTE	},
@@ -179,6 +188,7 @@ struct	mne	mne[] = {
     {	NULL,	".blkw",	S_BLK,		0,	O_2BYTE	},
 /*    {	NULL,	".blk3",	S_BLK,		0,	O_3BYTE	},	*/
 /*    {	NULL,	".blk4",	S_BLK,		0,	O_4BYTE	},	*/
+/*    {	NULL,	".blkl",	S_BLK,		0,	O_4BYTE	},	*/
     {	NULL,	".ascii",	S_ASCIX,	0,	O_ASCII	},
     {	NULL,	".ascis",	S_ASCIX,	0,	O_ASCIS	},
     {	NULL,	".asciz",	S_ASCIX,	0,	O_ASCIZ	},
@@ -194,7 +204,22 @@ struct	mne	mne[] = {
     {	NULL,	".msg"	,	S_MSG,		0,	0	},
     {	NULL,   ".assume",      S_ERROR,        0,      O_ASSUME},
     {	NULL,   ".error",       S_ERROR,        0,      O_ERROR	},
+/*    {	NULL,	".msb",		S_MSB,		0,	0	},	*/
+/*    {	NULL,	".lohi",	S_MSB,		0,	O_LOHI	},	*/
+/*    {	NULL,	".hilo",	S_MSB,		0,	O_HILO	},	*/
+/*    {	NULL,	".8bit",	S_BITS,		0,	O_1BYTE	},	*/
+/*    {	NULL,	".16bit",	S_BITS,		0,	O_2BYTE	},	*/
+/*    {	NULL,	".24bit",	S_BITS,		0,	O_3BYTE	},	*/
+/*    {	NULL,	".32bit",	S_BITS,		0,	O_4BYTE	},	*/
+    {	NULL,	".trace",	S_TRACE,	0,	O_TRC	},
+    {	NULL,	".ntrace",	S_TRACE,	0,	O_NTRC	},
+/*    {	NULL,	"_______",	S_CONST,	0,	VALUE	},	*/
+    {	NULL,	".end",		S_END,		0,	0	},
+
 /* sdas specific */
+    {   NULL,   ".df",          S_FLOAT,        0,      0       },
+/*    {   NULL,   ".uleb128",     S_ULEB128,      0,      0       },	*/
+/*    {   NULL,   ".sleb128",     S_SLEB128,      0,      0       },	*/
     {   NULL,   ".optsdcc",     S_OPTSDCC,      0,      0 },
 /* end sdas specific */
 
@@ -217,6 +242,8 @@ struct	mne	mne[] = {
     {	NULL,	".mdelete",	S_MACRO,	0,	O_MDEL	},
 
 	/* Gameboy, a modified Z80 */
+
+    {	NULL,	".setpg",	S_SPG,		0,	0	},
     {	NULL,	".tile",	S_TILE,		0,	0	},
 
     {	NULL,	"ld",		S_LD,		0,	0x40	},
@@ -234,17 +261,16 @@ struct	mne	mne[] = {
     {	NULL,	"dec",		S_DEC,		0,	0x05	},
 
     {	NULL,	"add",		S_ADD,		0,	0x80	},
-    {   NULL,   "adc",          S_ADC,          0,      0x88    },
-    {   NULL,   "sub",          S_SUB,          0,      0x90    },
-    {   NULL,   "sbc",          S_SBC,          0,      0x98    },
+    {	NULL,	"adc",		S_ACC,		0,	0x88	},
+    {	NULL,	"sub",		S_ACC,		0,	0x90	},
+    {	NULL,	"sbc",		S_ACC,		0,	0x98	},
+    {	NULL,	"and",		S_ACC,		0,	0xA0	},
+    {	NULL,	"xor",		S_ACC,		0,	0xA8	},
+    {	NULL,	"or",		S_ACC,		0,	0xB0	},
+    {	NULL,	"cp",		S_ACC,		0,	0xB8	},
 
-    {   NULL,   "and",          S_AND,          0,      0xA0    },
-    {   NULL,   "cp",           S_AND,          0,      0xB8    },
-    {   NULL,   "or",           S_AND,          0,      0xB0    },
-    {   NULL,   "xor",          S_AND,          0,      0xA8    },
-
-    {   NULL,   "push",         S_PUSH,         0,      0xC5    },
-    {   NULL,   "pop",          S_PUSH,         0,      0xC1    },
+    {	NULL,	"push",		S_PTYP,		0,	0xC5	},
+    {	NULL,	"pop",		S_PTYP,		0,	0xC1	},
 
     {	NULL,	"rl",		S_RL,		0,	0x10	},
     {	NULL,	"rlc",		S_RL,		0,	0x00	},
@@ -260,19 +286,19 @@ struct	mne	mne[] = {
 
     {   NULL,   "ldh",          S_LDH,          0,      0xE0    },
 
-    {   NULL,   "ccf",          S_INH1,         0,      0x3F    },
-    {   NULL,   "cpl",          S_INH1,         0,      0x2F    },
-    {   NULL,   "daa",          S_INH1,         0,      0x27    },
-    {   NULL,   "di",           S_INH1,         0,      0xF3    },
-    {   NULL,   "ei",           S_INH1,         0,      0xFB    },
-    {   NULL,   "nop",          S_INH1,         0,      0x00    },
-    {   NULL,   "halt",         S_INH1,         0,      0x76    },
-    {   NULL,   "rla",          S_INH1,         0,      0x17    },
-    {   NULL,   "rlca",         S_INH1,         0,      0x07    },
-    {   NULL,   "rra",          S_INH1,         0,      0x1F    },
-    {   NULL,   "rrca",         S_INH1,         0,      0x0F    },
-    {   NULL,   "scf",          S_INH1,         0,      0x37    },
-    {   NULL,   "reti",         S_INH1,         0,      0xD9    },
+    {   NULL,   "ccf",          S_INH,         0,      0x3F    },
+    {   NULL,   "cpl",          S_INH,         0,      0x2F    },
+    {   NULL,   "daa",          S_INH,         0,      0x27    },
+    {   NULL,   "di",           S_INH,         0,      0xF3    },
+    {   NULL,   "ei",           S_INH,         0,      0xFB    },
+    {   NULL,   "nop",          S_INH,         0,      0x00    },
+    {   NULL,   "halt",         S_INH,         0,      0x76    },
+    {   NULL,   "rla",          S_INH,         0,      0x17    },
+    {   NULL,   "rlca",         S_INH,         0,      0x07    },
+    {   NULL,   "rra",          S_INH,         0,      0x1F    },
+    {   NULL,   "rrca",         S_INH,         0,      0x0F    },
+    {   NULL,   "scf",          S_INH,         0,      0x37    },
+    {   NULL,   "reti",         S_INH,         0,      0xD9    },
     {   NULL,   "lda",          S_LDA,          0,      0xE8    },
     {   NULL,   "ldhl",         S_LDHL,         0,      0x0F    },
     {   NULL,   "stop",         S_STOP,         S_EOL,  0x10    }

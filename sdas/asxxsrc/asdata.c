@@ -1,7 +1,7 @@
 /* asdata.c */
 
 /*
- *  Copyright (C) 1989-2025  Alan R. Baldwin
+ *  Copyright (C) 1989-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -70,6 +70,14 @@ int	(*mchoptn_ptr)(char *id, int v);
 
 int	aserr;		/*	ASxxxx error counter
 			 */
+int	rlerr;		/*	Relocation error counter
+			 */
+int	rprterr;	/*	report expr() errors
+			 */
+int	ignrerr;	/*	ignore expr() errors
+			 */
+int	rlsym;		/*	Relocation symbol counter
+			 */
 int	trcflags;	/*	ASxxxx tracing flags
 			 */
 jmp_buf	jump_env;	/*	compiler dependent structure
@@ -88,7 +96,7 @@ int	passcnt;	/* number of passes executed
 			 */
 int	passJLH;	/* JLH output pass
 			 */
-int	passfuz;	/* residual fuss after pass == 1
+a_uint	passfuz;	/* residual fuss after pass == 1
 			 */
 
 /*
@@ -246,8 +254,8 @@ int	alevel;		/*	area stack pointer
 struct	area *astack[16]; /*	area stack
 			 */
 int	flevel;		/*	IF-ELSE-ENDIF flag (false != 0)
-                         *      the flag will be non zero
-                         *      for false conditional case
+				 *	the flag will be non zero
+				 *	for false conditional case
 			 */
 int	ftflevel;	/*	IIFF-IIFT-IIFTF FLAG
 			 */
@@ -265,7 +273,9 @@ char	afn[FILSPC];	/*	current input file specification
 			 */
 int	afp;		/*	current input file path length
 			 */
-char	afntmp[FILSPC];	/*	temporary input file specification
+char	afstmp[FILSPC];	/*	temporary input file specification
+			 */
+char	afntmp[FILSPC];	/*	temporary input file name
 			 */
 int	afptmp;		/*	temporary input file path length
 			 */
@@ -281,6 +291,12 @@ int	radix;		/*	current number conversion radix:
 			 *	2 (binary), 8 (octal), 10 (decimal),
 			 *	16 (hexadecimal)
 			 */
+int	expr_radix;	/*	expression process radix
+			 */
+int	rdxidx;		/*	index into exression radix stack
+			 */
+int	rdxval[MAXNST];	/*	expression radix stack
+			 */
 int	line;		/*	current assembler source
 			 *	line number
 			 */
@@ -289,6 +305,8 @@ int	page;		/*	current page number
 int	lop;		/*	current line number on page
 			 */
 time_t	curtim;		/*	pointer to the current time string
+			 */
+int	pstate;		/*	assembler pass state
 			 */
 int	pass;		/*	assembler pass number
 			 */
@@ -310,7 +328,7 @@ int	kflag;		/*	-k, disable error output to .lst file
 			 */
 int	lflag;		/*	-l, generate listing flag
 			 */
-int     nflag;          /*      -n, don't resolve global assigned value symbols flag
+int	nflag;	/*	-n, don't resolve global assigned value symbols flag
 			 */
 int	oflag;		/*	-o, generate relocatable output flag
 			 */
@@ -334,7 +352,7 @@ int	yflag;		/*	-y, enable SDCC Debug Symbols
 			 */
 int	zflag;		/*	-z, disable symbol case sensitivity
 			 */
-int     waddrmode;      /*      WORD Address mode flag
+int	waddrmode;	/*	WORD Address mode flag
 			 */
 int	a_bytes;	/*	REL file T Line address length
 			 */
@@ -374,10 +392,10 @@ char	*ex[NERR];	/*	array of error string pointers
 char	*ip;		/*	pointer into the assembler-source
 			 *	text line in ib[]
 			 */
-char    *ib;            /*      assembler-source text line for processing
-                         */
-char    *ic;            /*      assembler-source text line for listing
-                         */
+char	*ib;		/*	assembler-source text line for processing
+			 */
+char	*ic;		/*	assembler-source text line for listing
+			 */
 char	*il;		/*	pointer to the assembler-source
 			 *	text line to be listed
 			 */
@@ -404,7 +422,7 @@ char	tb[NTITL];	/*	Title string buffer
 			 */
 char	stb[NSBTL];	/*	Subtitle string buffer
 			 */
-char    erb[NINPUT+4];  /*      Error string buffer
+char	erb[NINPUT+4];	/*	Error string buffer
 			 */
 
 char	symtbl[] = { "Symbol Table" };
@@ -413,9 +431,9 @@ char	aretbl[] = { "Area Table" };
 char	module[NCPS+2];	/*	module name string
 			 */
 /* sdas specific */
-int     org_cnt;        /*      .org directive counter
+int	org_cnt;		/*	.org directive counter
 			 */
-char    *optsdcc;       /*      sdcc compile options
+char	*optsdcc;	/*	sdcc compile options
 			 */
 /* end sdas specific */
 
@@ -446,15 +464,18 @@ struct	mne	*mnehash[NHASH];
 /*
  *	The sym structure is a linked list of symbols defined
  *	in the assembler source files.  The first symbol is "."
- *	defined here.  The entry 'struct tsym *s_tsym'
+ *	defined in asdata.c.  The entry 'struct tsym *s_tsym'
  *	links any temporary symbols following this symbol and
  *	preceeding the next normal symbol.  The structure also
- *	contains the symbol's name, type (USER or NEW), flag
- *	(global, assigned, and multiply defined), a pointer
+ *	contains the symbol's name, type (USER or NEW),
+ *	flag(global, assigned, and multiply defined), a pointer
  *	to the area structure defining where the symbol is
  *	located, a reference number assigned by outgsd() in
- *	asout.c, and the symbols address relative to the base
- *	address of the area where the symbol is located.
+ *	asout.c, the symbols address relative to the base
+ *	address of the area where the symbol is located, the
+ *	symbols base address from the previous assembler pass,
+ *	and a pointer to an expression that the linker should
+ *	evaluate (if required).
  *
  *	struct	sym
  *	{
@@ -466,17 +487,19 @@ struct	mne	*mnehash[NHASH];
  *		struct	area *s_area;	Area line, 0 if absolute
  *		int	s_ref;		Ref. number
  *		a_uint	s_addr;		Address
+ *		a_uint	p_addr;		Previous Pass Address
+ *		char	*s_expr;	Expression to evaluate
  * sdas specific
- *              a_uint  s_org;          Start Address if absolute
+ *		a_uint	s_org;		Start Address if absolute
  * end sdas specific
  *	};
  */
 struct	sym	sym[] = {
-    {	NULL,	NULL,	".",	    S_USER, 0,			NULL,0,0, 0 },
-    {	NULL,	NULL,	".__.ABS.", S_USER, S_ASG|S_GBL,	NULL,0,0, 0 },
-    {	NULL,	NULL,	".__.CPU.", S_USER, S_ASG|S_LCL,	NULL,0,0, 0 },
-    {	NULL,	NULL,	".__.H$L.", S_USER, S_ASG|S_LCL,	NULL,0,0, 0 },
-    {	NULL,	NULL,	".__.$$$.", S_USER, S_ASG|S_LCL|S_EOL,	NULL,0,0, 0 }
+    {	NULL,	NULL,	".",	    S_USER, 0,			NULL,0,0,0,NULL,0 },
+    {	NULL,	NULL,	".__.ABS.", S_USER, S_ASG|S_GBL,	NULL,0,0,0,NULL,0 },
+    {	NULL,	NULL,	".__.CPU.", S_USER, S_ASG|S_LCL,	NULL,0,0,0,NULL,0 },
+    {	NULL,	NULL,	".__.H$L.", S_USER, S_ASG|S_LCL,	NULL,0,0,0,NULL,0 },
+    {	NULL,	NULL,	".__.$$$.", S_USER, S_ASG|S_LCL|S_EOL,	NULL,0,0,0,NULL,0 }
 };
 
 struct	sym	*symp;		/*	pointer to a symbol structure
@@ -489,9 +512,9 @@ struct	sym *symhash[NHASH];	/*	array of pointers to NHASH
  *	The area structure contains the parameter values for a
  *	specific program or data section.  The area structure
  *	is a linked list of areas.  The initial default area
- *      is "_CODE" defined here, the next area structure
+ *	is "_CODE" defined here, the next area structure
  *	will be linked to this structure through the structure
- *      element 'struct area *a_ap'.  The structure contains the
+ *	element 'struct area *a_ap'.  The structure contains the
  *	area name, area reference number ("_CODE" is 0) determined
  *	by the order of .area directives, area size determined
  *	from the total code and/or data in an area, area fuzz is
@@ -508,13 +531,16 @@ struct	sym *symhash[NHASH];	/*	array of pointers to NHASH
  *		a_uint	a_fuzz;		Area fuzz
  *		int	a_flag;		Area flags
  *	};
+ *
+ *
+ * Pointer to an area structure
  */
 struct  area    area[] = {
     {NULL,      "_CODE",        0,      0,      0,      A_CON|A_REL}
 };
 
-struct  area    *areap; /*      pointer to an area structure
-                         */
+struct	area	*areap;	/*	pointer to an area structure
+			 */
 
 /*
  *	The bank structure contains the parameter values for a

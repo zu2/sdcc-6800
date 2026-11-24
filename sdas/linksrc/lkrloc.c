@@ -1,7 +1,7 @@
 /* lkrloc.c */
 
 /*
- *  Copyright (C) 1989-2024  Alan R. Baldwin
+ *  Copyright (C) 1989-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -83,9 +83,9 @@ reloc(int c)
 		reloc3(c);
 		break;
 
-//      case 4:
-//              reloc4(c);
-//              break;
+	case 4:
+		reloc4(c);
+		break;
 
 	default:
 		fprintf(stderr, "?ASlink-Error-Internal Version Error");

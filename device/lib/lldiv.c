@@ -13,7 +13,7 @@
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License 
+   You should have received a copy of the GNU General Public License
    along with this library; see the file COPYING. If not, write to the
    Free Software Foundation, 51 Franklin Street, Fifth Floor, Boston,
    MA 02110-1301, USA.
@@ -28,7 +28,8 @@
 
 #include <stdlib.h>
 
-#if !defined(__SDCC_ds390) && !defined(__SDCC_ds390) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) && !defined(__SDCC_mos6502) // struct return not yet supported
+#if !defined(__SDCC_ds390) || defined(__SDCC_MODEL_FLAT24) // DS390 struct return is supported only in flat24.
+#if !(defined(SDCC_MOS) && defined(__SDCC_STACK_AUTO)) && !defined(__SDCC_hc08) && !defined(__SDCC_s08) // struct return limited to <=8
 lldiv_t lldiv(long long int numer, long long int denom)
 {
 	lldiv_t ret;
@@ -36,5 +37,6 @@ lldiv_t lldiv(long long int numer, long long int denom)
 	ret.rem = numer % denom;
 	return(ret);
 }
+#endif
 #endif
 

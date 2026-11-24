@@ -25,8 +25,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 02111-1307, USA. */
 /*@1@*/
 
-#ifndef R4KCL_HEADER
-#define R4KCL_HEADER
+#ifndef RXK_R4KCL_HEADER
+#define RXK_R4KCL_HEADER
 
 #include "r3kacl.h"
 #include "dp0m4.h"
@@ -68,6 +68,8 @@ public:
   
   virtual void make_cpu_hw(void);
   virtual t_addr chip_size() { return rom_size?rom_size:0x1000000; }
+  virtual class cl_hw *mk_tb(void);
+  virtual class cl_hw *mk_tc(void);
 
   virtual struct dis_entry *dis_entry(t_addr addr);
   virtual struct dis_entry *dis_6d_entry(t_addr addr);

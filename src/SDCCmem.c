@@ -45,7 +45,7 @@ memmap *c_abs = NULL;           /* constant absolute data      */
 memmap *x_abs = NULL;           /* absolute xdata/pdata        */
 memmap *i_abs = NULL;           /* absolute idata upto 256     */
 memmap *d_abs = NULL;           /* absolute data upto 128 (mcs51) or 64 K (z80-related) */
-memmap *sfr = NULL;             /* register space              */
+memmap *sfr = NULL;             /* special function registers  */
 memmap *reg = NULL;             /* register space              */
 memmap *sfrbit = NULL;          /* sfr bit space               */
 memmap *generic = NULL;         /* is a generic pointer        */
@@ -120,7 +120,7 @@ initMem (void)
      BIT-ACCESS     -   NO
      CODE-ACCESS    -   NO
      DEBUG-NAME     -   'A'
-     POINTER-TYPE   -   FPOINTER
+     POINTER-TYPE   -   PPOINTER
    */
   xstack = allocMap (0, 1, 1, 0, 0, 0, options.xstack_loc, XSTACK_NAME, 'A', PPOINTER);
 
@@ -224,13 +224,13 @@ initMem (void)
   if (OVERLAY_NAME)
       overlay = allocMap (0, 0, 0, 1, 0, 0, options.data_loc, DATA_NAME, 'E', POINTER);
 
-  /* Xternal paged segment ;   
+  /* Xternal paged segment ;
      SFRSPACE       -   NO
      FAR-SPACE      -   NO
      PAGED          -   YES
      DIRECT-ACCESS  -   NO
      BIT-ACCESS     -   NO
-     CODE-ACCESS    -   NO 
+     CODE-ACCESS    -   NO
      DEBUG-NAME     -   'P'
      POINTER-TYPE   -   PPOINTER
    */
@@ -427,7 +427,7 @@ defaultOClass (symbol *sym)
       break;
     case S_CODE:
       if (sym->_isparm)
-        return FALSE;
+        return false;
       /* if code change to constant */
       if (sym->ival && SPEC_ABSA (sym->etype))
         {
@@ -510,9 +510,9 @@ defaultOClass (symbol *sym)
       SPEC_OCLS (sym->etype) = eeprom;
       break;
     default:
-      return FALSE;
+      return false;
     }
-  return TRUE;
+  return true;
 }
 
 /*-----------------------------------------------------------------*/
@@ -524,9 +524,9 @@ allocDefault (struct symbol *sym)
   if (defaultOClass (sym))
     {
       allocIntoSeg (sym);
-      return TRUE;
+      return true;
     }
-  return FALSE;
+  return false;
 }
 
 /*-----------------------------------------------------------------*/
@@ -700,7 +700,6 @@ allocParms (value *val, struct sym_link *ftype)
             }
           else                      /* use internal stack */
             {
-              
               SPEC_OCLS (lval->etype) = SPEC_OCLS (lval->sym->etype) = istack;
               if ((port->stack.direction > 0) != smallc)
                 {
@@ -746,7 +745,8 @@ allocParms (value *val, struct sym_link *ftype)
           SPEC_OCLS (lval->etype) = SPEC_OCLS (lval->sym->etype) =
               port->mem.default_local_map;
           if (options.model == MODEL_SMALL ||
-              /* The test for NO_MODEL was introduced to fix an issue for pdk (pdk has no xdata) maybe it is the right thing to do for pic, too.
+              /* The test for NO_MODEL was introduced to fix an issue for pdk
+                 (pdk has no xdata) maybe it is the right thing to do for pic, too.
                  But I don't know about pic */
               options.model == NO_MODEL && !TARGET_PIC_LIKE)
             {
@@ -789,7 +789,7 @@ allocParms (value *val, struct sym_link *ftype)
       sym->_isparm = 1;
       sym->ismyparm = 1;
       addSymChain (&sym);
-      
+
       if (options.useXstack)
         {
           SPEC_OCLS (sym->etype) = xstack;
@@ -1004,7 +1004,7 @@ deallocLocal (symbol *csym)
             stackPtr -= getSize (sym->type);
         }
       /* if not used give a warning */
-      if (!sym->isref && !IS_STATIC (sym->etype))
+      if (!sym->isref && !sym->istmp && !IS_STATIC (sym->etype))
         werror (W_NO_REFERENCE,
                 currFunc ? currFunc->name : "(unknown)",
                 "local variable", sym->name);
@@ -1024,7 +1024,6 @@ overlay2data (void)
   for (sym = setFirstItem (overlay->syms); sym;
        sym = setNextItem (overlay->syms))
     {
-
 //      SPEC_OCLS (sym->etype) = (options.xdata_spill)?xdata:data;
       SPEC_OCLS (sym->etype) = data;
       allocIntoSeg (sym);
@@ -1046,7 +1045,6 @@ overlay2Set (void)
   for (sym = setFirstItem (overlay->syms); sym;
        sym = setNextItem (overlay->syms))
     {
-
       addSet (&oset, sym);
     }
 
@@ -1055,7 +1053,7 @@ overlay2Set (void)
 }
 
 /*-----------------------------------------------------------------*/
-/* allocVariables - creates decl & assign storage class for a v    */
+/* allocVariables - creates decl & assign storage class for a var  */
 /*-----------------------------------------------------------------*/
 int
 allocVariables (symbol *symChain)
@@ -1089,6 +1087,16 @@ allocVariables (symbol *symChain)
 
       /* check the declaration */
       checkDecl (csym, 0);
+
+      /* An initializer requires a complete object type.  Reject an
+         incomplete structure or union before assigning it to a target
+         memory segment, where initializer emission cannot handle it. */
+      if (sym->ival && IS_STRUCT (csym->type) && !SPEC_STRUCT (csym->type)->fields)
+        {
+          werrorfl (sym->fileDef, sym->lineDef, E_UNKNOWN_SIZE, sym->name);
+          sym->ival = csym->ival = NULL;
+          continue;
+        }
 
       /* if this is a function or a pointer to a */
       /* function then do args processing        */
@@ -1137,7 +1145,7 @@ clearStackOffsets (void)
        sym = setNextItem (istack->syms))
     {
       const int size = getSize (sym->type);
-      
+
       /* nothing to do with parameters so continue */
       if ((sym->_isparm && !IS_REGPARM (sym->etype)))
         continue;
@@ -1182,7 +1190,7 @@ redoStackOffsets (void)
           /* Remove them all, and let btree_alloc() below put them back in more efficiently. */
           currFunc->stack -= size;
           SPEC_STAK (currFunc->etype) -= size;
-      
+
           if(IS_AGGREGATE (sym->type) || sym->allocreq)
             btree_add_symbol (sym);
         }
@@ -1252,7 +1260,7 @@ redoStackOffsets (void)
 }
 
 #define SP_BP(sp, bp) (options.omitFramePtr ? sp : bp)
-#define SYM_BP(sym)   (SPEC_OCLS (sym->etype)->paged ? SP_BP("_spx", "_bpx") : SP_BP("sp", "_bp"))
+#define SYM_BP(sym)   (SPEC_OCLS (sym->etype)->paged ? SP_BP("spx", "bpx") : SP_BP("sp", "bp"))
 
 /*-----------------------------------------------------------------*/
 /* printAllocInfoSeg- print the allocation for a given section     */
@@ -1261,7 +1269,7 @@ static int
 printAllocInfoSeg (memmap *map, symbol *func, struct dbuf_s *oBuf)
 {
   symbol *sym;
-  int flg = FALSE;
+  int flg = false;
 
   if (!map || !map->syms)
     return 0;
@@ -1274,7 +1282,7 @@ printAllocInfoSeg (memmap *map, symbol *func, struct dbuf_s *oBuf)
         continue;
 
       dbuf_printf (oBuf, ";%-13s Allocated ", sym->name);
-      flg = TRUE;
+      flg = true;
 
       /* if assigned to registers */
       if (!sym->allocreq && sym->reqv)
@@ -1341,25 +1349,25 @@ canOverlayLocals (eBBlock ** ebbs, int count)
   if (options.noOverlay ||
       options.stackAuto ||
       (currFunc &&
-       (IFFUNC_ISREENT (currFunc->type) ||
-        FUNC_ISISR (currFunc->type))) ||
+       (IFFUNC_ISREENT (currFunc->type) || FUNC_ISISR (currFunc->type))) ||
       elementsInSet (overlay->syms) == 0)
     {
-      return FALSE;
+      return false;
     }
 
   wassert (currFunc);
 
   /* if this is a forces overlay */
-  if (IFFUNC_ISOVERLAY(currFunc->type)) return TRUE;
+  if (IFFUNC_ISOVERLAY(currFunc->type))
+    return true;
 
   // struct / union parameters are written using memcpy, which goes very wrong if they are overlaid with memcpy's parameters.
   for (value *arg = FUNC_ARGS (currFunc->type); arg; arg = arg->next)
     if (IS_STRUCT (arg->type))
       return false;
 
-  /* otherwise do thru the blocks and see if there
-     any function calls if found then return false */
+  /* otherwise go through the blocks and see if there are
+     any function calls, if found then return false */
   for (i = 0; i < count; i++)
     {
       iCode *ic;
@@ -1371,17 +1379,18 @@ canOverlayLocals (eBBlock ** ebbs, int count)
                 {
                   sym_link *ftype = operandType(IC_LEFT(ic));
                   /* builtins only can use overlays */
-                  if (!IFFUNC_ISBUILTIN(ftype)) return FALSE;
+                  if (!IFFUNC_ISBUILTIN(ftype))
+                    return false;
                 }
               else if (ic->op == PCALL)
                 {
-                  return FALSE;
+                  return false;
                 }
           }
     }
 
-  /* no function calls found return TRUE */
-  return TRUE;
+  /* no function calls found return true */
+  return true;
 }
 
 /*-----------------------------------------------------------------*/
@@ -1393,17 +1402,17 @@ doOverlays (eBBlock ** ebbs, int count)
   if (!overlay)
     return;
 
-  /* check if the parameters and local variables
+  /* Check if the parameters and local variables
      of this function can be put in the overlay segment
      This check is essentially to see if the function
-     calls any other functions if yes then we cannot
+     calls any other functions. If yes then we cannot
      overlay */
   if (canOverlayLocals (ebbs, count))
-    /* if we can then put the parameters &
+    /* If we can then put the parameters &
        local variables in the overlay set */
     overlay2Set ();
   else
-    /* otherwise put them into data where they belong */
+    /* Otherwise put them into data where they belong */
     overlay2data ();
 }
 
@@ -1429,9 +1438,11 @@ printAllocInfo (symbol *func, struct dbuf_s *oBuf)
   cnt += printAllocInfoSeg (xstack, func, oBuf);
   cnt += printAllocInfoSeg (istack, func, oBuf);
   cnt += printAllocInfoSeg (code, func, oBuf);
+  cnt += printAllocInfoSeg (bit, func, oBuf);
   cnt += printAllocInfoSeg (data, func, oBuf);
-  cnt += printAllocInfoSeg (xdata, func, oBuf);
   cnt += printAllocInfoSeg (idata, func, oBuf);
+  cnt += printAllocInfoSeg (pdata, func, oBuf);
+  cnt += printAllocInfoSeg (xdata, func, oBuf);
   cnt += printAllocInfoSeg (sfr, func, oBuf);
   cnt += printAllocInfoSeg (sfrbit, func, oBuf);
 

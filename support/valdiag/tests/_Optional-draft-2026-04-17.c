@@ -9,6 +9,15 @@
 #ifdef TEST1
 #include <stdio.h>
 
+/* The type check below is affected by bug #4071 on ds390 and mcs51, and
+   currently also fails on pdk13, pdk14 and pdk15. */
+#if !defined(__SDCC_ds390) && !defined(__SDCC_MODEL_LARGE) && \
+    !defined(__SDCC_pdk13) && !defined(__SDCC_pdk14) && \
+    !defined(__SDCC_pdk15) && \
+    (!defined(__SDCC_mcs51) || defined(__SDCC_STACK_AUTO))
+#define CHECK_POINTER_TO_ARRAY_CONVERSION
+#endif
+
 struct S {
   char m[64];
 };
@@ -23,7 +32,7 @@ char *str_from_struct(_Optional const struct S *pocs)
 
   static_assert(_Generic(pocs->m,
                          const char *: 1,
-                         default: 0)); /* IGNORE */ // TODO: implement!
+                         default: 0));
 
   // constraint violation: decayed type is pointer to const char
   return pocs->m; /* WARNING */
@@ -38,12 +47,14 @@ char *str_from_array(_Optional const char (*paocc)[64])
   // valid: array to pointer decay removes _Optional
   puts(*paocc);
 
+#ifdef CHECK_POINTER_TO_ARRAY_CONVERSION
   static_assert(_Generic(*paocc,
                          const char *: 1,
-                         default: 0)); /* IGNORE */ // TODO: implement!
+                         default: 0));
+#endif
 
   // constraint violation: decayed type is pointer to const char
-  return *paocc; // TODO: implement warning!
+  return *paocc; /* WARNING */
 }
 #endif
 
@@ -101,7 +112,7 @@ _Optional int *poi;
 // fails: qualifier is dropped from controlling expression
 static_assert(_Generic(*poi,
                        _Optional int: 1,
-                       default: 0)); /* ERROR */
+                       default: 0)); /* WARNING */
 #endif
 
 // EXAMPLE 1 An implementation that performs data-flow analysis is encouraged to produce a
@@ -263,9 +274,9 @@ void atom(void)
   _Optional int *poi = (_Optional int *){nullptr};
 
   // constraint violation: type name is optional-qualified
-  poi = &(_Optional int){0}; /* WARNING */
-  (_Optional int){0}; /* WARNING */
-  (int *_Optional){nullptr}; /* WARNING */
+  poi = &(_Optional int){0}; /* ERROR */
+  (_Optional int){0}; /* ERROR */
+  (int *_Optional){nullptr}; /* ERROR */
 }
 #endif
 
@@ -380,7 +391,7 @@ int opt_fflush(_Optional FILE *stream)
 
 #define FLUSH_ONE(STREAM) opt_fflush(&*(STREAM))
 #define FLUSH_ALL()       opt_fflush(nullptr)
- 
+
 int main(void)
 {
   _Optional FILE *stream = fopen("test", "wb");
@@ -495,7 +506,7 @@ ptrdiff_t blue(_Optional int *poi, int *pi)
 
 int *green(_Optional int *poi)
 {
-  return poi - 0; // recommended diagnostic /* IGNORE */ // BUG: missing warning
+  return poi - 0; // recommended diagnostic /* WARNING */
 }
 
 int *black(_Optional int *poi)
@@ -709,7 +720,7 @@ void free_str_1(_Optional const char *s)
 void free_str_2(_Optional const char *s)
 {
   // constraint violation: const qualifier is lost
-  free(optional_cast(s)); /* IGNORE */ //BUG: missing diagnostic
+  free(optional_cast(s)); /* WARNING */
 }
 
 // s has the intended type
@@ -937,7 +948,7 @@ void lynne(void)
 void andy(_Optional int *poi)
 {
   int *pi;
-  
+
   pi = (int *)poi;          // does not constrain pi to non-null
   *(_Optional int *)pi = 2; // recommended diagnostic /* WARNING */
 }
@@ -1434,7 +1445,7 @@ TOPI *popi;     // treat popi but not *popi as potentially null
 TPOI poi;       // treat poi as potentially null
 TOPFRI *popfri; // treat popfri but not *popfri as maybe null
 TPOFRI pofri;   // treat pofri as potentially null
- 
+
 // constraint violation: object type is optional-qualified
 TOI oi; /* ERROR */
 X oi; /* ERROR */
@@ -1551,4 +1562,3 @@ int main(void)
   return 0;
 }
 #endif
-

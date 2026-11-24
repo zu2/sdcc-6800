@@ -28,6 +28,10 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "glob.h"
 #include "49wrap.h"
 #include "r6kwrap.h"
+#include "tacl.h"
+#include "tbcl.h"
+#include "tccl.h"
+#include "rtypes.h"
 
 #include "r6kcl.h"
 
@@ -72,6 +76,35 @@ cl_r6k::init(void)
   return 0;
 }
 
+void
+cl_r6k::mk_hw_elements(void)
+{
+  class cl_hw *h;
+  cl_r5k::mk_hw_elements();
+  add_hw(h= new cl_tax(this, 11, 0xa2, 0x08, rxkhw_ta12_out)); h->init();
+  add_hw(h= new cl_tax(this, 12, 0, 0, 0)); h->init();
+}
+
+void
+cl_r6k::make_ta8_10(void)
+{
+  class cl_hw *h;
+  add_hw(h= new cl_tax(this,  8, 0xa2, 0x01, rxkhw_ta12_out)); h->init();
+  add_hw(h= new cl_tax(this,  9, 0xa2, 0x02, rxkhw_ta12_out)); h->init();
+  add_hw(h= new cl_tax(this, 10, 0xa2, 0x04, rxkhw_ta12_out)); h->init();
+}
+
+class cl_hw *
+cl_r6k::mk_tb(void)
+{
+  return new cl_tbs6(this);
+}
+
+class cl_hw *
+cl_r6k::mk_tc(void)
+{
+  return new cl_tc6(this);
+}
 
 struct dis_entry *
 cl_r6k::dis_entry(t_addr addr)

@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------------------
-   _divschar.c :- routine for signed char (8 bit) division. just calls
+   __divschar.c :- routine for signed char (8 bit) division. just calls
                   routine for signed int division after sign extension
 
    Copyright (C) 2013, Philipp Klaus Krause . pkk@spth.de
@@ -27,20 +27,10 @@
    might be covered by the GNU General Public License.
 -------------------------------------------------------------------------*/
 
-signed int
-_divschar (signed char x, signed char y)
-{
-  return ((int)x / (int)y);
-}
+#include <sdcc-lib.h>
 
 signed int
-_divuschar (unsigned char x, signed char y)
-{
-  return ((int)x / (int)y);
-}
-
-signed int
-_divsuchar (signed char x, unsigned char y)
+__divschar (signed char x, signed char y) __SDCC_NONBANKED
 {
   return ((int)x / (int)y);
 }

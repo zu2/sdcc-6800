@@ -1,7 +1,7 @@
 /* ds8.h */
 
 /*
- *  Copyright (C) 1998-2025  Alan R. Baldwin
+ *  Copyright (C) 1998-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -153,6 +153,8 @@ extern struct PreDef preDef[];
 /*
  * Extended Addressing Modes
  */
+//#define	R_J11	0x0100		/* 11-Bit Addressing Mode */
+//#define	R_J19	0x0200		/* 19-Bit Addressing Mode */
 
 /*
  * Assembler Types
@@ -184,6 +186,6 @@ extern	int		reg(void);
 
 	/* ds8mch.c */
 extern	void		machine(struct mne *mp);
-extern  int             mchpcr(struct expr *esp);
+extern	int		mchpcr(struct expr *esp, int *v, int n);
 extern	void		minit(void);
 

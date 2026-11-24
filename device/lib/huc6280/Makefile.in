@@ -1,0 +1,37 @@
+# libc/huc6280 Makefile
+
+srcdir 		= @srcdir@
+top_srcdir      = @top_srcdir@
+top_builddir 	= @top_builddir@
+abs_top_builddir = @abs_top_builddir@
+
+include $(srcdir)/../common_files.mk
+
+# user configuration
+VPATH  		= $(srcdir):$(srcdir)/../mos-common:$(std_lib_dirs)
+AS		= $(top_builddir)/bin/sdas6500
+EXTRA_CFLAGS 	= --opt-code-speed
+PORT_CRT	= crt0.rel
+LIB_TYPE	= @LIB_TYPE@
+LIB		= huc6280.lib
+
+
+PORT_SDCC = $(COMMON_SDCC) \
+  $(COMMON_SDCC_LL) \
+  _mulschar \
+  _muluchar \
+  sdcc_indirect_jsr \
+  sdcc_regs
+
+PORT_FLOAT = $(COMMON_FLOAT) \
+  sdcc_float
+
+PORT_LIBC = $(COMMON_LIBC) \
+  $(COMMON_LIBC_STRUCT_RET) \
+  atomic_flag_clear \
+  atomic_flag_test_and_set
+
+PORT_LIBM = $(COMMON_LIBM)
+
+include $(srcdir)/../library_build.mk
+

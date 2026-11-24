@@ -1,7 +1,7 @@
 /* asexpr.c */
 
 /*
- *  Copyright (C) 1989-2025  Alan R. Baldwin
+ *  Copyright (C) 1989-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -44,47 +44,154 @@
  *	asexpr.c contains the following functions:
  *		void	abscheck()
  *		a_uint	absexpr()
- *		int	is_abs()
+ *		void	binop()
  *		void	clrexpr()
  *		int	digit()
  *		void	expr()
+ *		void	exprx()
  *		void	exprmasks()
+ *		void	exprscan()
+ *		void	exprsym()
+ *		int	is_abs()
+ *		int	is_digit()
+ *	struct	sym *	newsym()
  *		int	oprio()
+ *		int	rngchk()
  *		void	term()
- *              a_uint  rngchk()
  *
  *	asexpr.c contains no local/static variables
  */
 
-/*)Function	void	expr(esp, n)
+/*)Function	void	expr(esp)
  *
  *		expr *	esp		pointer to an expr structure
- *		int	n		a firewall priority; all top
- *					level calls (from the user)
- *					should be made with n set to 0.
  *
- *	The function expr() evaluates an expression and
+ *	The function expr() initializes variables, calls
+ *	the evaluation function exprx(), and may call the
+ *	complex argument exprscan() function.  The evaluation
  *	stores its value and relocation information into
  *	the expr structure supplied by the user.
  *
  *	local variables:
- *		a_uint	ae		value from expr esp
- *		a_uint	ar		value from expr re
+ *		int	c		current assembler-source
+ *					text character
+ *		char *	jp		pointer to first source character
+ *		char *	kp		temporary pointer
+ *
+ *	global variables:
+ *		char	ctype[]		array of character types, one per
+ *					ASCII character
+ *		int	expr_radix	expr() radix value
+ *		int	ignrerr		ignore errors flag
+ *		char *	ip		pointer to next source character
+ *		int	radix		current assembler radix
+ *		int	rprterr		report errors flag
+ *
+ *	functions called:
+ *		void	exprx()		asexpr.c
+ *		void	exprscan()	asexpr.c
+ *		int	getnb()		aslex.c
+ *		void	unget()		aslex.c
+ *
+ *
+ *	side effects:
+ *		An expression is evaluated modifying the user supplied
+ *		expr structure, a sym structure maybe created for an
+ *		undefined symbol, and the parse of the expression may
+ *		terminate if a 'q' error occurs.
+ */
+
+/*
+ *	Notes about the processing of complex expressions that
+ *	is now supported by ASxxxx version 6 and later:
+ *
+ *	The function expr() has been modified to trap the
+ *	relocation errors, (r), and generate special symbols
+ *	to allow the relocations to be performed by the linker.
+ *
+ *	ASxxxx versions prior to 6 allowed only these
+ *	argument options:
+ *
+ *		1)	a local  constant
+ *		2)	a local  label
+ *		3)	a local  label +/- a constant
+ *		4)	a global constant
+ *		5)	a global label
+ *		6)	a global label +/- a constant
+ *
+ *	ASxxxx versions 6 and later support any valid
+ *	arithmetic or logical expression containing
+ *	local and/or global constants and/or labels.
+ *
+ *	The valid operations are all those
+ *	natively supported by the assembler.
+ *
+ */
+
+void
+expr(struct expr *esp)
+{
+	int c;
+	char *jp, *kp;
+
+	/*
+	 * Set ignore error
+	 * Clear The Inhibit Flag
+	 * Reset Relocation Error Count
+	 * Preset expr_radix
+	 */
+	ignrerr = (rprterr ? 0 : 1);
+	expr_radix = radix;
+	rlerr = 0;
+	/*
+	 *	Skip Any Leading White Space
+	 */
+	kp = ip;
+	c = getnb();
+	unget(c);
+	jp = ip;
+	ip = kp;
+	/*
+	 * Process Expression
+	 */
+	exprx(esp, 0);
+	/*
+	 * Reset error processing
+	 */
+	rprterr = 0;
+	ignrerr = 0;
+	/*
+	 * Push Complex Relocations To Linker
+	 */
+	if ((pass != 0) && (rlerr != 0) && (jp != ip)) {
+		exprscan(esp, jp, ip);
+	}
+}
+
+/*)Function	void	exprx(esp, n)
+ *
+ *		expr *	esp		pointer to an expr structure
+ *		int	n		a firewall priority
+ *
+ *	The function exprx() evaluates an expression and
+ *	stores its value and relocation information into
+ *	the expr structure supplied by the user. This
+ *	function should only be called after initialization
+ *	from expr() or recursively during exprx() processing.
+ *
+ *	local variables:
  *		int	c		current assembler-source
  *					text character
  *		int	p		current operator priority
- *		area *	ap		pointer to an area structure
  *		exp	re		internal expr structure
  *
  *	global variables:
  *		char	ctype[]		array of character types, one per
  *					ASCII character
- *
  *	functions called:
- *		void	abscheck()	asexpr.c
+ *		void	binop()		asexpr.c
  *		void	clrexpr()	asexpr.c
- *		void	err()		assubr.c
- *		void	expr()		asexpr.c
+ *		void	exprx()		asexpr.c
  *		int	get()		aslex.c
  *		int	getnb()		aslex.c
  *		int	oprio()		asexpr.c
@@ -101,168 +208,538 @@
  */
 
 void
-expr(struct expr *esp, int n)
+exprx(struct expr *esp, int n)
 {
-        a_uint ae, ar;  
 	int c, p;
-	struct area *ap;
 	struct expr re;
 
+	/*
+	 * Process Expression
+	 */
 	term(esp);
 	while (ctype[c = getnb()] & BINOP) {
 		/*
-                 * Handle binary operators + - * / & | % ^ << >> [
+		 * Handle binary operators + - * / & | % ^ << >> [
 		 */
 		if ((p = oprio(c)) <= n)
 			break;
 		if ((c == '>' || c == '<') && c != get())
-			xerr('q', "Binary operator >> or << expected.");
+			xerr('q', "Binary operator >> or << expected");
 		clrexpr(&re);
-		expr(&re, p);
+		exprx(&re, p);
 		esp->e_rlcf |= re.e_rlcf;
-                
-                ae = esp->e_addr;
-                ar = re.e_addr;
 
-                if (c == '+') {
-			/*
-                         * esp + re, at least one must be absolute
-			 */
-                        if (esp->e_base.e_ap == NULL) {
-                                /*
-                                 * esp is absolute (constant),
-                                 * use area from re
-                                 */
-                                esp->e_base.e_ap = re.e_base.e_ap;
-                        } else
-                        if (re.e_base.e_ap) {
-                                /*
-                                 * re should be absolute (constant)
-                                 */
-				xerr('r', "Arg1 + Arg2, Arg2 must be a constant.");
-			}
-                        if (esp->e_flag && re.e_flag)
-				xerr('r', "Arg1 + Arg2, Both arguments cannot be external.");
-                        if (re.e_flag)
-				esp->e_flag = 1;
-                        ae += ar;
- 		} else
-                if (c == '-') {
-			/*
-                         * esp - re
-			 */
-                        if ((ap = re.e_base.e_ap) != NULL) {
-                                if (esp->e_base.e_ap == ap) {
-                                        esp->e_base.e_ap = NULL;
-                                } else {
-					xerr('r', "Arg1 - Arg2, Arg2 must be in same area.");
-				}
-			}
-                        if (re.e_flag)
-				xerr('r', "Arg1 - Arg2, Arg2 cannot be external.");
-                        ae -= ar;
-		} else {
-			/*
-                         * Both operands (esp and re) must be constants
-			 */
-                        /* SD/MB :- postpone the abscheck to cases '>' and '['
-                           and change the right shift operator.. if
-                           right shift by 8/16/24 bits of a relocatable address then
-                           the user wants the higher order byte. set the R_MSB
-                           for the expression */
-                        if (c != '>' && c != '[')
-                                abscheck(esp);
-                        abscheck(&re);
-                        switch (c) {
-			/*
-                         * The (int) /, %, and >> operations
-                         * are truncated to a_bytes.
-			 */
-                        case '*':
-                                ae *= ar;
-                                break;
-
-                        case '/':
-                                if (ar == 0) {
-                                        ae = 0;
-                                        err('z');
-                                } else {
-                                        ae /= ar;
-				}
-                                break;
-
-                        case '&':
-                                ae &= ar;
-                                break;
-
-                        case '|':
-                                ae |= ar;
-                                break;
-
-                        case '%':
-                                if (ar == 0) {
-                                        ae = 0;
-                                        err('z');
-                                } else {
-                                        ae %= ar;
-				}
-                                break;
-
-                        case '^':
-                                ae ^= ar;
-                                break;
-
-                        case '<':
-                                ae <<= ar;
-                                break;
-
-                        case '>':
-                                /* SD change here */
-                                /* if the left is a relative address &
-                                   the right side is 8/16/24 then */
-                                if (esp->e_base.e_ap && ar == 8) {
-                                        esp->e_rlcf |= R_MSB;
-                                        break;
-				}
-                                else if (esp->e_base.e_ap && ar == 16) {
-                                        esp->e_rlcf |= R_HIB;
-                                        break;
-				}
-                                else if (esp->e_base.e_ap && ar == 24) {
-                                        esp->e_rlcf |= R_MSB | R_HIB;
-                                        break;
-				}
-                                /* else continue with the normal processing */
-                                abscheck(esp);
-                                ae >>= ar;
-                                break;
-
-                        case '[':
-                                if (is_sdas() && is_sdas_target_8051_like()) {
-                                        /* MB added [ for bit access in bdata */
-                                        if (getnb() != ']')
-                                                qerr();
-
-                                        /* if the left is a relative address then */
-                                        if (esp->e_base.e_ap) {
-                                                ae |= (ar | 0x80) << 8;
-                                                break;
-                                        }
-                                        else if ((ae & 0x87) == 0x80) {
-                                                ae |= ar;
-                                                break;
-                                        }
-				}
-                                /* fall through */
-
-                        default:
-                                qerr();
-                                break;
-			}
-		}
-                esp->e_addr = rngchk(ae);
+		binop(c, esp, &re);
 	}
 	unget(c);
+}
+
+/*)Function	void	exprscan(struct expr *esp, char *bgn, char *end)
+ *
+ *		struct expr *	esp	pointer to an expr structure
+ *		char *		bgn	pointer to first character of argument
+ *		char *		end	pointer to last + 1 character of argument
+ *
+ *	The function exprscan() is called when the evaluation
+ *	of the argument expression results in relocation
+ *	errors (rerr()).  Relocation errors are created
+ *	when the argument is not a symbol +/- constant.
+ *
+ *	The function scans the argument to detect those
+ *	elements that are local symbols, local equates, or
+ *	the program counter('.').  For each of these elements
+ *	a hidden global symbol is created.  These created
+ *	symbols are substituted for the original elements
+ *	in the argument.  A new hidden global symbol is
+ *	created which contains this new argument.  The
+ *	assembler outputs this special symbol to the
+ *	.rel file.  The linker then processes the supplied
+ *	argument generating the value for this argument.
+ *		
+ *	local variables:
+ *		int	c		character from argument
+ *		int	ct		character case type
+ *		int	sc		argument scanning character
+ *		int	scnt		number of '$'s in argument segment
+ *		int	i		loop counter
+ *		int	n		n$ number
+ *		int	v		digit value
+ *		char	nbufr[]		name string buffer
+ *		char	obufr[]		output string buffer
+ *		char	sbufr[]		scanning argument buffer
+ *		char *	o		obufr pointer
+ *		char *	s		generic buffer pointer
+ *		struct sym *	sp	symbol structure pointer
+ *		struct tsym *	tp	tempoary symbol structure pointer
+ *
+ *	global variables:
+ *		struct asmf *	asmc	pointer to the current input structure
+ *		char	ctype[]		character type
+ *		int	rlsym		relocatable symbol counter
+ *
+ *	functions called:
+ *		int	digit()		asexpr.c
+ *		struct sym * newsym()	asexpr.c
+ *		void	exprsym()	asexpr.c
+ *		a_uint	rngchk()	asexpr.c
+ *		struct sym * slookup()	assym.c
+ *		int	sprintf()	c_library
+ *		int	strncpy()	c_library
+ *
+ *
+ *	side effects:
+ *		An expression is evaluated modifying the user supplied
+ *		expr structure, multiple sym structures may be created.
+ */
+
+void
+exprscan(struct expr *esp, char *bgn, char *end)
+{
+	int c, ct;
+	int i, d;
+	a_uint n;
+	char sbufr[128];
+	char nbufr[128];
+	char obufr[256];
+	char *o, *s;
+	struct sym *sp;
+	struct tsym *tp;
+
+	/*
+	 * Clear buffers
+	 */
+	o = obufr;	/* output string buffer */
+	*o = 0;
+	s = sbufr;	/* argument string buffer */
+	*s = 0;
+
+	/*
+	 * Override R_MSB when linker evaluates expression
+	 */
+	esp->e_rlcf &= ~R_MSB;
+
+	while (bgn <= end) {
+		if (bgn == end) {
+			c = 0;
+			ct = 0;
+		} else {
+			ct = ctype[(c = *bgn & 0x7F)];
+		}
+		/*
+		 * Note: SPACE and ETC also have a ctype[c] of 0
+ 		 */
+		if ((ct == 0) || (ct == BINOP)) {
+			if (s != sbufr) {
+				s = sbufr;
+				/*
+				 * Determine first character type
+				 */
+				ct = ctype[*s & 0x007F];
+				/*
+				 * Evaluate digit sequences as reusable
+				 * symbols if followed by a '$'.
+				 */
+				while (ctype[*s++ & 0x007F] & RAD10) { ; }
+
+				if (((ct & RAD10) == RAD10) && (*(s-1) == '$') && (*s == 0)) {
+					s = sbufr;
+					n = 0;
+					while ((d = digit(*s++, 10)) >= 0) {
+						n = 10*n + d;
+					}
+					n = rngchk(n);
+					/*
+					 * Reusable symbol follows this symbol
+					 */
+					tp = symp->s_tsym;
+					for (i=0; i<NHASH; i++) {
+						sp = symhash[i];
+						while (sp) {
+							if (sp->s_tsym == tp) {
+								i = NHASH;
+								break;
+							}
+							sp = sp->s_sp;
+						}
+					}
+					/*
+					 * Create symbol name
+					 */
+					sprintf(nbufr, "%.32s.%.80s.%d$", asmc->afn, sp->s_id, n);
+					while (tp) {
+						if (tp->t_num == n) {
+							/*
+							 * Create/Update symbol
+							 */
+							sp = newsym(nbufr, sbufr, tp->t_area, tp->t_addr);
+							break;
+						}
+						tp = tp->t_lnk;
+					}
+					s = nbufr;
+				} else {
+					/*
+					 * Create/Update symbol
+					 */
+					sp = slookup(sbufr);
+					if (sp != NULL) {
+						if (sp == &dot) {
+							sprintf(nbufr, "%.32s_%d", asmc->afn, ++rlsym);
+							sp = newsym(nbufr, sbufr, sp->s_area, sp->s_addr);
+							s = nbufr;
+						} else {
+							sprintf(nbufr, "%.32s.%.80s", asmc->afn, sbufr);
+							if ((sp->s_flag & S_GBL) == 0) {
+								sp = newsym(nbufr, sbufr, sp->s_area, sp->s_addr);
+								s = nbufr;
+							} else {
+								sp = slookup(nbufr);
+								if (sp != NULL) {
+									sp->s_flag &= ~S_GBL;
+								}
+								s = sbufr;
+							}
+						}
+					} else {
+						s = sbufr;
+					}
+				}
+				while (*s) {
+					if (o < &obufr[250]) *o++ = *s;
+					s++;
+				}
+				s = sbufr;		/* clear symbol string */
+				*s = 0;
+			}
+			*o = c;				/* copy SPACE/ETC/BINOP or terminate string */
+			if (o < &obufr[250]) o++;	/* limit for exprsym() */
+		} else {
+			*s = c;				/* build symbol string */
+			if (s < &sbufr[126]) s++;	/* limit to buffer size */
+			*s = 0;				/* Terminate buffer */
+		}
+		bgn++;
+	}
+	/* strip trailing white space */
+	o = obufr + strlen(obufr);
+	while ((o != obufr) && (((c = *(--o)) == ' ') || (c == '\t'))) *o = 0;
+	/* create expression symbol */
+	exprsym(esp, obufr);
+}
+
+/*)Function	struct sym *newsym(char *str, struct area *ap, a_uint addr)
+ *
+ *
+ *		char *		str	contains the name of the new symbol
+ *		struct area *	ap	symbols area
+ *		a_uint		addr	symbol address
+ *
+ *	The function newsym() creates a new special symbol
+ *	with the attributes of global and hidden.
+ *	The name of the symbol is provided by the string str.
+ *	The symbols area and address values are set using
+ *	the ap and addr parameters.
+ *
+ *	local variables:
+ *		struct sym *	sp	the symbol structure
+ *
+ *	global variables:
+ *		int	rlsym		relocation symbol number
+ *
+ *	functions called:
+ *		struct sym * lookup()	assym.c
+ *		void	xerr()		assubr.c
+ *
+ *
+ *	side effects:
+ *		A new hidden global symbol may be created.
+ */
+
+struct sym *
+newsym(char *str, char *id, struct area *ap, a_uint addr)
+{
+	struct sym *sp;
+
+	sp = slookup(str);
+	if (sp == NULL) {
+		/*
+		 * Make a new global symbol but hidden
+		 */
+		sp = lookup(str);
+		sp->s_id = strsto(str);
+		sp->s_type = S_USER;
+		sp->s_flag |= (S_GBL | S_HID);
+		sp->s_expr = strsto(id);
+	}
+	sp->s_area = ap;
+	sp->s_addr = addr;
+
+	return(sp);
+}
+
+/*)Function	void	exprsym(struct expr *esp, char *str)
+ *
+ *		struct expr *	esp	pointer to the expression to modify
+ *		char *	str		pointer to the argument string
+ *
+ *	The function exprsym() creates a special symbol
+ *	to allow the linker to process complex arguments
+ *	containing more than just a constant or an external
+ *	symbol +/- a constant.
+ *
+ *	local variables:
+ *		char *	bufr		string buffer
+ *		char *	p		string pointer
+ *		sym	sp		pointer to a symbol structure
+ *
+ *	global variables:
+ *		int	rlsym		relocation symbol number
+ *		int	expr_radix	internal expr() radix value
+ *
+ *	functions called:
+ *		sym *	lookup()	assym.c
+ *		int	sprintf()	c_library
+ *		char *	strcat()	c_library
+ *		char *	strcpy()	c_library
+ *		char *	strsto()	assym.c
+ *		void	xerr()		assubr.c
+ *
+ *	side effects:
+ *		A new unique symbol is created and the expression
+ *		string required to calculate the value of the symbol
+ *		is saved in the symbol structure.
+ */
+
+void
+exprsym(struct expr *esp, char *str)
+{
+	char bufr[256];
+	char *p;
+	struct sym *sp;
+
+	/*
+	 * Create a new symbol
+	 */
+	sprintf(bufr, "%.32s_%d", asmc->afn, ++rlsym);
+	sp = lookup(bufr);
+	if ((sp->s_type == S_NEW) && (sp->s_flag == 0)) {
+		sp->s_id = strsto(bufr);
+		/*
+		 * Pass current radix to linker
+		 * when evaluating the expression.
+		 */
+		switch(expr_radix) {
+		case 2:		p = "^B(";	break;
+		case 8:		p = "^O(";	break;
+		case 10:	p = "^D(";	break;
+		case 16:	p = "^X(";	break;
+		default:	p = "";		break;
+		}
+		strcpy(bufr, p);
+		strcat(bufr, str);
+		if (*p) strcat(bufr, ")");
+		sp->s_expr = strsto(bufr);
+		/*
+		 * Make symbol global and hidden with an expression
+		 */
+		sp->s_flag |= (S_GBL | S_SWX | S_HID);
+	}
+	esp->e_flag = 1;
+	esp->e_addr = 0;
+	esp->e_base.e_sp = sp;
+}
+
+/*)Function	void	binop(c, esp, re)
+ * 
+ *		int	c		operation to perform
+ *		expr *	esp		pointer to LHS argument, result
+ *		expr *	re		pointer to RHS argument
+ *
+ *	The function binop() evaluates a binary operator and
+ *	stores its value and relocation information into the
+ *	esp structure supplied by the user.
+ *
+ *	Notes about the arithmetic:
+ *		The coding emulates N-Bit unsigned
+ *		arithmetic operations.  This allows
+ *		program compilation without regard to the
+ *		intrinsic integer length of the host
+ *		machine.
+ *
+ *	local variables:
+ *		a_uint	ae		value from expr esp
+ *		a_uint	ar		value from expr re
+ *		area *	ap		pointer to an area structure
+ *
+ *	functions called:
+ *		void	abscheck()	asexpr.c
+ *		void	err()		assubr.c
+ *		void	xerr()		assubr.c
+ */
+
+void
+binop(int c, struct expr *esp, struct expr *re)
+{
+	a_uint ae, ar;
+	int re_is_abs;
+	struct area *ap;
+
+	/*
+	 * N-Bit Unsigned Arithmetic
+	 */
+	ae = esp->e_addr;
+	ar = re->e_addr;
+
+	if (c == '+') {
+		/*
+		 * esp + re, at least one must be absolute
+		 */
+		if (esp->e_base.e_ap == NULL) {
+			/*
+			 * esp is absolute (constant),
+			 * use area from re
+			 */
+			esp->e_base.e_ap = re->e_base.e_ap;
+		} else
+		if (re->e_base.e_ap) {
+			/*
+			 * re should be absolute (constant)
+			 */
+			xerr('r', "Arg1 + Arg2, Arg2 must be a constant.");
+		}
+		if (esp->e_flag && re->e_flag)
+			xerr('r', "Arg1 + Arg2, Both arguments cannot be external.");
+		if (re->e_flag)
+			esp->e_flag = 1;
+		ae += ar;
+	} else
+	if (c == '-') {
+		/*
+		 * esp - re
+		 */
+		if ((ap = re->e_base.e_ap) != NULL) {
+			if (esp->e_base.e_ap == ap) {
+				esp->e_base.e_ap = NULL;
+			} else {
+				xerr('r', "Arg1 - Arg2, Arg2 must be in same area.");
+			}
+		}
+		if (re->e_flag)
+			xerr('r', "Arg1 - Arg2, Arg2 cannot be external.");
+		ae -= ar;
+	} else {
+		/*
+		 * Both operands (esp and re) must be constants
+		 */
+		re_is_abs = is_abs(re);
+		/* SD/MB :- postpone the abscheck to cases '>' and '['
+		   and change the right shift operator.. if
+		   right shift by 8/16/24 bits of a relocatable address then
+		   the user wants the higher order byte. set the R_MSB
+		   for the expression */
+		if (c != '>' && c != '[')
+			abscheck(esp);
+		abscheck(re);
+		switch (c) {
+		/*
+		 * The (int) /, %, and >> operations
+		 * are truncated to a_bytes.
+		 */
+		case '*':
+			ae *= ar;
+			break;
+
+		case '/':
+			if (ar == 0) {
+				ae = 0;
+				if (re_is_abs && ignrerr) {
+					ignrerr = 0;
+					err('z');
+					ignrerr = 1;
+				} else {
+					err('z');
+				}
+			} else {
+				ae /= ar;
+			}
+			break;
+
+		case '&':
+			ae &= ar;
+			break;
+
+		case '|':
+			ae |= ar;
+			break;
+
+		case '%':
+			if (ar == 0) {
+				ae = 0;
+				if (re_is_abs && ignrerr) {
+					ignrerr = 0;
+					err('z');
+					ignrerr = 1;
+				} else {
+					err('z');
+				}
+			} else {
+				ae %= ar;
+			}
+			break;
+
+		case '^':
+			ae ^= ar;
+			break;
+
+		case '<':
+			ae <<= ar;
+			break;
+
+		case '>':
+			/* SD change here */
+			/* if the left is a relative address &
+			   the right side is 8/16/24 then */
+			if (esp->e_base.e_ap && ar == 8) {
+				esp->e_rlcf |= R_MSB;
+				break;
+			}
+			else if (esp->e_base.e_ap && ar == 16) {
+				esp->e_rlcf |= R_HIB;
+				break;
+			}
+			else if (esp->e_base.e_ap && ar == 24) {
+				esp->e_rlcf |= R_MSB | R_HIB;
+				break;
+			}
+			/* else continue with the normal processing */
+			abscheck(esp);
+			ae >>= ar;
+			break;
+
+		case '[':
+			if (is_sdas() && is_sdas_target_8051_like()) {
+				/* MB added [ for bit access in bdata */
+				if (getnb() != ']')
+					qerr();
+
+				/* if the left is a relative address then */
+				if (esp->e_base.e_ap) {
+					ae |= (ar | 0x80) << 8;
+					break;
+				}
+				else if ((ae & 0x87) == 0x80) {
+					ae |= ar;
+					break;
+				}
+			}
+			/* fall through */
+
+		default:
+			qerr();
+			break;
+		}
+	}
+	esp->e_addr = rngchk(ae);
 }
 
  /*)Function	a_uint	absexpr()
@@ -293,7 +770,7 @@ absexpr(void)
 	struct expr e;
 
 	clrexpr(&e);
-	expr(&e, 0);
+	expr(&e);
 	abscheck(&e);
 	return (e.e_addr);
 }
@@ -328,7 +805,7 @@ absexpr(void)
  *	global variables:
  *		char	ctype[]		array of character types, one per
  *					ASCII character
- *              int     nflag           don't resolve global assigned value symbols flag
+ *		int	expr_radix	internal expression radix
  *		sym *	symp		pointer to a symbol structure
  *
  *	functions called:
@@ -354,40 +831,58 @@ absexpr(void)
 void
 term(struct expr *esp)
 {
-	int c;
-        const char *jp;
+	int c, d;
+	const char *jp;
 	char id[NCPS];
 	struct sym  *sp;
 	struct tsym *tp;
-        int r, v;
+	int r;
 	a_uint n;
 
- 	r = radix;
+	r = expr_radix;
 	c = getnb();
 	/*
- 	 * Discard the unary '+' at this point and
+	 * Discard the unary '+' at this point and
 	 * also any reference to numerical arguments
 	 * associated with the '#' prefix.
 	 */
 	while (c == '+' || c == '#') { c = getnb(); }
+
 	/*
- 	 * Evaluate all binary operators
-	 * by recursively calling expr().
+	 * Evaluate all binary operators
+	 * by recursively calling exprx().
 	 */
 	if (c == LFTERM) {
-		expr(esp, 0);
+		exprx(esp, 0);
 		if (getnb() != RTTERM)
 			qerr();
 		return;
 	}
+	unget(c);
+
+	/*
+	 * If mchterm_ptr != NULL then a call to
+	 * the machine specific 'mchterm()' function
+	 * is made.  If the argument is processed
+	 * the return value is non zero and the
+	 * argument's value is returned in esp.
+  	 * If the argument is not used then a zero
+	 * is returned and the normal 'term()'
+	 * processing continues.
+	 */
+	if (*mchterm_ptr && ((*mchterm_ptr)(esp))) {
+		return;
+	}
+
+	c = getnb();
 	if (c == '-') {
-		expr(esp, 100);
+		exprx(esp, 100);
 		abscheck(esp);
 		esp->e_addr = ~esp->e_addr + 1;
 		return;
 	}
 	if (c == '~') {
-		expr(esp, 100);
+		exprx(esp, 100);
 		abscheck(esp);
 		esp->e_addr = ~esp->e_addr;
 		return;
@@ -395,56 +890,56 @@ term(struct expr *esp)
 	if (c == '\'') {
 		esp->e_mode = S_USER;
 		esp->e_addr = getmap(-1)&0377;
-                /* MB: accept a closing ' */
+		/* MB: accept a closing ' */
 		c = get();
-                if (c != '\'')
+		if (c != '\'')
 			unget(c);
 		return;
 	}
 	if (c == '\"') {
 		esp->e_mode = S_USER;
 		if ((int) hilo) {
-		    esp->e_addr  = (getmap(-1)&0377)<<8;
-		    esp->e_addr |= (getmap(-1)&0377);
+			esp->e_addr  = (getmap(-1)&0377)<<8;
+			esp->e_addr |= (getmap(-1)&0377);
 		} else {
-		    esp->e_addr  = (getmap(-1)&0377);
-		    esp->e_addr |= (getmap(-1)&0377)<<8;
+			esp->e_addr  = (getmap(-1)&0377);
+			esp->e_addr |= (getmap(-1)&0377)<<8;
 		}
-                /* MB: accept a closing " */
+		/* MB: accept a closing " */
 		c = get();
-                if (c != '\"')
+		if (c != '\"')
 			unget(c);
 		return;
 	}
 	if (c == '>' || c == '<') {
-                if (is_sdas_target_pdk()) {
-                        waddrmode = 1;
+		if (is_sdas_target_pdk()) {
+			waddrmode = 1;
 		}
-		expr(esp, 100);
-                if (is_sdas_target_pdk()) {
-                        waddrmode = 0;
+		exprx(esp, 100);
+	if (is_sdas_target_pdk()) {
+			waddrmode = 0;
 		}
 		if (is_abs (esp)) {
 			/*
 			 * evaluate byte selection directly
 			 */
 			if (c == '>')
-                                esp->e_addr >>= 8;
+				esp->e_addr >>= 8;
 			esp->e_addr &= 0377;
 			return;
 		} else {
 			/*
 			 * let linker perform byte selection
 			 */
-                        esp->e_rlcf |= R_BYTX;
+			esp->e_rlcf |= R_BYTX;
 			if (c == '>')
 				esp->e_rlcf |= R_MSB;
 			return;
 		}
 	}
 	/*
-         * Evaluate digit sequences as reusable symbols
-         * if followed by a '$' or as constants.
+	 * Evaluate digit sequences as reusable
+	 * symbols if followed by a '$' or as constants.
 	 */
 	if (ctype[c] & DIGIT) {
 		esp->e_mode = S_USER;
@@ -454,8 +949,8 @@ term(struct expr *esp)
 		}
 		if (*jp == '$') {
 			n = 0;
-			while ((v = digit(c, 10)) >= 0) {
-				n = 10*n + v;
+			while ((d = digit(c, 10)) >= 0) {
+				n = 10*n + d;
 				c = get();
 			}
 			n = rngchk(n);
@@ -471,76 +966,76 @@ term(struct expr *esp)
 			err('u');
 			return;
 		}
-                if (c == '0') {
+		if (c == '0') {
 			c = get();
-                        switch (c) {
-                                case 'b':
-                                case 'B':
-                                        r = 2;
-                                        c = get();
-                                        break;
-                                case 'o':
-                                case 'O':
-                                case 'q':
-                                case 'Q':
-                                        r = 8;
-                                        c = get();
-                                        break;
-                                case 'd':
-                                case 'D':
-                                        r = 10;
-                                        c = get();
-                                        break;
-                                case 'h':
-                                case 'H':
-                                case 'x':
-                                case 'X':
-                                        r = 16;
-                                        c = get();
-                                        break;
-                                default:
-                                        break;
+			switch (c) {
+			case 'b':
+			case 'B':
+				r = 2;
+				c = get();
+				break;
+			case 'o':
+			case 'O':
+			case 'q':
+			case 'Q':
+				r = 8;
+				c = get();
+				break;
+			case 'd':
+			case 'D':
+				r = 10;
+				c = get();
+				break;
+			case 'h':
+			case 'H':
+			case 'x':
+			case 'X':
+				r = 16;
+				c = get();
+				break;
+			default:
+				break;
 			}
 		}
 		n = 0;
-		while ((v = digit(c, r)) >= 0) {
-			n = r*n + v;
+		while ((d = digit(c, r)) >= 0) {
+			n = r*n + d;
 			c = get();
 		}
-                unget(c);
-                if (is_sdas_target_pdk() && waddrmode) {
-                        n *= 2;
+		unget(c);
+		if (is_sdas_target_pdk() && waddrmode) {
+			n *= 2;
 		}
 		esp->e_addr = rngchk(n);
 		return;
 	}
 	/*
 	 * Evaluate '$' sequences as a temporary radix
-         * if followed by a '%', '&', '#', or '$'.
+	 * if followed by a '%', '&', '#', or '$'.
 	 */
 	if (c == '$') {
 		c = get();
-                if (c == '%' || c == '&' || c == '#' || c == '$') {
-                        switch (c) {
-                                case '%':
-                                        r = 2;
-                                        break;
-                                case '&':
-                                        r = 8;
-                                        break;
-                                case '#':
-                                        r = 10;
-                                        break;
-                                case '$':
-                                        r = 16;
-                                        break;
-                                default:
-                                        break;
+		if (c == '%' || c == '&' || c == '#' || c == '$') {
+			switch (c) {
+			case '%':
+				r = 2;
+				break;
+			case '&':
+				r = 8;
+				break;
+			case '#':
+				r = 10;
+				break;
+			case '$':
+				r = 16;
+				break;
+			default:
+				break;
 			}
 			c = get();
 			n = 0;
-			while ((v = digit(c, r)) >= 0) {
-				n = r*n + v;
+			while ((d = digit(c, r)) >= 0) {
+				n = r*n + d;
 				c = get();
 			}
 			unget(c);
@@ -548,45 +1043,37 @@ term(struct expr *esp)
 			esp->e_addr = rngchk(n);
 			return;
 		}
-                unget(c);
-                c = '$';
+		unget(c);
+		c = '$';
 	}
 	/*
-         * Evaluate symbols and labels
+	 * Evaluate Symbols and Labels
 	 */
 	if (ctype[c] & LETTER) {
 		getid(id, c);
 		esp->e_mode = S_USER;
 		sp = lookup(id);
-                /* Handle if the symbol or label is not yet defined.
+		/* Handle if the symbol or label is not yet defined.
 
-                   Also leave unevaluated if it's a global with an assigned value
-                   and the don't resolve global symbol assigns flag is set.
-                   This allows the value to get resolved at link time instead
-                   of during compile time. */
-                if ((sp->s_type == S_NEW) || ((sp->s_flag & S_GBL) && (sp->s_flag & S_ASG) && (nflag))) {
-                        esp->e_addr = 0;
+		   Also leave unevaluated if it's a global with an assigned value
+		   and the don't resolve global symbol assigns flag is set.
+		   This allows the value to get resolved at link time instead
+		   of during compile time. */
+		if ((sp->s_type == S_NEW) || ((sp->s_flag & S_GBL) && (sp->s_flag & S_ASG) && (nflag))) {
+			esp->e_addr = 0;
 			/*
-                         * Flag the expression symbol as external if it's global
+			 * Flag the expression symbol as external if it's global
 			 */
 			if (sp->s_flag&S_GBL) {
 				esp->e_flag = 1;
 				esp->e_base.e_sp = sp;
 				return;
 			}
-			/*
-                         * Otherwise it's an undefined symbol
-			 */
 			err('u');
 		} else {
 			esp->e_mode = sp->s_type;
 			esp->e_addr = sp->s_addr;
 			esp->e_base.e_ap = sp->s_area;
-                        /* MB: abused bit 15 of s_addr to indicate bit-addressable bytes */
-                        if ((sp->s_addr & 0x8000) && sp->s_area &&
-                            (!strcmp(sp->s_area->a_id, "BSEG_BYTES") || !strcmp(sp->s_area->a_id, "BIT_BANK"))) {
-                                esp->e_rlcf |= R_BIT | R_BYTX;
-			}
 		}
 		return;
 	}
@@ -642,6 +1129,9 @@ digit(int c, int r)
 	if (r == 2) {
 		if (ctype[c] & RAD2)
 			return (c - '0');
+	}
+	if (ctype[c] & RAD16) {
+		err('k');
 	}
 	return (-1);
 }
@@ -785,8 +1275,8 @@ oprio(int c)
 		return (3);
 	if (c == '|')
 		return (1);
-        if (is_sdas() && is_sdas_target_8051_like() && c == '[')
-                return (12);
+	if (is_sdas() && is_sdas_target_8051_like() && c == '[')
+		return (12);
 	return (0);
 }
 
@@ -808,7 +1298,7 @@ oprio(int c)
  *	side effects:
  *		expression structure cleared.
  */
- 
+
 void
 clrexpr(struct expr *esp)
 {
@@ -849,7 +1339,7 @@ clrexpr(struct expr *esp)
  *		arithmetic overflow cannot be determined.
  *		This ambiguity is caused by the inability
  *		to distinguish signed and unsigned values
- *		at the instrinsic sizeof(int) size. 
+ *		at the instrinsic sizeof(int) size.
  */
 
 a_uint
@@ -863,7 +1353,7 @@ rngchk(a_uint n)
 	return((n & s_mask) ? (n | ~v_mask) : (n & v_mask));
 }
 
-/*)Function	void	exprmasks(esp)
+/*)Function	void	exprmasks(n)
  *
  *		int	n		T Line Bytes in Address
  *
@@ -885,7 +1375,7 @@ rngchk(a_uint n)
  *	side effects:
  *		The arithmetic precision parameters are set.
  */
- 
+
 void
 exprmasks(int n)
 {

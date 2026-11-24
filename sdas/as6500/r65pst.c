@@ -1,7 +1,7 @@
 /* r65pst.c */
 
 /*
- *  Copyright (C) 1995-2023  Alan R. Baldwin
+ *  Copyright (C) 1995-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -36,8 +36,7 @@
 #include "asxxxx.h"
 #include "r6500.h"
 
-#if 0
-
+#ifdef ONLY_ASXXXX
 /*
  * Coding Banks
  */
@@ -54,6 +53,7 @@ struct	area	area[2] = {
     {	NULL,		&bank[0],	"_CODE",	0,	0,	0,	A_1BYTE|A_BNK|A_CSEG	},
     {	&area[0],	&bank[1],	"_DATA",	1,	0,	0,	A_1BYTE|A_BNK|A_DSEG	}
 };
+#endif
 
 /*
  * Basic Relocation Mode Definition
@@ -101,8 +101,6 @@ struct	mode	*modep[16] = {
 	NULL,		NULL,		NULL,		NULL
 };
 
-#endif
-
 /*
  * Mnemonic Structure
  */
@@ -110,12 +108,12 @@ struct	mne	mne[] = {
 
         /* machine */
 
-//    {	NULL,	"CSEG",		S_ATYP,		0,	A_CSEG|A_1BYTE	},
-//    {	NULL,	"DSEG",		S_ATYP,		0,	A_DSEG|A_1BYTE	},
+/*    {	NULL,	"CSEG",		S_ATYP,		0,	A_CSEG|A_1BYTE	},	*/
+/*    {	NULL,	"DSEG",		S_ATYP,		0,	A_DSEG|A_1BYTE	},	*/
 
         /* system */
 
-//    {	NULL,	"BANK",		S_ATYP,		0,	A_BNK	},
+/*    {	NULL,	"BANK",		S_ATYP,		0,	A_BNK	},	*/
     {   NULL,   "CON",          S_ATYP,         0,      A_CON   },
     {   NULL,   "OVR",          S_ATYP,         0,      A_OVR   },
     {   NULL,   "REL",          S_ATYP,         0,      A_REL   },
@@ -128,6 +126,10 @@ struct	mne	mne[] = {
     {   NULL,   "LOAD",         S_ATYP,         0,      A_LOAD  },
     {   NULL,   "NOLOAD",       S_ATYP,         0,      A_NOLOAD },
 
+	/* assembler */
+
+    {	NULL,	".enabl",	S_OPTN,		0,	O_ENBL	},
+    {	NULL,	".dsabl",	S_OPTN,		0,	O_DSBL	},
     {	NULL,	".page",	S_PAGE,		0,	0	},
     {	NULL,	".title",	S_HEADER,	0,	O_TITLE	},
     {	NULL,	".sbttl",	S_HEADER,	0,	O_SBTTL	},
@@ -135,9 +137,9 @@ struct	mne	mne[] = {
     {	NULL,	".include",	S_INCL,		0,	I_CODE	},
     {	NULL,	".incbin",	S_INCL,		0,	I_BNRY	},
     {	NULL,	".area",	S_AREA,		0,	0	},
-//    {	NULL,	".psharea",	S_AREA,		0,	O_PSH	},
-//    {	NULL,	".poparea",	S_AREA,		0,	O_POP	},
-//    {	NULL,	".bank",	S_BANK,		0,	0	},
+    {	NULL,	".psharea",	S_AREA,		0,	O_PSH	},	
+    {	NULL,	".poparea",	S_AREA,		0,	O_POP	},	
+/*    {	NULL,	".bank",	S_BANK,		0,	0	},	*/
     {	NULL,	".org",		S_ORG,		0,	0	},
     {	NULL,	".radix",	S_RADIX,	0,	0	},
     {	NULL,	".globl",	S_GLOBL,	0,	0	},
@@ -178,8 +180,6 @@ struct	mne	mne[] = {
     {	NULL,	".endif",	S_CONDITIONAL,	0,	O_ENDIF	},
     {	NULL,	".list",	S_LISTING,	0,	O_LIST	},
     {	NULL,	".nlist",	S_LISTING,	0,	O_NLIST	},
-    {   NULL,   ".uleb128",     S_ULEB128,      0,      0       },
-    {   NULL,   ".sleb128",     S_SLEB128,      0,      0       },
     {	NULL,	".equ",		S_EQU,		0,	O_EQU	},
     {	NULL,	".gblequ",	S_EQU,		0,	O_GBLEQU},
     {	NULL,	".lclequ",	S_EQU,		0,	O_LCLEQU},
@@ -225,15 +225,17 @@ struct	mne	mne[] = {
 /*    {	NULL,	".16bit",	S_BITS,		0,	O_2BYTE	},	*/
 /*    {	NULL,	".24bit",	S_BITS,		0,	O_3BYTE	},	*/
 /*    {	NULL,	".32bit",	S_BITS,		0,	O_4BYTE	},	*/
-//    {	NULL,	".trace",	S_TRACE,	0,	O_TRC	},
-//    {	NULL,	".ntrace",	S_TRACE,	0,	O_NTRC	},
+    {	NULL,	".trace",	S_TRACE,	0,	O_TRC	},
+    {	NULL,	".ntrace",	S_TRACE,	0,	O_NTRC	},
 /*    {	NULL,	"_______",	S_CONST,	0,	VALUE	},	*/
-//    {	NULL,	".end",		S_END,		0,	0	},
+    {	NULL,	".end",		S_END,		0,	0	},
 
 /* sdas specific */
+/*    {   NULL,   ".df",          S_FLOAT,        0,      0       },	*/
+    {   NULL,   ".uleb128",     S_ULEB128,      0,      0       },
+    {   NULL,   ".sleb128",     S_SLEB128,      0,      0       },
     {   NULL,   ".optsdcc",     S_OPTSDCC,      0,      0       },
 /* end sdas specific */
-
 
 	/* Macro Processor */
 
@@ -256,7 +258,7 @@ struct	mne	mne[] = {
 	/* Special */
 
     {	NULL,	".setdp",	S_SDP,		0,	0	},
-//    {	NULL,	".dpgbl",	S_PGD,		0,	0	},
+/*    {	NULL,	".dpgbl",	S_PGD,		0,	0	},	*/
 
 	/* Machines */
 
@@ -264,6 +266,7 @@ struct	mne	mne[] = {
     {	NULL,	".r65f11",	S_CPU,		0,	X_R65F11},
     {	NULL,	".r65c00",	S_CPU,		0,	X_R65C00},
     {	NULL,	".r65c02",	S_CPU,		0,	X_R65C02},
+    {	NULL,	".huc6280",	S_CPU,		0,	X_HUC6280},
 
 	/* 650X / 651X Family  Instructions */
 
@@ -387,5 +390,47 @@ struct	mne	mne[] = {
     {	NULL,	"stz",		S_STZ,		0,	0x60	},
 
     {	NULL,	"trb",		S_TB,		0,	0x10	},
-    {	NULL,	"tsb",		S_TB,		S_EOL,	0x00	}
+    {	NULL,	"tsb",		S_TB,		0,	0x00	},
+
+	/* Additional HuC6280 series Instructions */
+
+    {	NULL,	"cla",		S_INH4,		0,	0x62	},
+    {	NULL,	"clx",		S_INH4,		0,	0x82	},
+    {	NULL,	"cly",		S_INH4,		0,	0xc2	},
+    {	NULL,	"sax",		S_INH4,		0,	0x22	},
+    {	NULL,	"say",		S_INH4,		0,	0x42	},
+    {	NULL,	"sxy",		S_INH4,		0,	0x02	},
+    {	NULL,	"set",		S_INH4,		0,	0xf4	},
+
+    {	NULL,	"bsr",		S_BRA3,		0,	0x44	},
+
+    {	NULL,	"tai",		S_MT,		0,	0xf3	},
+    {	NULL,	"tdd",		S_MT,		0,	0xc3	},
+    {	NULL,	"tia",		S_MT,		0,	0xe3	},
+    {	NULL,	"tii",		S_MT,		0,	0x73	},
+    {	NULL,	"tin",		S_MT,		0,	0xd3	},
+
+    {	NULL,	"tam0",		S_TAM,		0,	0x01	},
+    {	NULL,	"tam1",		S_TAM,		0,	0x02	},
+    {	NULL,	"tam2",		S_TAM,		0,	0x04	},
+    {	NULL,	"tam3",		S_TAM,		0,	0x08	},
+    {	NULL,	"tam4",		S_TAM,		0,	0x10	},
+    {	NULL,	"tam5",		S_TAM,		0,	0x20	},
+    {	NULL,	"tam6",		S_TAM,		0,	0x40	},
+    {	NULL,	"tam7",		S_TAM,		0,	0x80	},
+    {	NULL,	"tma0",		S_TMA,		0,	0x01	},
+    {	NULL,	"tma1",		S_TMA,		0,	0x02	},
+    {	NULL,	"tma2",		S_TMA,		0,	0x04	},
+    {	NULL,	"tma3",		S_TMA,		0,	0x08	},
+    {	NULL,	"tma4",		S_TMA,		0,	0x10	},
+    {	NULL,	"tma5",		S_TMA,		0,	0x20	},
+    {	NULL,	"tma6",		S_TMA,		0,	0x40	},
+    {	NULL,	"tma7",		S_TMA,		0,	0x80	},
+
+    {	NULL,	"st0",		S_ST,		0,	0x03	},
+    {	NULL,	"st1",		S_ST,		0,	0x13	},
+    {	NULL,	"st2",		S_ST,		0,	0x23	},
+
+    {	NULL,	"tst",		S_TST,		S_EOL,	0x83	}
+
 };

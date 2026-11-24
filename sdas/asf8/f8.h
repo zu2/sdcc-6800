@@ -21,19 +21,18 @@
  * Alan R. Baldwin
  * 721 Berkeley St.
  * Kent, Ohio  44240
- * 
  */
 
 /*)BUILD
-	$(PROGRAM) =	ASSTM8
+	$(PROGRAM) =	ASF8
 	$(INCLUDE) = {
 		ASXXXX.H
-		ST8.H
+		F8.H
 	}
 	$(FILES) = {
-		ST8MCH.C
-		ST8ADR.C
-		ST8PST.C
+		F8MCH.C
+		F8ADR.C
+		F8PST.C
 		ASMAIN.C
 		ASMCRO.C
 		ASDBG.C
@@ -49,12 +48,12 @@
 */
 
 // Opcodes
-#define OPCODE_SWAPOP 0x9c
-#define OPCODE_ALTACC1 0x9d
-#define OPCODE_ALTACC2 0x9e
-#define OPCODE_ALTACC3 0x9f
-#define OPCODE_ALTACC4 0x94
-#define OPCODE_ALTACC5 0xd8
+#define OPCODE_SWAPOP 0xb9
+#define OPCODE_ALTACC1 0xec
+#define OPCODE_ALTACC2 0xee
+#define OPCODE_ALTACC3 0x43
+#define OPCODE_ALTACC4 0xf5
+#define OPCODE_ALTACC5 0x49
 
 /*
  * Registers
@@ -91,16 +90,26 @@
  */
 enum insttype {
 S_2OP = 60,
+S_2OPADC,
+S_2OPADD,
+S_2OPAND,
+S_2OPCP,
+S_2OPSBC,
 S_2OPSUB,
+S_2OPXOR,
 S_1OP,
+S_1OPINC,
 S_1OPPUSH,
 S_2OPW,
-S_2OPWSUB,
-S_2OPWSBC,
-S_2OPWADD,
 S_2OPWADC,
+S_2OPWADD,
+S_2OPWSBC,
+S_2OPWSUB,
+S_2OPWXOR,
 S_1OPW,
+S_1OPWINC,
 S_1OPWPUSH,
+S_1OPWTST,
 S_LD,
 S_LDI,
 S_LDW,
@@ -110,23 +119,31 @@ S_0OPMAD,
 S_0OPROT,
 S_0OPMSK,
 S_0OPCAX,
-S_0OPW,
-S_0OPWXCH,
-S_0OPWSLL,
-S_0OPWRLC,
 S_0OPWCP,
 S_0OPWDEC,
+S_0OPW,
+S_0OPWPOP,
+S_0OPWRLC,
+S_0OPWRRC,
+S_0OPWSLL,
+S_0OPWXCH,
 S_0OPWSEX,
 S_0OPWCAX,
 S_BIT,
 S_JR,
 S_JR2,
 S_DNJNZ,
+S_CALL,
 S_JP,
 S_RET,
 S_NOP,
-S_TRAP
+S_TRAP,
+
+S_CPU
 };
+
+#define X_F8  0
+#define X_F8L 1
 
 struct adsym
 {
@@ -140,7 +157,7 @@ extern	int	rcode;
 
 	/* machine dependent functions */
 	
-        /* ST8adr.c */
+        /* f8adr.c */
 extern	int		addr(struct expr *esp);
 extern	int		addr1(struct expr *esp);
 extern	int		addrsl(struct expr *esp);
@@ -148,12 +165,12 @@ extern	int		admode(struct adsym *sp);
 extern	int		any(int c, char *str);
 extern	int		srch(char *str);
 
-	/* ST8mch.c */
-extern	VOID		machine(struct mne *mp);
+	/* f8mch.c */
+extern	void		machine(struct mne *mp);
 extern	int		mchpcr(struct expr *esp);
-extern	VOID		minit(void);
-extern	VOID		opcy_aerr(void);
-extern	VOID		valu_aerr(struct expr *e, int n);
+extern	void		minit(void);
+extern	void		opcy_aerr(void);
+extern	void		valu_aerr(struct expr *e, int n);
 extern	int		ls_mode(struct expr *e);
 extern	int		d_mode(struct expr *e);
 extern	int		setbit(int b);

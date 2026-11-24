@@ -25,9 +25,10 @@
   Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
   -------------------------------------------------------------------------*/
 
-#include "m6502.h"
+#include "subport.h"
 #include "ralloc.h"
 #include "gen.h"
+
 #include "dbuf_string.h"
 
 /**************************************************************************
@@ -39,7 +40,7 @@ m6502_pushReg (reg_info * reg, bool freereg)
 {
   bool needloada = false;
 
-  m6502_emitComment (REGOPS, "  pushReg(%s) %s %s", reg->name, reg->isFree?"free":"", reg->isDead?"dead":"");
+  emitComment (REGOPS, "  pushReg(%s) %s %s", reg->name, reg->isFree?"free":"", reg->isDead?"dead":"");
 
   switch (reg->rIdx)
     {
@@ -48,7 +49,7 @@ m6502_pushReg (reg_info * reg, bool freereg)
       m6502_updateCFA ();
       break;
     case X_IDX:
-      if (IS_MOS65C02)
+      if (HAS_EXT_STACK_OPS)
         {
           m6502_emitOp ("phx", "");
         }
@@ -62,7 +63,7 @@ m6502_pushReg (reg_info * reg, bool freereg)
       m6502_updateCFA ();
       break;
     case Y_IDX:
-      if (IS_MOS65C02)
+      if (HAS_EXT_STACK_OPS)
         {
           m6502_emitOp ("phy", "");
         }
@@ -77,7 +78,12 @@ m6502_pushReg (reg_info * reg, bool freereg)
       break;
       // little-endian order
     case XA_IDX:
-      if(!IS_MOS65C02)
+      if(HAS_EXT_STACK_OPS)
+        {
+	  m6502_pushReg(m6502_reg_x, freereg);
+	  m6502_pushReg(m6502_reg_a, freereg);
+        }
+      else
         {
           if(m6502_reg_y->isFree)
             {
@@ -96,24 +102,19 @@ m6502_pushReg (reg_info * reg, bool freereg)
               m6502_pushReg(m6502_reg_a, freereg);
             }
         }
-      else
-        {
-	  m6502_pushReg(m6502_reg_x, freereg);
-	  m6502_pushReg(m6502_reg_a, freereg);
-        }
       break;
     case XY_IDX:
-      if(!IS_MOS65C02)
+      if(HAS_EXT_STACK_OPS)
+        {
+          m6502_pushReg(m6502_reg_x, freereg);
+          m6502_pushReg(m6502_reg_y, freereg);
+        }
+      else
         {
           needloada = storeRegTempIfUsed (m6502_reg_a);
           m6502_pushReg(m6502_reg_x, freereg);
           m6502_pushReg(m6502_reg_y, freereg);
           m6502_loadOrFreeRegTemp (m6502_reg_a, needloada);
-        }
-      else
-        {
-          m6502_pushReg(m6502_reg_x, freereg);
-          m6502_pushReg(m6502_reg_y, freereg);
         }
       break;
     default:
@@ -134,7 +135,7 @@ m6502_pullReg (reg_info * reg)
 {
   int regidx = reg->rIdx;
 
-  m6502_emitComment (REGOPS, __func__ );
+  emitComment (REGOPS, __func__ );
 
   switch (regidx) {
   case A_IDX:
@@ -142,7 +143,7 @@ m6502_pullReg (reg_info * reg)
     m6502_updateCFA ();
     break;
   case X_IDX:
-    if (IS_MOS65C02)
+    if (HAS_EXT_STACK_OPS)
       {
         m6502_emitOp ("plx", "");
       }
@@ -157,7 +158,7 @@ m6502_pullReg (reg_info * reg)
     m6502_updateCFA ();
     break;
   case Y_IDX:
-    if (IS_MOS65C02)
+    if (HAS_EXT_STACK_OPS)
       {
         m6502_emitOp ("ply", "");
       }
@@ -203,8 +204,8 @@ m6502_adjustStack (int n)
   int sx_cycle = (m6502_reg_x->isFree)?0:6;
   int abs_n = (n>0)?n:-n;
 
-  m6502_emitComment (TRACEGEN, "%s - adjust: %d", __func__, n );
-  m6502_emitComment (REGOPS, "  %s reg:  %s", __func__, m6502_regInfoStr());
+  emitComment (TRACEGEN, "%s - adjust: %d", __func__, n );
+  emitComment (REGOPS, "  %s reg:  %s", __func__, m6502_regInfoStr());
 
   // unrolled PHA      1b, 3c x n
   // unrolled PLA      1b, 4c x n + 4b, 6c if A is used
@@ -222,7 +223,7 @@ m6502_adjustStack (int n)
       incdec-=2;
     }
 
-  m6502_emitComment (REGOPS|VVDBG, "  %s : cycles stk:%d  incdec:%d  adc:%d", __func__,
+  emitComment (REGOPS|VVDBG, "  %s : cycles stk:%d  incdec:%d  adc:%d", __func__,
 		     stack, incdec, adc);
 
   if(stack<=incdec && stack<=adc)
@@ -256,12 +257,13 @@ m6502_adjustStack (int n)
           m6502_emitSetCarry(0);
           m6502_emitOp ("adc", IMMDFMT, (unsigned int)(n & 0xff));
           m6502_transferRegReg (m6502_reg_a, m6502_reg_x, true);
+          m6502_loadOrFreeRegTemp(m6502_reg_a, restore_a);
         }
 
       _S.stackPushes -= n;
       m6502_emitOp ("txs", "");
-      m6502_loadOrFreeRegTemp(m6502_reg_a, restore_a);
       m6502_loadOrFreeRegTemp(m6502_reg_x, restore_x);
     }
+
   m6502_updateCFA ();
 }

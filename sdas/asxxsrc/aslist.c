@@ -1,7 +1,7 @@
 /* aslist.c */
 
 /*
- *  Copyright (C) 1989-2025  Alan R. Baldwin
+ *  Copyright (C) 1989-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -236,6 +236,14 @@ list(void)
 	}
 
 	/*
+	 * Extra Cycle Digits
+	 */
+	if (cycldgts <= 2) { cycldgts = 2; } else
+	if (cycldgts >= 4) { cycldgts = 4; } else {
+		cycldgts = 3;
+	}
+
+	/*
 	 * Paging Control
 	 */
 	paging = !pflag && ((lnlist & LIST_PAG) || (uflag == 1)) ? 1 : 0;
@@ -244,7 +252,7 @@ list(void)
 	 * ALIST/BLIST Output Processing
 	 */
 	if (lmode == ALIST) {
-                outchk(ASXHUGE,ASXHUGE);
+                outchk(HUGE,HUGE);
 	}
 	if (lmode == ALIST || lmode == BLIST) {
 		outdot();
@@ -258,10 +266,17 @@ list(void)
 	}
 
 	/*
+	 * Check Listing Nothing
+	 */
+	if (listing == LIST_NONE) {
+		return;
+	}
+
+	/*
 	 * ALIST/BLIST Output Processing
 	 */
 	if (lmode == ALIST) {
-                outchk(ASXHUGE,ASXHUGE);
+                outchk(HUGE,HUGE);
 	}
 
 
@@ -589,7 +604,7 @@ list(void)
 	/*
          * If we list cycles, decrease max. bytes on first line.
 	 */
-        nl = (!cflag && !(opcycles & OPCY_NONE) && (listing & LIST_CYC)) ? (n-1) : n;
+        nl = (!cflag && !(opcycles & CYCL_NONE) && (listing & LIST_CYC)) ? (n-1) : n;
 
 	/*
          * First line of output for this source line with data.
@@ -701,7 +716,7 @@ list1(char *wp, int *wpt, int nb, int n, int f, int g)
 	/*
          * If we list cycles, put them out, first line only
 	 */
-        if (f && (g & LIST_CYC) && !cflag && !(opcycles & OPCY_NONE)) {
+        if (f && (g & LIST_CYC) && !cflag && !(opcycles & CYCL_NONE)) {
                 fprintf(lfp, "%s%c%2d%c",
                         (xflag != 0) ? " " : "", CYCNT_BGN, opcycles, CYCNT_END);
 	} else

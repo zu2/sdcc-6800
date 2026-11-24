@@ -49,6 +49,7 @@
 #define OPTION_ALLOW_UNDOC_INST "--allow-undocumented-instructions"
 #define OPTION_SMALL_MODEL      "--model-small"
 #define OPTION_MEDIUM_MODEL     "--model-medium"
+#define OPTION_LARGE_MODEL      "--model-large"
 
 static char _z80_defaultRules[] = {
 #include "peeph.rul"
@@ -139,7 +140,8 @@ static OPTION _rab_options[] = {
   {0, OPTION_LEGACY_BANKING,  &z80_opts.legacyBanking, "Use legacy method to call banked functions"},
   {0, OPTION_SDCCCALL,        &options.sdcccall, "Set ABI version for default calling convention", CLAT_INTEGER},
   {0, OPTION_SMALL_MODEL,     NULL, "16-bit address space for both data and code (default)"},
-  {0, OPTION_MEDIUM_MODEL,    NULL, "16-bit address space for data, 24-bit for code"},
+  {0, OPTION_MEDIUM_MODEL,    NULL, "16-bit address space for data, 24-bit (physical 20) for code"},
+  {0, OPTION_LARGE_MODEL,     NULL, "16-bit address space for data, 32-bit (physical 24) for code"},
   {0, NULL}
 };
 
@@ -928,7 +930,6 @@ _setValues (void)
 static void
 _finaliseOptions (void)
 {
-  
   if (!options.std_c99 && port->c_preamble)
     port->c_preamble = z80_builtins_c90;
 
@@ -940,7 +941,7 @@ _finaliseOptions (void)
     }
   else if (IS_RAB && options.model == MODEL_LARGE)
     {
-      wassertl (IS_R4K || IS_R5K || IS_R6K, "Large memory model not supported on Rabbits earlier than Rabbit 4000");
+      wassertl (IS_R4K || IS_R5K || IS_R6K, "Large memory model supported for r4k, r5k, r6k only");
       port->s.funcptr_size = 4;
       port->stack.call_overhead = 4;
       port->jumptableCost.maxCount = 0;
@@ -1121,7 +1122,7 @@ rab_genIVT (struct dbuf_s *oBuf, symbol **intTable, int intCount)
       werror (E_INT_BAD_INTNO, intCount - 1);
       intCount = RAB_INTERRUPTS_COUNT;
     }
-    
+
   for (int i = 0; i < intCount; i++)
     {
       dbuf_printf (oBuf, "\t.org\t0x%04x ; int %d - %s\n", (unsigned int)(0x200 + i * 0x10), i, rab_int_names[i]);
@@ -1279,19 +1280,7 @@ static const char *_GnuAsmCmd[] = {
 };
 */
 static const char *const _crt[] = { "crt0.rel", NULL, };
-static const char *const _libs_z80[] = { "z80", NULL, };
-static const char *const _libs_z180[] = { "z180", NULL, };
-static const char *const _libs_r2k[] = { "r2k", NULL, };
-static const char *const _libs_r2ka[] = { "r2ka", NULL, };
-static const char *const _libs_r3ka[] = { "r3ka", NULL, };
-static const char *const _libs_r4k[] = { "r4k", NULL, };
-static const char *const _libs_r5k[] = { "r5k", NULL, };
-static const char *const _libs_r6k[] = { "r6k", NULL, };
-static const char *const _libs_tlcs90[] = { "tlcs90", NULL, };
-static const char *const _libs_sm83[] = { "sm83", NULL, };
-static const char *const _libs_ez80[] = { "ez80", NULL, };
-static const char *const _libs_z80n[] = { "z80n", NULL, };
-static const char *const _libs_r800[] = { "r800", NULL, };
+static const char *const _libs[] = { "libsdcc", "libsdccf", "libc", "libm", NULL };
 
 /* Globals */
 PORT z80_port =
@@ -1322,7 +1311,7 @@ PORT z80_port =
     ".rel",
     1,                          /* needLinkerScript */
     _crt,                       /* crt */
-    _libs_z80,                  /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _z80_defaultRules,
@@ -1373,7 +1362,7 @@ PORT z80_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 3, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     true,                       // Use support routine for int x int -> long multiplication.
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -1459,7 +1448,7 @@ PORT z80n_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_z80n,                 /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _z80n_defaultRules,
@@ -1510,7 +1499,7 @@ PORT z80n_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 3, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     false,                      /* do not use support routine for int x int -> long multiplication */
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -1596,7 +1585,7 @@ PORT z180_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_z180,                 /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _z80_defaultRules,
@@ -1647,7 +1636,7 @@ PORT z180_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 3, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     true,                       // Use support routine for int x int -> long multiplication.
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -1732,7 +1721,7 @@ PORT r2k_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_r2k,                  /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _r2k_defaultRules,
@@ -1783,7 +1772,7 @@ PORT r2k_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 2, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     false,                      /* do not use support routine for int x int -> long multiplication */
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -1869,7 +1858,7 @@ PORT r2ka_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_r2ka,                 /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _r2k_defaultRules,
@@ -1920,7 +1909,7 @@ PORT r2ka_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 2, 0 },
-  { 
+  {
     -1,                         // shifts never use support routines
     true,                       // use support routine for unsigned int x unsigned int -> unsigned long multiplication
     true,                       // Use support routine for unsigned long x unsigned char -> unsigned long long multiplication.
@@ -2006,7 +1995,7 @@ PORT r3ka_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_r3ka,                 /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _r2k_defaultRules,
@@ -2057,7 +2046,7 @@ PORT r3ka_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 2, 0 },
-  { 
+  {
     -1,                         // shifts never use support routines
     true,                       // use support routine for unsigned int x unsigned int -> unsigned long multiplication
     true,                       // Use support routine for unsigned long x unsigned char -> unsigned long long multiplication.
@@ -2143,7 +2132,7 @@ PORT r4k_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_r4k,                  // libs
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _r2k_defaultRules,
@@ -2194,7 +2183,7 @@ PORT r4k_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 2, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     false,                      /* do not use support routine for int x int -> long multiplication */
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -2280,7 +2269,7 @@ PORT r5k_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_r5k,                  // libs
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _r2k_defaultRules,
@@ -2331,7 +2320,7 @@ PORT r5k_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 2, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     false,                      /* do not use support routine for int x int -> long multiplication */
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -2417,7 +2406,7 @@ PORT r6k_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_r6k,                  // libs
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _r2k_defaultRules,
@@ -2468,7 +2457,7 @@ PORT r6k_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 2, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     false,                      /* do not use support routine for int x int -> long multiplication */
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -2556,7 +2545,7 @@ PORT sm83_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_sm83,                 /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _sm83_defaultRules,
@@ -2607,7 +2596,7 @@ PORT sm83_port =
   { NULL, NULL },
   1,                            /* default ABI revision */
   { -1, 0, 0, 2, 0, 4, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     false,                      /* do not use support routine for int x int -> long multiplication */
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -2693,7 +2682,7 @@ PORT tlcs90_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_tlcs90,               /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _tlcs90_defaultRules,
@@ -2744,7 +2733,7 @@ PORT tlcs90_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 2, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     false,                      /* do not use support routine for int x int -> long multiplication */
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -2830,7 +2819,7 @@ PORT ez80_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_ez80,             /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _ez80_defaultRules,
@@ -2881,7 +2870,7 @@ PORT ez80_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 3, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     true,                       // Use support routine for int x int -> long multiplication.
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */
@@ -2967,7 +2956,7 @@ PORT r800_port =
     ".rel",
     1,
     _crt,                       /* crt */
-    _libs_r800,                 /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _z80_defaultRules,
@@ -3018,7 +3007,7 @@ PORT r800_port =
   { NULL, NULL },
   1,                            /* ABI revision */
   { -1, 0, 0, 4, 0, 3, 0 },
-  { 
+  {
     -1,                         /* shifts never use support routines */
     true,                       // Use support routine for int x int -> long multiplication.
     false,                      /* do not use support routine for unsigned long x unsigned char -> unsigned long long multiplication */

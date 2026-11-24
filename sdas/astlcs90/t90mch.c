@@ -1,7 +1,11 @@
 /* t90mch.c */
 
 /*
- *  Copyright (C) 2013 Rainer Keuchel
+ *  Copyright (C) 2026  Alan R. Baldwin
+ *
+ *  A rewrite of the
+ *    Port to the SDAS fork of ASxxxx by Rainer Keuchel (C) 2013
+ *    Port to ASxxxx from the SDASTLCS90 by Philip Klaus Krause 2025
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,17 +37,17 @@
 #define GET_IND_REG(T) ((T) - S_IDBC)
 #define GET_COND_FROM_MODE(V) ((V) & 0xFF)
 
-char *cpu = "Toshiba TLCS90";
+char *cpu = "Toshiba TLCS90 Series";
 char *dsft = "asm";
 
 /*
- * Opcode Cycle Definitions (not yet)
+ * Opcode Cycle Definitions
  */
 #define OPCY_SDP        ((char) (0xFF))
 #define OPCY_ERR        ((char) (0xFE))
 
-/*      OPCY_NONE       ((char) (0x80)) */
-/*      OPCY_MASK       ((char) (0x7F)) */
+#define OPCY_NONE	((char) (0x80))
+#define OPCY_MASK	((char) (0x7F))
 
 #define OPCY_CPU        ((char) (0xFD))
 
@@ -446,6 +450,12 @@ machine(struct mne *mp)
   struct expr e1, e2;
   int rf, v1, v2, v3;
 
+	/*
+	 * Using Internal Format
+	 * For Cycle Counting
+	 */
+	opcycles = OPCY_NONE;
+
   clrexpr(&e1);
   clrexpr(&e2);
 
@@ -687,7 +697,7 @@ machine(struct mne *mp)
           op = 0x18;
         }
 
-      //expr(&e2, 0);
+      //expr(&e2);
       t2 = addr(&e2);
 
       if(rf == S_DJNZ)
@@ -702,7 +712,7 @@ machine(struct mne *mp)
 
               comma(1);
 
-              expr(&e2, 0);
+              expr(&e2);
             }
         }
 
@@ -1994,22 +2004,24 @@ machine(struct mne *mp)
           }
         }
     }
+	/*
+	 * Translate To External Format
+	 */
+	if (opcycles == OPCY_NONE) { opcycles  =  CYCL_NONE; } else
+	if (opcycles  & OPCY_NONE) { opcycles |= (CYCL_NONE | 0x3F00); }
 }
 
 /*
  * Branch/Jump PCR Mode Check
  */
-
 int
 mchpcr(struct expr *esp)
 {
-  if (esp->e_base.e_ap == dot.s_area)
-    {
+  if (esp->e_base.e_ap == dot.s_area) {
       return(1);
     }
 
-  if (esp->e_flag==0 && esp->e_base.e_ap==NULL)
-    {
+  if (esp->e_flag==0 && esp->e_base.e_ap==NULL) {
       /*
        * Absolute Destination
        *
@@ -2021,7 +2033,6 @@ mchpcr(struct expr *esp)
       esp->e_flag = 1;
       esp->e_base.e_sp = &sym[1];
     }
-
   return(0);
 }
 
@@ -2029,8 +2040,8 @@ mchpcr(struct expr *esp)
  * Machine dependent initialization
  */
 
-VOID
-minit()
+void
+minit(void)
 {
   /*
    * Byte Order
