@@ -6949,6 +6949,18 @@ genLeftShiftLiteral (operand * left, operand * right, operand * result, iCode * 
   freeAsmop (result, NULL, ic, true);
 }
 
+static float
+guessShiftCount (const iCode *ic, const operand *count)
+{
+  struct valinfo range = getOperandValinfo (ic, count);
+
+  if (range.nothing || range.anything || range.min < 0 || range.max > 255
+      || (range.min == 0 && range.max == 255))
+    return 1.0f;
+
+  return (range.min + range.max) * 0.5f;
+}
+
 /*-----------------------------------------------------------------*/
 /* genLeftShift - generates code for left shifting                 */
 /*-----------------------------------------------------------------*/
@@ -7116,6 +7128,7 @@ genLeftShift (iCode *ic)
     emitBranch ("beq", tlbl1);
   if (!regalloc_dry_run)
     emitLabel (tlbl);
+  float loopStartCycles = regalloc_dry_run_cost_cycles;
   if (valueind && tmp)
     {
       emitOp ("aslb", MODE_INH, "");
@@ -7138,6 +7151,9 @@ genLeftShift (iCode *ic)
   else
     emitOp ("dec", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
   emitBranch ("bne", tlbl);
+  if (regalloc_dry_run)
+    regalloc_dry_run_cost_cycles = loopStartCycles
+      + (regalloc_dry_run_cost_cycles - loopStartCycles) * guessShiftCount (ic, right);
   if (!skipzero && !regalloc_dry_run)
     emitLabel (tlbl1);
 
@@ -7513,6 +7529,7 @@ genRightShift (iCode *ic)
     emitBranch ("beq", tlbl1);
   if (!regalloc_dry_run)
     emitLabel (tlbl);
+  float loopStartCycles = regalloc_dry_run_cost_cycles;
   if (valueind && tmp)
     {
       emitOp (sign ? "asr" : "lsr", MODE_EXT, "%s", tmp);
@@ -7535,6 +7552,9 @@ genRightShift (iCode *ic)
   else
     emitOp ("dec", MODE_EXT, IS_AOP_X (AOP (right)) ? "%s+1" : "%s", tmp);
   emitBranch ("bne", tlbl);
+  if (regalloc_dry_run)
+    regalloc_dry_run_cost_cycles = loopStartCycles
+      + (regalloc_dry_run_cost_cycles - loopStartCycles) * guessShiftCount (ic, right);
   if (!skipzero && !regalloc_dry_run)
     emitLabel (tlbl1);
 
