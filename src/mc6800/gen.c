@@ -1882,7 +1882,7 @@ aopOp (operand *op, iCode * ic, bool result)
       aop->size = getSize (operandType (op));
       aop->op = op;
       if (!result)
-        aop->valinfo = getOperandValinfo (ic, op);
+        aop->valinfo = getOperandValinfo (ic, op, false);
       return;
     }
 
@@ -1911,7 +1911,7 @@ aopOp (operand *op, iCode * ic, bool result)
       op->aop = aop = aopForSym (ic, OP_SYMBOL (op), result);
       aop->op = op;
       if (!result)
-        aop->valinfo = getOperandValinfo (ic, op);
+        aop->valinfo = getOperandValinfo (ic, op, false);
       return;
     }
 
@@ -1934,7 +1934,7 @@ aopOp (operand *op, iCode * ic, bool result)
       aop->size = 0;
       aop->op = op;
       if (!result)
-        aop->valinfo = getOperandValinfo (ic, op);
+        aop->valinfo = getOperandValinfo (ic, op, false);
       return;
     }
 
@@ -1950,7 +1950,7 @@ aopOp (operand *op, iCode * ic, bool result)
           aop->size = getSize (sym->type);
           aop->op = op;
           if (!result)
-            aop->valinfo = getOperandValinfo (ic, op);
+            aop->valinfo = getOperandValinfo (ic, op, false);
           return;
         }
 
@@ -1978,7 +1978,7 @@ aopOp (operand *op, iCode * ic, bool result)
           aop->size = getSize (sym->type);
           aop->op = op;
           if (!result)
-            aop->valinfo = getOperandValinfo (ic, op);
+            aop->valinfo = getOperandValinfo (ic, op, false);
           return;
         }
 
@@ -2002,7 +2002,7 @@ aopOp (operand *op, iCode * ic, bool result)
           aop->size = getSize (sym->type);
           aop->op = op;
           if (!result)
-            aop->valinfo = getOperandValinfo (ic, op);
+            aop->valinfo = getOperandValinfo (ic, op, false);
           return;
         }
 
@@ -2011,7 +2011,7 @@ aopOp (operand *op, iCode * ic, bool result)
       aop->size = getSize (sym->type);
       aop->op = op;
       if (!result)
-        aop->valinfo = getOperandValinfo (ic, op);
+        aop->valinfo = getOperandValinfo (ic, op, false);
       return;
     }
 
@@ -2025,7 +2025,7 @@ aopOp (operand *op, iCode * ic, bool result)
       aop->size = 2;
       aop->op = op;
       if (!result)
-        aop->valinfo = getOperandValinfo (ic, op);
+        aop->valinfo = getOperandValinfo (ic, op, false);
       return;
     }
   sym->aop = op->aop = aop = newAsmop (AOP_REG);
@@ -2039,7 +2039,7 @@ aopOp (operand *op, iCode * ic, bool result)
     }
   aop->op = op;
   if (!result)
-    aop->valinfo = getOperandValinfo (ic, op);
+    aop->valinfo = getOperandValinfo (ic, op, false);
 }
 
 /*-----------------------------------------------------------------*/
@@ -6975,7 +6975,7 @@ genLeftShiftLiteral (operand * left, operand * right, operand * result, iCode * 
 static float
 guessShiftCount (const iCode *ic, const operand *count)
 {
-  struct valinfo range = getOperandValinfo (ic, count);
+  struct valinfo range = getOperandValinfo (ic, count, false);
 
   if (range.nothing || range.anything || range.min < 0 || range.max > 255
       || (range.min == 0 && range.max == 255))
