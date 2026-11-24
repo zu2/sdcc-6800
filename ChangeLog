@@ -1,3 +1,329 @@
+2026-06-24 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/stm8/gen.c:
+	  Fix bug #4020.
+	* src/f8/gen.c:
+	  Fix bug #4022.
+	* src/z80/gen.c:
+	  Fix bug #4021.
+
+2026-06-23 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* Merge fuzzing branch.
+
+2026-06-23 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/stm8/gen.c:
+	  Fix bug #4019.
+
+2026-06-23 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCBBlock.c,
+	  src/SDCCglobl.h,
+	  src/SDCClabel.c,
+	  src/SDCCmain.c:
+	  Remove effect of --nolabelopt on unreachable labels. Too much of SDCC can't really handle unreachable basic blocks.
+	*  support/regression/ports/*/spec.mk:
+	  Fix default enable of --nosidechannels in some regressiont st targets.
+
+2026-06-23 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/randport.c:
+	  Include --nosidechannels option in fuzzing.
+
+2026-06-23 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/asconaead128.c.in,
+	  support/regression/tests/asconhash256.c.in:
+	  Disable test parts that fail due to known bug #4018.
+	* src/z80/gen.c:
+	  Fix use of neg instruction in sm83 port.
+
+2026-06-22 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* Merge nosidechannels branch.
+
+2026-06-22 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* Merge next branch.
+
+2026-06-22 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdcc/.version:
+	  Bump version for --nosidechannels (and corresponding #pragma) functionality.
+
+2026-06-22 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdcc/.version:
+	  Bump version for post -4.6.0 development.
+	* sdcc/support/scripts/repack_release.sh:
+	  Disable 32-bit Windows deliverables processing.
+
+2026-06-22 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sim/ucsim/src/sims/f8.src/f8cl.h:
+	  Fix f8 flag bit order.
+
+2026-06-22 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/scripts/sdcc.nsi:
+	  Fix for Windows uninstaller leaving a few files.
+
+2026-06-21 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c,
+	  src/SDCCicode.c,
+	  src/SDCCopt.c,
+	  src/SDCCsymt.c,
+	  src/SDCCsymt.h:
+	  Fix RFE #1029.
+	* src/z80/peep.c:
+	  Fix bug #4015.
+	* src/f8/peep.c:
+	  Fix bug #4016.
+	* support/regression/tests/bug-2959.c:
+	  Don't use nop in test for targets that don't have it.
+	* src/f8/gen.c:
+	  Fix use of non-f8l f8 instruction sllw in f8l port.
+
+2026-06-20 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/hc08/gen.c,
+	  src/z80/gen.c:
+	  Fixes for --nosidechannel codegen.
+	  src/z80/peeph-r2k.def:
+	  Fix a peephole optimizer rule bug triggered by --nosidechannel Rabbit codegen.
+
+2026-06-19 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/f8/gen.c:
+	  Control f8 codegen aspects by --nosidechannels: equality comparisons.
+	* doc/sdccman.lyx:
+	  Document which operations on mcs51 generic pointers might leak information.
+
+2026-06-18 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* doc/sdccman.lyx,
+	  src/mcs51/gen.c:
+	  Control mcs51 codegen aspects by --nosidechannels: addition, subtraction, right shift, casts, bit-field reads, comparisons.
+
+2026-06-18 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* doc/sdccman.lyx,
+	  src/f8/gen.c,
+	  src/hc08/gen.c,
+	  src/z80/gen.c:
+	  Control hc08, s08, f8, z80-related, codegen aspects by --nosidechannels: reads of signed bit-fields, signed casts, comparisons.
+
+2026-06-14 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/stm8/gen.c,
+	  doc/sdccman.lyx:
+	  Control z80-related codegen aspects by --nosidechannels: Comparisons.
+
+2026-06-13 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/stm8/gen.c,
+	  src/stm8/peeph.def,
+	  doc/sdccman.lyx:
+	  Control stm8 codegen aspects by --nosidechannels: Comparisons.
+
+2026-06-12 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/stm8/gen.c:
+	  Control stm8 codegen aspects by --nosidechannels: Equality comparisons.
+
+2026-06-12 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/stm8/peeph.def:
+	  Optimize some push / pop cases.
+	* src/z80/gen.c:
+	  Optimize some pointer reads.
+
+2026-06-12 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* Merge next branch.
+
+2026-06-11 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/ds390/gen.c,
+	  src/hc08/gen.c,
+	  src/mcs51/gen.c,
+	  src/pic14/gen.c:
+	  #if 0 unused genCpl.
+
+2026-06-11 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/gen.c,
+	  support/regression/tests/bug-4007.c:
+	  Fix bug #4007.
+
+2026-06-11 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/gen.c,
+	  support/regression/tests/bug-4008.c:
+	  Fix bug #4008.
+
+2026-06-10 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/peep.c:
+	  Fix bug #4009.
+
+2026-06-08 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/mos6502/gen.c:
+	  Fix bug #3999.
+	* src/mos6502/gen.c:
+	  Fix bug #3993.
+
+2026-06-08 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/lib/ds390/__sdcc_atomic_maybe_rollback.c,
+	* device/lib/mcs51/__sdcc_atomic_maybe_rollback.asm: Fix nested interrupt bug mentioned
+	  in RFE #624 by applying modified patch from Oleg Endo, thanks!
+
+2026-06-08 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/f8/gen.c,
+	  src/z80/gen.c,
+	  doc/sdccman.lyx:
+	  Control f8, f8l, z80-related codegen aspects by --nosidechannels: Reads of signed bit-fields, signed casts.
+
+2026-06-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/stm8/gen.c,
+	  doc/sdccman.lyx:
+	  Check more details of stm8 codegen for side channels, document results.
+
+2026-06-06 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/stm8/gen.c,
+	  doc/sdccman.lyx:
+	  Control stm8 codegen aspects by --nosidechannels: Rotation.
+
+2026-06-06 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCopt.c,
+	  support/regression/tests/bug-3998.c:
+	  Disable one change from recent next branch merge that caused regression in diagnostics.
+
+2026-06-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* doc/sdccman.lyx:
+	  Document pdk side-channels.
+
+2026-06-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* doc/sdccman.lyx:
+	  Document hc08/s08 side-channels.
+
+2026-06-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCmain.c:
+	  Fix --nosidechannels command-line option handling.
+	* doc/sdccman.lyx,
+	  src/z80/gen.c:
+	  Control some mcs51 codegen aspects by --nosidechannels: Negation. Document remaining mcs51 side-channels.
+
+2026-06-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* Merge next branch.
+
+2026-06-04 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* doc/sdccman.lyx:
+	  Document f8(l) side-channels.
+
+2026-06-04 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* doc/sdccman.lyx,
+	  src/z80/gen.c:
+	  Control some z80 codegen aspects by --nosidechannels: Addition, right shift (leaking left operand). Document remaining z80 side-channels.
+
+2026-06-04 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* doc/sdccman.lyx,
+	  src/stm8/gen.c:
+	  Control some stm8 codegen aspects by --nosidechannels: Addition, subtraction, div hw bug workaround, right shift (leaking left operand). Document remaining stm8 side-channels.
+
+2026-06-04 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* doc/sdccman.lyx,
+	  src/SDCC.lex,
+	  src/SDCCglobl.h,
+	  src/SDCCmain.c:
+	  Infrastructure for command-line-option and #pragma to avoid introducing side-channels.
+	* src/SDCCicode.c:
+	  Disable some optimizations of divisions by powers of two for --nosidechannels.
+	* src/SDCCicode.c:
+	  Mostly use jump tables to implement switch statements for --nosidechannels.
+
+2026-06-04 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/Makefile.in,
+	  support/regression/randport.c:
+	  Basic documentation for fuzzing infrastructure.
+
+2026-06-03 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCopt.c,
+	  support/regression/tests/bug-3998.c:
+	  Fix bug #3998.
+
+2026-06-03 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCBBlock.c:
+	  Fix dump filenames (iCode vs graph dump for generalized constant propagation).
+
+2026-06-02 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/gen.c,
+	  support/regression/tests/bug-3997.c:
+	  Fix bug #3997.
+	* support/regression/tests/bug-3988.c:
+	  Fix bug description comment.
+
+2026-06-01 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/Makefile.in:
+	  Workaround for bug #3996.
+	* support/regression/randport.c:
+	  Include further optimization options in command-line fuzzing.
+
+2026-05-29 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdcc/support/regression/Makefile.in:
+	  Mark clean target of regression testing as phony.
+	* src/z80/gen.c:
+	  Fix bug #3994.
+	* src/mcs51/gen.c:
+	  Fix bug #3995.
+
+2026-05-28 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/MakeList,
+	  support/regression/Makefile.in,
+	  support/regression/randport.c,
+	  support/regression/randseq.c:
+	  Improve infrastructure for randomized regression testing (command-line option fuzzing).
+
+2026-05-27 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/Makefile.in,
+	  support/regression/randseq.c,
+	  support/regression/randport.c:
+	  Infrastructure for randomized regression testing (command-line option fuzzing).
+
+2026-05-27 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdcc/support/regression/Makefile.in:
+	  Update/fix description of dependencies for regression testing.
+
+2026-05-27 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdcc/support/regression/Makefile.in:
+	  --mmos6502 --stack-auto has been stable for a while, include it in default target for regression testing.
+
 2026-05-26 Philipp Klaus Krause <philipp@colecovision.eu>
 
 	* support/regression/MakeList:
@@ -61007,4 +61333,4 @@
 	* as/mcs51/lklex.c:  accept everything as symbol name in rel-files, bug fix ID 452601
 	* as/mcs51/lksym.c:  accept everything as symbol name in rel-files, bug fix ID 452601
 
-$Revision: 16555 $
+$Revision$
