@@ -46,3 +46,6 @@ ___SDCC_mc6800_tmp6::
 REGTEMP7::
 ___SDCC_mc6800_tmp7::
 	.ds 2
+REGTEMPX::
+	.ds 2
+___SDCC_mc6800_regs_end::

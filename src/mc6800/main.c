@@ -772,7 +772,7 @@ PORT mc6800_port =
   false,
   1,                            /* reset labelKey to 1 */
   1,                            /* globals & local statics allowed */
-  6,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
+  7,                            /* Number of registers handled in the tree-decomposition-based register allocator in SDCCralloc.hpp */
   PORT_MAGIC
 };
 

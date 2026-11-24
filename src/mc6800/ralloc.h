@@ -37,10 +37,13 @@ enum
     TEMP0H_IDX,
     TEMP1L_IDX,
     TEMP1H_IDX,
+    TEMPXL_IDX,
+    TEMPXH_IDX,
     X_IDX,
     D_IDX,
     TEMP0_IDX,
     TEMP1_IDX,
+    TEMPX_IDX,
     CND_IDX,
     SP_IDX
   };

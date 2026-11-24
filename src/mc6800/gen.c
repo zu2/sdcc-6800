@@ -2017,7 +2017,8 @@ aopOp (operand *op, iCode * ic, bool result)
 
   /* must be in a register */
   wassert (sym->nRegs);
-  if (sym->regs[0]->rIdx == TEMP0L_IDX || sym->regs[0]->rIdx == TEMP1L_IDX)
+  if (sym->regs[0]->rIdx == TEMP0L_IDX || sym->regs[0]->rIdx == TEMP1L_IDX
+      || sym->regs[0]->rIdx == TEMPXL_IDX)
     {
       sym->aop = op->aop = aop = newAsmop (AOP_DIR);
       aop->aopu.aop_dir = sym->regs[1]->name;
@@ -3086,11 +3087,11 @@ genFunction (iCode * ic)
       emitOp ("ldaa", MODE_IDX, "0,x");
       emitOp ("psha", MODE_INH, "");
       emitOp ("inx", MODE_INH, "");
-      emitOp ("cpx", MODE_IMM, "#___SDCC_mc6800_ret0+24");
+      emitOp ("cpx", MODE_IMM, "#___SDCC_mc6800_regs_end");
       emitBranch ("bne", tlbl);
       mc6800_dirtyReg (mc6800_reg_a, false);
       mc6800_dirtyReg (mc6800_reg_x, false);
-      _G.stackPushes += 24;
+      _G.stackPushes += 26;
       updateCFA ();
     }
 
@@ -3269,14 +3270,14 @@ genEndFunction (iCode * ic)
     {
       symbol *tlbl = newiTempLabel (NULL);
 
-      emitOp ("ldx", MODE_IMM, "#___SDCC_mc6800_ret0+24");
+      emitOp ("ldx", MODE_IMM, "#___SDCC_mc6800_regs_end");
       emitLabel (tlbl);
       emitOp ("dex", MODE_INH, "");
       emitOp ("pula", MODE_INH, "");
       emitOp ("staa", MODE_IDX, "0,x");
       emitOp ("cpx", MODE_IMM, "#___SDCC_mc6800_ret0");
       emitBranch ("bne", tlbl);
-      _G.stackPushes -= 24;
+      _G.stackPushes -= 26;
 
       /* if debug then send end of function */
       if (options.debug && currFunc && !regalloc_dry_run)

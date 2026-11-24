@@ -36,7 +36,37 @@ extern "C"
 static std::vector<symbol *> fixed_stack_vars;
 static int fixed_stack_size;
 
-static const short places[] = {A_IDX, B_IDX, D_IDX, X_IDX, TEMP0_IDX, TEMP1_IDX};
+static const short places[] = {A_IDX, B_IDX, D_IDX, X_IDX, TEMP0_IDX, TEMP1_IDX, TEMPX_IDX};
+
+static std::set<int> short_lived_temps;
+
+static void
+collect_short_lived_temps (const con_t &I)
+{
+  short_lived_temps.clear ();
+  for (unsigned int v = 0; v < boost::num_vertices (I); ++v)
+    {
+      if (I[v].size != 2)
+        continue;
+      const symbol *sym = static_cast<symbol *> (hTabItemWithKey (liveRanges, I[v].v));
+      if (bitVectnBitsOn (sym->defs) != 1 || bitVectnBitsOn (sym->uses) != 1)
+        continue;
+
+      const iCode *def = static_cast<iCode *> (hTabItemWithKey (iCodehTab, bitVectFirstBit (sym->defs)));
+      const iCode *use = static_cast<iCode *> (hTabItemWithKey (iCodehTab, bitVectFirstBit (sym->uses)));
+      if (!def || !use || def->eBBlockNum != use->eBBlockNum
+          || def->op == CALL || def->op == PCALL || use->op == CALL || use->op == PCALL)
+        continue;
+
+      // Restrict intervening iCodes to plain copies that cannot call a helper.
+      const iCode *ic = def->next;
+      for (int remaining = 2; remaining && ic && ic != use; --remaining, ic = ic->next)
+        if (ic->op != '=' || POINTER_SET (ic) || operandSize (IC_RESULT (ic)) > 2)
+          break;
+      if (ic == use)
+        short_lived_temps.insert (sym->key);
+    }
+}
 
 static int place_bytes(reg_t r)
 {
@@ -237,6 +267,9 @@ static bool assignment_hopeless(const assignment &a, unsigned short int i, const
 {
   reg_t r = a.global[lastvar];
 
+  if (places[r] == TEMPX_IDX && !short_lived_temps.count (I[lastvar].v))
+    return (true);
+
   if(I[lastvar].size != mc6800_regWithIdx(places[r])->size)
     return(true);
 
@@ -427,6 +460,7 @@ iCode *mc6800_ralloc2_cc(ebbIndex *ebbi)
   iCode *ic = create_cfg(control_flow_graph, conflict_graph, ebbi);
 
   make_value_graph(control_flow_graph, conflict_graph);
+  collect_short_lived_temps (conflict_graph);
 
   if (optimize.genconstprop)
     recomputeValinfos (ic, ebbi, "_2");

@@ -46,15 +46,18 @@ reg_info regsmc6800[] =
   {TEMP0H_IDX, "REGTEMP0", 0, 1, {TEMP0H_IDX}, NULL, 0, 1},
   {TEMP1L_IDX, "REGTEMP1+1", 0, 1, {TEMP1L_IDX}, NULL, 0, 1},
   {TEMP1H_IDX, "REGTEMP1", 0, 1, {TEMP1H_IDX}, NULL, 0, 1},
+  {TEMPXL_IDX, "REGTEMPX+1", 0, 1, {TEMPXL_IDX}, NULL, 0, 1},
+  {TEMPXH_IDX, "REGTEMPX", 0, 1, {TEMPXH_IDX}, NULL, 0, 1},
   {X_IDX,   "x",  MC6800MASK_X,  2, {XL_IDX, XH_IDX}, NULL, 0, 1},
   {D_IDX,   "d",  MC6800MASK_D,  2, {B_IDX, A_IDX}, NULL, 0, 1},
   {TEMP0_IDX, "temp0", 0, 2, {TEMP0L_IDX, TEMP0H_IDX}, NULL, 0, 1},
   {TEMP1_IDX, "temp1", 0, 2, {TEMP1L_IDX, TEMP1H_IDX}, NULL, 0, 1},
+  {TEMPX_IDX, "tempx", 0, 2, {TEMPXL_IDX, TEMPXH_IDX}, NULL, 0, 1},
 
   {CND_IDX, "C",  0, 1, {CND_IDX}, NULL, 0, 1},
   {SP_IDX,  "sp", 0, 1, {SP_IDX}, NULL, 0, 1},
 };
-static const int mc6800_nRegs = TEMP1_IDX + 1;
+static const int mc6800_nRegs = TEMPX_IDX + 1;
 
 reg_info *mc6800_reg_a;
 reg_info *mc6800_reg_b;
@@ -744,6 +747,28 @@ packPointerOp (iCode * ic, eBBlock * ebp)
   dic->op = '=';
 }
 
+/* Expose the stack load to the register allocator before the indirect store. */
+static void
+splitPointerStore (iCode *ic, eBBlock *ebp)
+{
+  operand *rhs = IC_RIGHT (ic);
+  if (!IS_TRUE_SYMOP (rhs) || !OP_SYMBOL (rhs)->onStack
+      || !IS_INTEGRAL (operandType (rhs)) || operandSize (rhs) != 2
+      || isOperandVolatile (rhs, false))
+    return;
+
+  iCode *load = newiCode ('=', NULL, rhs);
+  operand *value = newiTempOperand (operandType (rhs), false);
+  IC_RESULT (load) = value;
+  IC_RIGHT (ic) = operandFromOperand (value);
+  OP_DEFS (value) = bitVectSetBit (OP_DEFS (value), load->key);
+  OP_USES (value) = bitVectSetBit (OP_USES (value), ic->key);
+  bitVectUnSetBit (OP_USES (rhs), ic->key);
+  OP_USES (rhs) = bitVectSetBit (OP_USES (rhs), load->key);
+  hTabAddItem (&iCodehTab, load->key, load);
+  addiCodeToeBBlock (ebp, load, ic);
+}
+
 /*-----------------------------------------------------------------*/
 /* packRegisters - does some transformations to reduce register    */
 /*                   pressure                                      */
@@ -863,6 +888,8 @@ packRegisters (eBBlock ** ebpp, int count)
 
           if (POINTER_SET (ic) || POINTER_GET (ic))
             packPointerOp (ic, ebp);
+          if (POINTER_SET (ic))
+            splitPointerStore (ic, ebp);
         }
     }
 }
