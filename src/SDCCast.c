@@ -1679,8 +1679,11 @@ createIvalCharPtr (ast * sym, sym_link * type, ast * iexpr, ast * rootVal)
       unsigned int symsize = DCL_ELEM (type);
 
       size = DCL_ELEM (iexpr->ftype);
-      if (IS_CHAR (type->next) && !IS_CHAR (iexpr->ftype->next))
-        werror (E_TYPE_MISMATCH, "initialization", "");
+      if (!stringInitializerTypesMatch (type, iexpr->ftype))
+        {
+          werrorfl (iexpr->filename, iexpr->lineno, E_TYPE_MISMATCH, "initialisation", "");
+          return newNode (NULLOP, NULL, NULL);
+        }
       if (symsize && size > symsize)
         {
           if (size > symsize)
@@ -3345,10 +3348,7 @@ ptrTypeFromType (sym_link *type)
     }
 
   p->next = copyLinkChain (type);
-  if (IS_DECL (p->next))
-    DCL_PTR_OPTIONAL (p->next) = false;
-  else
-    SPEC_OPTIONAL (p->next) = false; // _Optional qualifier is not preserved across &.
+  removeOptionalQualifier (p->next);
   return p;
 }
 
@@ -4421,10 +4421,7 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
         }
 
       p->next = copyLinkChain (LTYPE (tree));
-      if (IS_DECL (p->next))
-        DCL_PTR_OPTIONAL (p->next) = false;
-      else
-        SPEC_OPTIONAL (p->next) = false; // _Optional qualifier is not preserved across &.
+      removeOptionalQualifier (p->next);
       TTYPE (tree) = p;
       TETYPE (tree) = getSpec (TTYPE (tree));
       LLVAL (tree) = 1;
@@ -5333,6 +5330,19 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
           goto errorTreeReturn;
         }
 
+      if (IS_PTR (RTYPE (tree)) && IS_FLOAT (LTYPE (tree)))
+        {
+          werrorfl (tree->filename, tree->lineno, E_CAST_PTR_TO_FLOAT);
+          goto errorTreeReturn;
+        }
+
+      /* Except for a cast to void, the operand must have scalar type. */
+      if (IS_STRUCT (RTYPE (tree)) && !IS_VOID (LTYPE (tree)))
+        {
+          werrorfl (tree->filename, tree->lineno, E_CAST_NONSCALAR);
+          goto errorTreeReturn;
+        }
+
       /* make sure the type is complete and sane */
       if ((resultType == RESULT_TYPE_GPTR) && IS_FUNCPTR (LTYPE (tree)))
         changePointer (LTYPE (tree)->next);
@@ -5569,6 +5579,19 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
 
       propagateConstExpr (&tree->left, resultType, reduceTypeAllowed);
       propagateConstExpr (&tree->right, resultType, reduceTypeAllowed);
+
+      /* A decisive constant left operand leaves the right operand unevaluated.
+         Require a value node so an evaluated comma expression keeps its effects. */
+      if (IS_AST_LIT_VALUE (tree->left) &&
+          (tree->opval.op == AND_OP && isEqualVal (tree->left->opval.val, 0) ||
+           tree->opval.op == OR_OP && !isEqualVal (tree->left->opval.val, 0)))
+        {
+          /* The rewrite helper must not rejoin this unevaluated side effect. */
+          tree->right = NULL;
+          rewriteAstNodeVal (tree, valLogicAndOr (tree->left->opval.val, tree->left->opval.val,
+                                                tree->opval.op, reduceTypeAllowed));
+          return decorateType (tree, resultType, reduceTypeAllowed);
+        }
 
       /* if they are both literal then */
       /* rewrite the tree */
@@ -6507,6 +6530,11 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
       /* ifx Statement              */
       /*----------------------------*/
     case IFX:
+      if (IS_STRUCT (LTYPE (tree)))
+        {
+          werrorfl (tree->left->filename, tree->left->lineno, E_INVALID_OP, "controlling expression");
+          goto errorTreeReturn;
+        }
       tree->left = backPatchLabels (tree->left, tree->trueLabel, tree->falseLabel);
       TTYPE (tree) = TETYPE (tree) = NULL;
       return tree;
@@ -6863,7 +6891,7 @@ createCase (ast * swStat, ast * caseVal, ast * stmnt)
 
   caseVal = decorateType (resolveSymbols (caseVal), RESULT_TYPE_NONE, true);
   /* if not a constant then error  */
-  if (!IS_LITERAL (caseVal->ftype))
+  if (!IS_AST_LIT_VALUE (caseVal))
     {
       werrorfl (caseVal->filename, caseVal->lineno, E_CASE_CONSTANT);
       return NULL;
@@ -6939,24 +6967,24 @@ createCaseRange (ast * swStat, ast * caseValLow, ast * caseValHigh, ast * stmnt)
   caseValLow = decorateType (resolveSymbols (caseValLow), RESULT_TYPE_NONE, true);
   caseValHigh = decorateType (resolveSymbols (caseValHigh), RESULT_TYPE_NONE, true);
   /* if not a constant then error  */
-  if (!IS_LITERAL (caseValLow->ftype))
+  if (!IS_AST_LIT_VALUE (caseValLow))
     {
       werrorfl (caseValLow->filename, caseValLow->lineno, E_CASE_CONSTANT);
       return NULL;
     }
-  if (!IS_LITERAL (caseValHigh->ftype))
+  if (!IS_AST_LIT_VALUE (caseValHigh))
     {
       werrorfl (caseValHigh->filename, caseValLow->lineno, E_CASE_CONSTANT);
       return NULL;
     }
 
   /* if not a integer than error */
-  if (!IS_LITERAL (caseValLow->ftype))
+  if (!IS_INTEGRAL (caseValLow->ftype))
     {
       werrorfl (caseValLow->filename, caseValLow->lineno, E_CASE_CONSTANT);
       return NULL;
     }
-  if (!IS_LITERAL (caseValHigh->ftype))
+  if (!IS_INTEGRAL (caseValHigh->ftype))
     {
       werrorfl (caseValHigh->filename, caseValHigh->lineno, E_CASE_CONSTANT);
       return NULL;
@@ -7024,16 +7052,6 @@ createIf (ast * condAst, ast * ifBody, ast * elseBody)
   ast *ifTree;
   symbol *ifTrue, *ifFalse, *ifEnd;
   struct dbuf_s dbuf;
-
-  /* if neither exists */
-  if (!elseBody && !ifBody)
-    {
-      // if there are no side effects (i++, j() etc)
-      if (!hasSEFcalls (condAst))
-        {
-          return condAst;
-        }
-    }
 
   /* create the labels */
   dbuf_init (&dbuf, 128);

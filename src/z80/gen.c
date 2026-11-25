@@ -10556,6 +10556,18 @@ genPlus (iCode * ic)
           started = true;
           i += 2;
         }
+      else if (!maskedword && !IS_SM83 && !IS_TLCS870 && (aopInReg (leftop, i, BC_IDX) || aopInReg (leftop, i, DE_IDX)) &&
+        (ic->result->aop->type == AOP_IY || ic->result->aop->type == AOP_DIR) && (rightop->type == AOP_IY || rightop->type == AOP_DIR))
+        {
+          emit2 ("ld hl, !mems", rightop->aopu.aop_dir);
+          cost2 (3, 4, -1, 4, 16, 15, 11, 11, -1 , 12, -1, 6, 6, 5, 5);
+          emit3w_o (started ? A_ADC : A_ADD, ASMOP_HL, 0, leftop, i);
+          emit2 ("ld !mems, hl", ic->result->aop->aopu.aop_dir);
+          cost2 (3, 4, -1, 4, 16, 16, 13, 13, -1, 12, -1, 6, 6, 5, 5);
+          spillPair (PAIR_HL);
+          started = true;
+          i += 2;
+        }
       else
         {
           if (!HAS_IYL_INST && (aopInReg (rightop, i, IYL_IDX) || aopInReg (rightop, i, IYH_IDX)))
@@ -10607,6 +10619,8 @@ genPlus (iCode * ic)
             UNIMPLEMENTED;
           else
             {
+              if (rightop->type == AOP_IY && !isRegDead (IY_IDX, ic))
+                UNIMPLEMENTED;
               emit3_o (started ? A_ADC : A_ADD, ASMOP_A, 0, rightop, i);
               started = true;
             }
@@ -16544,7 +16558,7 @@ genUnpackBits (operand *result, int offset, int blen, int bstr)
 static void
 _moveFrom_tpair_ (asmop * aop, int offset, PAIR_ID pair)
 {
-  emitDebug ("; _moveFrom_tpair_()");
+  // emitDebug ("; _moveFrom_tpair_()");
   if (pair == PAIR_HL && aop->type == AOP_REG)
     {
       if (!regalloc_dry_run)

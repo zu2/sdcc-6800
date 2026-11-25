@@ -1,3 +1,293 @@
+2026-10-30 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/pic16/gen.c,
+	  src/pic16/glue.c:
+	  pic16 long long fixes, bug #4323 via patch by zeynelsagcan.
+
+2026-10-30 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/c2y-control-flow-constraints.c:
+	* support/valdiag/tests/c2y-function-definition-constraints.c:
+	* support/valdiag/tests/c2y-static-assertion-constraints.c:
+	* support/valdiag/tests/c2y-structure-member-constraints.c:
+	* support/valdiag/tests/c2y-case-range-constraints.c:
+	* support/valdiag/tests/c2y-operator-constraints.c:
+	* support/valdiag/tests/c2y-arithmetic-constraints.c:
+	* support/valdiag/tests/c2y-logical-constraints.c:
+	* support/valdiag/tests/c2y-initialiser-constraints.c:
+	* support/valdiag/tests/c2y-ucn-surrogate.c:
+	* support/valdiag/tests/c2y-ucn-control-character.c:
+	  Add passing N3886 audit test cases for expression operands,
+	  declarations, labels, jumps, returns, function definitions,
+	  structure members, case ranges, static assertions and universal
+	  character names. Include corresponding valid cases and account
+	  for host diagnostic differences.
+
+2026-10-29 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (decorateType): Diagnose structure and union operands
+	  of casts to non-void types (bug #4089).
+	* src/SDCCerr.c, src/SDCCerr.h: Add E_CAST_NONSCALAR. Clarify that
+	  E_CAST_ILLEGAL concerns the destination type, avoiding "aggregate".
+	* support/valdiag/tests/bug-4089.c: Test structure and union operands,
+	  casts to void, and array and function decay.
+
+2026-10-29 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (decorateType): Diagnose casts from pointer to
+	  floating-point type (bug #4088).
+	* src/SDCCerr.c, src/SDCCerr.h: Add E_CAST_PTR_TO_FLOAT as an error.
+	* support/valdiag/tests/bug-4088.c: Add a test that expects an error
+	  when an expression of type int * is cast to type float.
+
+2026-10-29 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCval.h, src/SDCCval.c (stringInitializerTypesMatch): Compare
+	  string and destination element type compatibility, allowing ordinary
+	  character arrays and compatible wide types (bug #4189).
+	* src/SDCCast.c (createIvalCharPtr), src/SDCCglue.c (printIvalArray):
+	  Diagnose incompatible string initialisers before reading their elements.
+	  Limit the direct-array check to scalar character and integer elements;
+	  preserve pointer-element and nested-array initialisation.
+	* support/valdiag/tests/bug-4189.c: Check mismatched types, braces,
+	  qualifiers, typedefs and local arrays. Exercise ordinary and wide
+	  initialisers on the host, and preserve aggregate string initialisation.
+	  Select tests by language features and select compatible element types
+	  with _Generic instead of assuming compiler-specific wchar_t types.
+	  Cover incompatible L/u initialisation in both directions, at file and
+	  block scope, with and without braces, and matching wide strings.
+	* support/regression/tests/bug-4189.c: Check element values and NUL
+	  termination in ordinary, wide, pointer and nested arrays.
+	  Use the native wide prefix and check compatible cross-prefix data
+	  where type queries are available.
+
+2026-10-28 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (decorateType): Diagnose struct and union controlling
+	  expressions in IFX nodes (bug #4083).
+	  (createIf): Remove the early elimination of empty if statements so
+	  that their controlling expressions are checked before optimisation.
+	* support/valdiag/tests/bug-4083.c: Add diagnostic tests for struct and
+	  union controlling expressions in if, while, for and do statements.
+
+2026-10-28 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/lib/free.c,
+	* device/lib/realloc.c: fixed warnings
+	* support/regression/tests/bug-4153.c: added test for bug #3706
+
+2026-10-28 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4229.c:
+	  Fix test header for parsing by test infrastructure.
+
+2026-10-28 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCmain.c: Add --enable-warning to enable a numbered warning,
+	  including one disabled by default or by an earlier option.
+	* src/SDCC.lex: Add #pragma enable_warning, sharing argument parsing
+	  with #pragma disable_warning.
+	* doc/sdccman.lyx: Document warning enabling, option ordering and
+	  interaction with source-file pragmas.
+	* support/valdiag/tests/enable-warning.c: Test disabling and
+	  re-enabling warning 244, which is enabled by default. Warning 212
+	  is disabled by default but has no remaining emission sites.
+
+2026-10-27 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/mos-common,
+	  device/lib/mos-common/__sdcc_indirect_jsr.s,
+	  device/lib/mos-common/__sdcc_regs.s,
+	  device/lib/mos-common/__stdc_bit_width.s,
+	  device/lib/mos-common/__stdc_count_ones.s,
+	  device/lib/mos-common/_divsint.s,
+	  device/lib/mos-common/_divslong.s,
+	  device/lib/mos-common/_divuchar.s,
+	  device/lib/mos-common/_divuint.s,
+	  device/lib/mos-common/_divulong.s,
+	  device/lib/mos-common/_floatlib.s,
+	  device/lib/mos-common/_fsadd.s,
+	  device/lib/mos-common/_fseq.s,
+	  device/lib/mos-common/_fslt.s,
+	  device/lib/mos-common/_fsmul.s,
+	  device/lib/mos-common/_fsneq.s,
+	  device/lib/mos-common/_fssub.s,
+	  device/lib/mos-common/_memcmp.s,
+	  device/lib/mos-common/_memset.s,
+	  device/lib/mos-common/_modsint.s,
+	  device/lib/mos-common/_modslong.s,
+	  device/lib/mos-common/_moduchar.s,
+	  device/lib/mos-common/_moduint.s,
+	  device/lib/mos-common/_modulong.s,
+	  device/lib/mos-common/_mulint.s,
+	  device/lib/mos-common/_mullong.s,
+	  device/lib/mos-common/_mulschar.s,
+	  device/lib/mos-common/_muluchar.s,
+	  device/lib/mos-common/_setjmp.s,
+	  device/lib/mos-common/_strchr.s,
+	  device/lib/mos-common/_strcmp.s,
+	  device/lib/mos-common/_strcpy.s,
+	  device/lib/mos-common/_strrchr.s,
+	  device/lib/mos-common/abs.s,
+	  device/lib/mos-common/atomic_flag_test_and_set.c,
+	  device/lib/mos-common/cosf.s,
+	  device/lib/mos-common/div.s,
+	  device/lib/mos-common/fabsf.s,
+	  device/lib/mos-common/labs.s,
+	  device/lib/mos-common/ldiv.s,
+	  device/lib/mos-common/memcpy.s,
+	  device/lib/mos-common/rand.s,
+	  device/lib/mos-common/sinf.s,
+	  device/lib/mos-common/strlen.s,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos6502-stack-auto/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/mos65c02/config.inc,
+	  device/lib/mos65c02-stack-auto/Makefile.in,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/huc6280/abs.s,
+	  device/lib/huc6280/config.inc,
+	  device/lib/huc6280/crt0.s,
+	  device/lib/huc6280/memcpy.s:
+	  Move all mos6502 common library files into mos-common.
+
+2026-10-26 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/gen.c:
+	  Make --fverbose-asm a bit less verbose.
+	* src/stm8/peep.c,
+	  support/regression/tests/bug-4231.c:
+	  Fix bug #4231.
+
+2026-10-26 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/gen.c,
+	  support/regression/tests/bug-4229.c:
+	  Fix bug #4229.
+
+2026-10-25 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (decorateType): Fold short-circuited logical
+	  expressions with a decisive literal left operand. Discard the
+	  unevaluated right operand before rewriting so its side effects are
+	  not rejoined (bug #4207).
+	* support/regression/tests/bug-4207.c: Check static initialiser
+	  values and call counts, including local statics and evaluated left
+	  operands. Use separate failing functions for the short-circuited
+	  local static initialisers to identify an unexpected call.
+	* support/valdiag/tests/bug-4207.c: Retain diagnostics for evaluated
+	  calls in static initialisers.
+
+2026-10-25 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCval.c (getNelements): In C2Y mode, resolve generic selections
+	  when inferring the bound of an array initialised by a string. Inspect a
+	  copy without allocating strings or changing the initialiser (bug #4208).
+	* support/regression/tests/bug-4208.c: Check inferred lengths,
+	  characters and terminators for selected and default associations,
+	  nested selections, braces, empty strings and local arrays.
+
+2026-10-25 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (createCase, createCaseRange): Require literal value
+	  nodes before reading case values. Check that range endpoints have
+	  integer type (bug #4211).
+	* support/valdiag/tests/bug-4211.c: Diagnose evaluated comma
+	  expressions and invalid range endpoints. Accept integer cases and
+	  comma expressions confined to unevaluated conditional operands.
+	  Skip range tests for compilers without C2Y support.
+
+2026-10-24 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/c2y-array-expression-constraints.c:
+	  Test invalid array initialisers using array and pointer expressions,
+	  and valid list and string initialisers.
+	* support/valdiag/tests/c2y-auto-storage-constraints.c:
+	  Test an explicitly typed file-scope static auto declaration.
+	* support/valdiag/tests/c2y-declaration-diagnostic-coverage.c:
+	  Test compound-literal storage classes and initialisers, file-scope
+	  variably modified typedefs, static VLAs and initialised VLAs. Keep
+	  C99 declaration checks enabled on the host and qualify expectations
+	  for language-specific cases skipped by the host.
+	* support/valdiag/tests/c2y-declarator-diagnostic-coverage.c:
+	  Test typedef-based array return types, bit-precise width limits,
+	  implicit pointer/integer conversions, constexpr floating
+	  initialisers and arithmetic on pointers to incomplete types.
+	  Include corresponding valid cases. Qualify expectations for skipped
+	  constexpr and bit-precise cases.
+	* support/valdiag/tests/c2y-expression-constraints.c:
+	  Test member access through incomplete and complete structure types.
+	  Use a void expression statement to avoid unrelated return warnings.
+	* support/valdiag/tests/c2y-lexical-preprocessor-diagnostics.c:
+	  Test malformed tokens, feature-query operands, preprocessing
+	  controlling expressions and missing includes, with valid cases. Run
+	  these checks on the host and use a source-directory-relative header
+	  name for __has_include, including in out-of-tree builds.
+	* support/valdiag/tests/c2y-macro-constraints.c:
+	  Test macro redefinitions, argument counts, __VA_OPT__, stringising
+	  and token-pasting constraints, and valid identical redefinitions.
+	* support/valdiag/tests/c2y-operand-diagnostic-coverage.c:
+	  Test undeclared identifiers in evaluated expressions, sizeof and
+	  unselected generic associations. Test excess initialisers in array
+	  and structure compound literals, with valid cases. Use void expression
+	  statements for invalid identifiers to avoid unrelated return warnings.
+	* support/valdiag/tests/c2y-type-specifier-constraints.c:
+	  Test missing type specifiers and invalid type-specifier combinations,
+	  and a valid unsigned long long declaration. Make implicit-int diagnostics
+	  errors on GCC for consistent expectations across compiler versions.
+	* support/valdiag/tests/c2y-ucn-basic-character.c:
+	  Test a basic letter written as a universal character name in an
+	  identifier.
+	* support/valdiag/tests/c2y-ucn-initial-character.c:
+	  Test a combining character at the start of an identifier.
+	* support/valdiag/tests/c2y-ucn-out-of-range.c:
+	  Test a universal character name above U+10FFFF in an identifier.
+	* support/valdiag/tests/c2y-unsupported-type-diagnostics.c:
+	  Test diagnostics for unsupported complex and decimal floating types
+	  and an atomic constexpr object, with valid non-atomic cases. Qualify
+	  skipped constexpr expectations and allow language-mode-dependent
+	  GCC diagnostics for decimal types.
+
+2026-10-24 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.c (removeOptionalQualifier), src/SDCCsymt.h:
+	  Add a helper to remove outer _Optional qualification, looking
+	  through arrays to their element type.
+	* src/SDCC.y, src/SDCCast.c: Use the helper when forming address
+	  types and folding &* expressions (bug #4162).
+	* support/valdiag/tests/bug-4162.c: Test guarded array addresses,
+	  multiple dimensions, unsafe uses and preservation of const,
+	  volatile and deeper _Optional qualification.
+
+2026-10-24 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCicode.c (geniCodeStruct): Apply inherited qualifiers to
+	  members and array elements, including pointer types (bug #4165).
+	  Keep qualification of referenced types intact.
+	* support/valdiag/tests/bug-4165.c: Test array and non-array members,
+	  nested arrays, pointer depth and combined qualifiers. Retain
+	  warnings for unchecked structure pointers and unchecked pointers
+	  to _Optional int.
+
+2026-10-24 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/peeph.def,
+	  src/z80/peeph-sm83.def:
+	  Fix some missing conditions on peephole optimizer rules.
+
+2026-10-24 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/MakeList,
+	  support/regression/tests/bug-4153.c:
+	  Disable test for low-memory pdk via MakeList rather than #ifdef.
+	* device/include/stdbit.h,
+	  src/SDCCsymt.c:
+	  Fixes for signed _BitInt(1).
+	* support/regression/tests/bug-4123-2.c:
+	  Disable part of a test for pdk15, to make the test fit into pdk15 code memory.
+	* src/z80/peeph-sm83.def:
+	  Remove some sm83 peephole optimizer rules, for which no tests were found; towards fixing bug #4171.
+
 2026-10-23 Christopher Bazley <chris.bazley.wg14@gmail.com>
 
 	* src/SDCCpeeph.c (notVolatileRange, directOperandSymbol,
