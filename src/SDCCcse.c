@@ -432,6 +432,14 @@ DEFSETFUNC (findCheaperOp)
           return 0;
         }
 
+      /* Keep the volatile qualification of the object read through a pointer. */
+      if (IS_PTR (operandType (cop)) && IS_PTR (operandType (*opp)) &&
+          isVolatile (operandType (cop)->next) && !isVolatile (operandType (*opp)->next))
+        {
+          *opp = NULL;
+          return 0;
+        }
+
       *opp = operandFromOperand (*opp);
 
       if ((*opp)->isaddr != cop->isaddr && IS_ITEMP (cop))
@@ -2185,8 +2193,11 @@ static int isSignedOp (iCode *ic)
     case GETABIT:
     case GETBYTE:
     case GETWORD:
-    case RIGHT_OP:
     case CAST:
+        /* Casts from pointer types do not depend on the signedness
+           of the source type. */
+        return !IS_PTR (operandType (IC_RIGHT (ic)));
+    case RIGHT_OP:
     case ARRAYINIT:
         return 1;
     default:

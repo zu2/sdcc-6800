@@ -504,7 +504,8 @@ PRINTFUNC (picReceive)
 PRINTFUNC (picPointerCheck)
 {
   dbuf_printf (dbuf, "\t%s (%s) ", s,
-               ic->pointerCheck == POINTER_ARITHMETIC ? "arithmetic" : "dereference");
+               ic->pointerCheck == POINTER_ARITHMETIC ? "arithmetic" :
+               ic->pointerCheck == POINTER_RELATIONAL ? "relational" : "dereference");
   if (IC_LEFT (ic))
     dbuf_printOperand (IC_LEFT (ic), dbuf);
   if (IC_LEFT (ic) && IC_RIGHT (ic))
@@ -2776,15 +2777,24 @@ geniCodeStruct (operand * left, operand * right, bool islval)
   if (IS_PTR (element->type))
     {
       DCL_PTR_CONST (rtype) |= DCL_PTR_CONST (element->type);
-      DCL_PTR_VOLATILE (rtype) |= DCL_PTR_VOLATILE (element->type);
+      DCL_PTR_VOLATILE (rtype) |= SPEC_VOLATILE (etype);
       DCL_PTR_RESTRICT (rtype) |= DCL_PTR_RESTRICT (element->type);
       DCL_PTR_OPTIONAL (rtype) |= DCL_PTR_OPTIONAL(element->type);
       setOperandType (IC_RESULT (ic), aggrToPtr (operandType (IC_RESULT (ic)), true));
     }
   else
     {
+      sym_link *qualified_type = rtype;
+
+      /* An array member inherits volatile on its element type. */
+      while (IS_ARRAY (qualified_type))
+        qualified_type = qualified_type->next;
+      if (IS_PTR (qualified_type))
+        DCL_PTR_VOLATILE (qualified_type) |= SPEC_VOLATILE (etype);
+      else
+        SPEC_VOLATILE (qualified_type) |= SPEC_VOLATILE (etype);
+
       SPEC_CONST (retype) |= SPEC_CONST (etype);
-      // Do not preserve volatile.
       SPEC_RESTRICT (retype) |= SPEC_RESTRICT (etype);
       SPEC_OPTIONAL (retype) |= SPEC_OPTIONAL (etype);
     }
@@ -3283,6 +3293,13 @@ geniCodeLogic (operand * left, operand * right, int op, ast * tree)
   sym_link *ctype, *ttype;
   sym_link *rtype = operandType (right);
   sym_link *ltype = operandType (left);
+
+  /* Check the source pointers before the common type can add _Optional
+     to the other operand. Equality comparisons permit null pointers. */
+  if (op == '<' || op == '>' || op == LE_OP || op == GE_OP)
+    {
+      recordPointerCheck (left, right, POINTER_RELATIONAL);
+    }
 
   /* left is integral type and right is literal then
      check if the literal value is within bounds */

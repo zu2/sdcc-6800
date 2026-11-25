@@ -5482,7 +5482,49 @@ skip_byte:
           continue;
         }
 
-      // No byte can be assigned safely (i.e. the assignment is a permutation). Cache one in the accumulator.
+      // No byte can be assigned safely (i.e. the assignment is a permutation).
+
+      // If the permutation contains a swap of a with the high-order byte of a register pair, do it via push/pop, if we can.
+      i = source->regs[A_IDX] - soffset;
+      if (i >= 0 && i < n && !assigned[i]) // a is involved.
+        {
+          int j = result->regs[A_IDX] - roffset;
+          if (j >= 0 && j < n && !assigned[j] && // Check if it is a swap of a with another register.
+            result->aopu.aop_reg[roffset + i] == source->aopu.aop_reg[soffset + j] &&
+            result->aopu.aop_reg[roffset + j] == source->aopu.aop_reg[soffset + i])
+            {
+              bool c_free = bc_dead && (source->regs[C_IDX] < soffset || source->regs[C_IDX] >= soffset + n) && (result->regs[C_IDX] < roffset || result->regs[C_IDX] >= roffset + n);
+              bool e_free = de_dead && (source->regs[E_IDX] < soffset || source->regs[E_IDX] >= soffset + n) && (result->regs[E_IDX] < roffset || result->regs[E_IDX] >= roffset + n);
+              bool l_free = hl_dead && (source->regs[L_IDX] < soffset || source->regs[L_IDX] >= soffset + n) && (result->regs[L_IDX] < roffset || result->regs[L_IDX] >= roffset + n);
+              bool iyl_free = iy_dead && (source->regs[IYL_IDX] < soffset || source->regs[IYL_IDX] >= soffset + n) && (result->regs[IYL_IDX] < roffset || result->regs[IYL_IDX] >= roffset + n);
+              if (aopInReg (result, roffset + i, B_IDX) && (f_dead || c_free) ||
+                aopInReg (result, roffset + i, D_IDX) && (f_dead || e_free) ||
+                aopInReg (result, roffset + i, H_IDX) && (f_dead || l_free) ||
+                HAS_IYL_INST && aopInReg (result, roffset + i, IYH_IDX) && (f_dead || iyl_free))
+                {
+                  PAIR_ID pair = aopInReg (result, roffset + i, B_IDX) ? PAIR_BC : aopInReg (result, roffset + i, D_IDX) ? PAIR_DE : aopInReg (result, roffset + i, H_IDX) ? PAIR_HL : PAIR_IY; 
+                  if (f_dead)
+                    {
+                      _push (pair);
+                      emit3_o (A_LD, result, roffset + i, ASMOP_A, 0);
+                      _pop (PAIR_AF);
+                    }
+                  else
+                    {
+                      _push (PAIR_AF);
+                      emit3_o (A_LD, ASMOP_A, 0, result, roffset + i);
+                      _pop (pair);
+                    }
+                  assigned[i] = true;
+                  assigned[j] = true;
+                  regsize -= 2;
+                  size -= 2;
+                  continue;
+                }
+            }
+        }
+
+      // Otherwise cache one in the accumulator.
 
       if (cached_byte != -1)
         {
@@ -5497,7 +5539,12 @@ skip_byte:
           break;
 
       wassertl_bt (i != n, "genCopy error: Trying to cache non-existent byte in accumulator.");
-      if (!a_free && !pushed_a)
+      if (source->regs[A_IDX] > soffset && source->regs[A_IDX] < soffset + n && !assigned[source->regs[A_IDX] - soffset] && result->regs[roffset + source->regs[A_IDX] - soffset] != A_IDX)
+        {
+          // Would overwrite still-needed a.
+          UNIMPLEMENTED;
+        }
+      else if (!a_free && !pushed_a)
         {
           _push (PAIR_AF);
           pushed_a = TRUE;
@@ -10030,16 +10077,19 @@ genPlus (iCode * ic)
   if (size > 1 &&
     !(size == 2 && isPair (leftop) && (rightop->type == AOP_LIT || rightop->type == AOP_IY)) && !(size == 2 && leftop->type == AOP_STL && isPairDead (PAIR_HL, ic))) // No need to setup if a single 16 bit addition is sufficient below.
     {
-      if (!couldDestroyCarry (leftop) && (couldDestroyCarry (rightop) || couldDestroyCarry (IC_RESULT (ic)->aop)))
+      if (!couldDestroyCarry (leftop) && (couldDestroyCarry (rightop) || couldDestroyCarry (ic->result->aop)))
         {
           cheapMove (ASMOP_A, 0, leftop, offset, true);
           premoved = TRUE;
         }
 
-      if ((requiresHL (IC_RESULT (ic)->aop) && IC_RESULT (ic)->aop->type != AOP_REG || requiresHL (leftop) && leftop->type != AOP_REG || requiresHL (rightop) && rightop->type != AOP_REG) &&
+      if ((requiresHL (ic->result->aop) && ic->result->aop->type != AOP_REG || requiresHL (leftop) && leftop->type != AOP_REG || requiresHL (rightop) && rightop->type != AOP_REG) &&
         (leftop->regs[L_IDX] > 0 || leftop->regs[H_IDX] > 0 || rightop->regs[L_IDX] > 0 || rightop->regs[H_IDX] > 0))
         UNIMPLEMENTED;
-      setupToPreserveCarry (IC_RESULT (ic)->aop, leftop, rightop);
+      if (requiresHL (ic->result->aop) && couldDestroyCarry (ic->result->aop) &&
+        (leftop->regs[L_IDX] >= 0 || leftop->regs[H_IDX] >= 0 || rightop->regs[L_IDX] >= 0 || rightop->regs[H_IDX] >= 0))
+        UNIMPLEMENTED;
+      setupToPreserveCarry (ic->result->aop, leftop, rightop);
     }
   // But if we don't actually want to use hl for the addition, it can make sense to setup an op to use cheaper hl instead of iy.
   if (size == 1 && !aopInReg(leftop, 0, H_IDX) && !aopInReg(leftop, 0, L_IDX) && !aopInReg(rightop, 0, H_IDX) && !aopInReg(rightop, 0, L_IDX) && isPairDead (PAIR_HL, ic))

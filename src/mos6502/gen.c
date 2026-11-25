@@ -2223,8 +2223,7 @@ m6502_rmwWithReg (char *rmwop, reg_info * reg)
       else if (!strcmp(rmwop, "neg"))
         {
           m6502_emitOp ("eor", "#0xff");
-          m6502_emitSetCarry (0);
-          m6502_emitOp ("adc", "#0x01");
+          m6502_rmwWithReg ("inc", m6502_reg_a);
         }
       else
         {
@@ -2265,7 +2264,7 @@ m6502_rmwWithReg (char *rmwop, reg_info * reg)
 /**************************************************************************
  * m6502_rmwWithAop - Emit read/modify/write instruction rmwop with the byte at
  *                logical offset loffset of asmop aop.
- *                Supports: bit, dec, inc, lsl, lsr, neg, rol, ror
+ *                Supports: bit, dec, inc, asl, lsr, neg, rol, ror
  *************************************************************************/
 void
 m6502_rmwWithAop (char *rmwop, asmop * aop, int loffset)
@@ -2287,16 +2286,9 @@ m6502_rmwWithAop (char *rmwop, asmop * aop, int loffset)
 
     case AOP_DIR:
     case AOP_EXT:
-      m6502_emitComment (TRACE_AOP, "  m6502_rmwWithAop DIR/EXT");
-      m6502_emitOp (rmwop, aopAdrStr(aop, loffset, false));
-      dirtyRegAop (NULL, aop, loffset);
-      break;
-
     case AOP_SOF:
-      m6502_emitComment (TRACE_AOP, "  m6502_rmwWithAop AOP_SOF");
-      // FIXME: figure out if asr handling should be here
-      // or if asr should be generated at all by the codegen
-      m6502_emitOp (rmwop, aopAdrStr (aop, loffset, false));
+      m6502_emitComment (TRACE_AOP, "  m6502_rmwWithAop DIR/EXT/SOF");
+      m6502_emitOp (rmwop, aopAdrStr(aop, loffset, false));
       dirtyRegAop (NULL, aop, loffset);
       break;
 
@@ -4110,9 +4102,14 @@ static void genUminus (iCode * ic)
       if (left1 == m6502_reg_a)
         m6502_pushReg (left1, true);
 
-      if (left0 == m6502_reg_a) // TODO?
-        m6502_rmwWithReg ("neg", m6502_reg_a);
-      else {
+      if (left0 == m6502_reg_a)
+        {
+          m6502_emitOp ("eor", "#0xff");
+          m6502_emitSetCarry (0);
+          m6502_emitOp ("adc", "#0x01");
+        }
+      else
+        {
         m6502_loadRegFromConst (m6502_reg_a, 0);
         m6502_emitSetCarry(1);
         m6502_accopWithAop ("sbc", AOP (left), 0);

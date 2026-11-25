@@ -987,6 +987,24 @@ FBYNAME (newLabel)
   return true;
 }
 
+/* Conservatively identify volatile accesses before peephole replacements
+   can lose the original iCode association. */
+static bool
+mightHaveVolatileAccess (const iCode *ic)
+{
+  if (ic->op == INLINEASM)
+    return true;
+  if (ic->op == IFX)
+    return IS_OP_VOLATILE (IC_COND (ic));
+  if (ic->op == JUMPTABLE)
+    return IS_OP_VOLATILE (IC_JTCOND (ic));
+  return IS_OP_VOLATILE (IC_LEFT (ic)) ||
+    IS_OP_VOLATILE (IC_RIGHT (ic)) || IS_OP_VOLATILE (IC_RESULT (ic)) ||
+    ((POINTER_GET (ic) || ic->op == SET_VALUE_AT_ADDRESS) &&
+     isVolatile (operandType (IC_LEFT (ic))->next)) ||
+    (POINTER_SET (ic) && isVolatile (operandType (IC_RESULT (ic))->next));
+}
+
 /* Within the context of the lines currPl through endPl, determine
 ** if the variable var contains a symbol that is volatile. Returns
 ** true only if it is certain that this was not volatile (the symbol
@@ -1019,7 +1037,32 @@ notVolatileVariable(const char *var, lineNode *currPl, lineNode *endPl)
       if (var[0] == '#')
         return true;
       if (var[0] == '(')
-        return global_not_volatile;
+        {
+          for (const lineNode *line = currPl; line != endPl->next; line = line->next)
+            if (line->mightBeVolatileAccess)
+              return false;
+          /* Resolve only an exact direct symbol operand. Register-indirect
+             accesses and address expressions still need the fallback. */
+          const char *name = var + 1;
+          size_t len = 0;
+          if (*name != '_')
+            return global_not_volatile;
+          while (ISCHARALNUM (name[len]) || name[len] == '_')
+            len++;
+          if (len > SDCC_NAME_MAX || name[len] != ')' || name[len + 1])
+            return global_not_volatile;
+          memcpy (symname, name, len);
+          symname[len] = '\0';
+
+          /* As for direct calls, look up the C name without its leading
+             underscore. Verify the assembly name to reject shadowed or
+             renamed symbols. Instruction iCode associations need not survive
+             peephole rewrites. */
+          const symbol *sym = findSym (SymbolTab, NULL, symname + 1);
+          if (sym && !strcmp (sym->rname, symname))
+            return !isVolatile (sym->type);
+          return global_not_volatile;
+        }
       if (strstr (var, "(bc)"))
         return global_not_volatile;
       if (strstr (var, "(de)"))
@@ -1088,6 +1131,12 @@ notVolatileVariable(const char *var, lineNode *currPl, lineNode *endPl)
       */
       return true;
     }
+
+  /* Keep volatile accesses protected even when a replacement has lost
+     or changed its iCode association. */
+  for (const lineNode *line = currPl; line != endPl->next; line = line->next)
+    if (line->mightBeVolatileAccess)
+      return false;
 
   last_ic = NULL;
   for (cl = currPl; cl!=endPl->next; cl = cl->next)
@@ -1173,38 +1222,13 @@ FBYNAME (notVolatile)
   char *var;
   char *digitend;
   lineNode *cl;
-  operand *op;
 
   if (!cmdLine)
     {
-      /* If no parameters given, just scan the iCodes for volatile operands */
-      for (cl = currPl; cl!=endPl->next; cl = cl->next)
-      {
-        if (cl->ic)
-          {
-            switch (cl->ic->op)
-              {
-              case IFX:
-                op = IC_COND (cl->ic);
-                if (IS_SYMOP (op) && op->isvolatile)
-                  return false;
-              case JUMPTABLE:
-                op = IC_JTCOND (cl->ic);
-                if (IS_SYMOP (op) && op->isvolatile)
-                  return false;
-              default:
-                op = IC_LEFT (cl->ic);
-                if (IS_SYMOP (op) && op->isvolatile)
-                  return false;
-                op = IC_RIGHT (cl->ic);
-                if (IS_SYMOP (op) && op->isvolatile)
-                  return false;
-                op = IC_RESULT (cl->ic);
-                if (IS_SYMOP (op) && op->isvolatile)
-                  return false;
-              }
-          }
-      }
+      /* Use the access information captured before peephole rewriting. */
+      for (cl = currPl; cl != endPl->next; cl = cl->next)
+        if (cl->mightBeVolatileAccess)
+          return false;
       return true;
     }
 
@@ -3490,6 +3514,10 @@ replaceRule (lineNode **shead, lineNode *stail, const peepRule *pr)
   char *lbp;
   lineNode *comment = NULL;
 
+  bool mightBeVolatileAccess = false;
+  for (const lineNode *line = *shead; line != stail->next; line = line->next)
+    mightBeVolatileAccess |= line->mightBeVolatileAccess;
+
   /* collect all the comment lines in the source */
   for (cl = *shead; cl != stail; cl = cl->next)
     {
@@ -3545,6 +3573,7 @@ replaceRule (lineNode **shead, lineNode *stail, const peepRule *pr)
         lhead = cl = newLineNode (lb);
       cl->isComment = pl->isComment;
       cl->isLabel   = pl->isLabel;
+      cl->mightBeVolatileAccess = mightBeVolatileAccess && !cl->isComment;
     }
 
   /* add the comments if any to the head of list */
@@ -3848,6 +3877,10 @@ peepHole (lineNode ** pls)
   if (TARGET_PIC_LIKE)
     return;
 #endif
+
+  for (spl = *pls; spl; spl = spl->next)
+    if (!spl->isComment && !spl->isDebug && spl->ic && mightHaveVolatileAccess (spl->ic))
+      spl->mightBeVolatileAccess = true;
 
   assert(labelHash == NULL);
 

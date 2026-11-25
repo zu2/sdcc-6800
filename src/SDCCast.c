@@ -4224,6 +4224,13 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
     case DEC_OP:
       {
         sym_link *ltc = (tree->right ? RTYPE (tree) : LTYPE (tree));
+        /* nullptr_t is scalar, but increment and decrement require an
+           arithmetic or pointer operand. */
+        if (!IS_ARITHMETIC (ltc) && !IS_PTR (ltc))
+          {
+            werrorfl (tree->filename, tree->lineno, E_PLUS_INVALID, tree->opval.op == INC_OP ? "++" : "--");
+            goto errorTreeReturn;
+          }
         COPYTYPE (TTYPE (tree), TETYPE (tree), ltc);
         if (!tree->initMode && IS_CONSTANT (TTYPE (tree)))
           werrorfl (tree->filename, tree->lineno, E_CODE_WRITE, tree->opval.op == INC_OP ? "++" : "--");
@@ -5585,6 +5592,27 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
     case EQ_OP:
     case NE_OP:
       {
+        sym_link *leftTarget = pointerTargetType (LTYPE (tree)),
+                 *rightTarget = pointerTargetType (RTYPE (tree));
+        bool equality = tree->opval.op == EQ_OP || tree->opval.op == NE_OP;
+        const char *reason = NULL;
+
+        /* Check source types before optimisation or common-type conversion.
+           Equality shares the referenced-type constraint used by conditional
+           expressions and implicit conversions. Relational operators also
+           require object types. */
+        if (leftTarget && rightTarget)
+          {
+            if (!equality && (IS_FUNC (leftTarget) || IS_FUNC (rightTarget)))
+              reason = "pointers to non-object types";
+            else if (equality ? needsPtrTargetTypeWarning (LTYPE (tree), RTYPE (tree)) :
+                !similarTypes (leftTarget, rightTarget))
+              reason = "pointers to incompatible types";
+
+            if (reason && werrorfl (tree->filename, tree->lineno, W_COMPARE_POINTERS, reason))
+              printWithTypes (LTYPE (tree), RTYPE (tree));
+          }
+
         ast *lt = optimizeCompare (tree);
 
         if (tree != lt)
@@ -5601,22 +5629,21 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
           goto errorTreeReturn;
         }
 
-      /* if they are pointers they must be castable */
-      else if (IS_PTR (LTYPE (tree)) && IS_PTR (RTYPE (tree)))
+      /* Compatible referenced types do not guarantee compatible pointer
+         representations across address spaces. */
+      else if (IS_PTR (LTYPE (tree)) && IS_PTR (RTYPE (tree)) &&
+          similarTypes (LTYPE (tree)->next, RTYPE (tree)->next) &&
+          compareType (LTYPE (tree), RTYPE (tree), false) == 0 &&
+          compareType (RTYPE (tree), LTYPE (tree), false) == 0)
         {
-          if (compareType (LTYPE (tree), RTYPE (tree), false) == 0 && compareType (RTYPE (tree), LTYPE (tree), false) == 0) // Compare both ways, just cast to the one that is more generic.
-            {
-              werrorfl (tree->filename, tree->lineno, E_INCOMPAT_TYPES);
-              fprintf (stderr, "comparing type ");
-              printTypeChain (LTYPE (tree), stderr);
-              fprintf (stderr, " to type ");
-              printTypeChain (RTYPE (tree), stderr);
-              fprintf (stderr, "\n");
-              goto errorTreeReturn;
-            }
+          werrorfl (tree->filename, tree->lineno, E_INCOMPAT_TYPES);
+          printWithTypes (LTYPE (tree), RTYPE (tree));
+          goto errorTreeReturn;
         }
-      /* else they should be promotable to one another */
-      else
+
+      /* Pointer comparisons were checked above, including array and function
+         conversions. Other operands must be promotable to one another. */
+      else if (!pointerTargetType (LTYPE (tree)) || !pointerTargetType (RTYPE (tree)))
         {
           if (!((IS_PTR (LTYPE (tree)) && IS_LITERAL (RTYPE (tree)))
                 || (IS_PTR (RTYPE (tree)) && IS_LITERAL (LTYPE (tree)))
@@ -6038,6 +6065,20 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
                 for (assoc_etype = assoc_type; !IS_SPEC(assoc_etype); assoc_etype = assoc_etype->next);
                 checkTypeSanity (assoc_etype, "(_Generic)");
 
+                /* Duplicate types are forbidden even when neither
+                   association matches the controlling type. The list is
+                   reversed: other is the earlier source association. */
+                for (ast *other = assoc_list->left; other; other = other->left)
+                  if (other->right->left &&
+                      SPEC_ADDRSPACE (assoc_etype) ==
+                        SPEC_ADDRSPACE (getSpec (other->right->left->opval.lnk)) &&
+                      compatibleTypes (assoc_type, other->right->left->opval.lnk))
+                    {
+                      werrorfl (assoc->filename, assoc->lineno, E_DUPLICATE_GENERIC_TYPE,
+                                other->right->filename, other->right->lineno);
+                      goto errorTreeReturn;
+                    }
+
                 /* treat as non-equal if the address spaces differ */
                 if (SPEC_ADDRSPACE (getSpec (type)) != SPEC_ADDRSPACE (getSpec (assoc_type)))
                   continue;
@@ -6075,6 +6116,13 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
       return tree;
 
     case ':':
+      /* Castability alone does not satisfy the conditional operator's
+         requirement for compatible referenced types. */
+      if (needsPtrTargetTypeWarning (LTYPE (tree), RTYPE (tree)))
+        {
+          werrorfl (tree->filename, tree->lineno, W_INCOMPAT_PTYPES);
+          printWithTypes (LTYPE (tree), RTYPE (tree));
+        }
       if ((compareType (LTYPE (tree), RTYPE (tree), false) == 0) && (compareType (RTYPE (tree), LTYPE (tree), false) == 0))
         {
           if (IS_PTR (LTYPE (tree)) && !IS_GENPTR (LTYPE (tree)))
@@ -6089,7 +6137,7 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
         !(IS_ARRAY(RTYPE (tree)) && IS_INTEGRAL(LTYPE (tree))))
         {
           werrorfl (tree->filename, tree->lineno, E_TYPE_MISMATCH, "conditional operator", " ");
-          printFromToType (RTYPE (tree), LTYPE (tree));
+          printWithTypes (RTYPE (tree), LTYPE (tree));
         }
 
       TTYPE (tree) = computeType (LTYPE (tree), RTYPE (tree), resultType, tree->opval.op);
@@ -6339,6 +6387,27 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
             }
           else
             functype = LTYPE (tree);
+
+          /* Check calls through function pointers too. */
+          if (TARGET_IS_DS390 && options.model != MODEL_FLAT24 && IS_AGGREGATE (functype->next))
+            {
+              werrorfl (tree->filename, tree->lineno, E_FUNC_AGGR);
+              goto errorTreeReturn;
+            }
+
+          if (TARGET_IS_DS390 && !options.stack10bit && IS_AGGREGATE (functype->next))
+            {
+              werrorfl (tree->filename, tree->lineno, E_NOT_ALLOWED,
+                        "ds390 struct/union return requires --stack-10bit");
+              goto errorTreeReturn;
+            }
+
+          if (TARGET_IS_DS390 && options.useXstack && IS_AGGREGATE (functype->next))
+            {
+              werrorfl (tree->filename, tree->lineno, E_NOT_ALLOWED,
+                        "ds390 struct/union return with --xstack");
+              goto errorTreeReturn;
+            }
 
           if (tree->right && tree->right->reversed)
             reverseParms (tree->right, 0);

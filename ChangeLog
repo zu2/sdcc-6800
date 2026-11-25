@@ -1,3 +1,396 @@
+2026-10-23 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCopt.c (optimizeFinalCast): Retain pointer casts that change
+	  the volatility of the pointed-to type. Replacing the cast pointer
+	  with its source otherwise loses the qualification before register
+	  allocation and can allow a required volatile read to be deleted by
+	  peephole optimisation. This change is a precondition for removing
+	  the check for currFunc->funcUsesVolatile in notVolatileVariable.
+
+2026-10-23 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (decorateType): Diagnose incompatible referenced
+	  types in pointer comparisons and non-object pointer operands of
+	  relational operators before optimisation. Apply array and function
+	  conversions when checking the operands. Retain the equality exceptions
+	  for object/void pointers and null pointer constants (bug #4174).
+	* src/SDCCsymt.c, src/SDCCsymt.h: Share pointerTargetType and
+	  needsPtrTargetTypeWarning between comparison, conditional-expression
+	  and implicit-conversion constraint checks. Use similarTypes to compare
+	  referenced types. Check array and function operands without constructing
+	  temporary pointer types in comparisons and conditional expressions.
+	* src/SDCCerr.c, src/SDCCerr.h: Add W_COMPARE_POINTERS as a warning.
+	* support/valdiag/tests/bug-4174.c: Test all six operators, reversed
+	  operands, function pointers, arrays, constant folding and valid
+	  comparisons, including void and other incomplete object types,
+	  qualifiers, null pointers and address spaces.
+	* support/regression/tests/bug-2710.c: Suppress the warning for the
+	  comparison of pointers to incompatible types.
+
+2026-10-23 Lishin <lishin1008@gmail.com>
+
+	* support/regression/MakeList,
+	  support/regression/tests/bigreturn-remat.c.in,
+	  support/regression/tests/dynamiccstructret.c.in,
+	  support/regression/tests/funptrsstructreturn.c.in,
+	  support/regression/tests/gcc-torture-execute-struct-ret-1.c,
+	  support/regression/tests/largeoddstruct.c.in,
+	  support/regression/tests/structreturn.c.in:
+	  Run DS390 struct return tests for direct and indirect calls, and
+	  check returned data.
+
+2026-10-23 Lishin <lishin1008@gmail.com>
+
+	* device/include/stdlib.h,
+	  device/lib/div.c,
+	  device/lib/ldiv.c,
+	  device/lib/lldiv.c:
+	  Enable div(), ldiv(), and lldiv() for the DS390 flat24 model.
+	  These functions return structs.
+
+2026-10-23 Lishin <lishin1008@gmail.com>
+
+	* src/SDCCast.c,
+	  src/SDCCsymt.c,
+	  src/ds390/gen.c,
+	  src/ds390/main.c:
+	  Add struct and union return support for the DS390 flat24 model.
+	  Pass the result pointer in parameter registers and save it in the
+	  callee. Keep other parameters on the stack.
+	* support/regression/tests/ds390-structreturn-static.c:
+	  Add a test for returning a static struct.
+
+2026-10-22 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCgen.h (lineElem_t, lineNode): Record possible volatile accesses.
+	* src/SDCCpeeph.c (mightHaveVolatileAccess, notVolatileVariable,
+	  notVolatile, replaceRule, peepHole): Preserve volatile-access information
+	  through peephole replacements, including SET_VALUE_AT_ADDRESS stores,
+	  protecting required accesses even when instruction iCode associations
+	  are lost or changed (bugs #4202, #4203 and #4204). Make the no-parameter
+	  notVolatile rule restriction use the preserved information instead of
+	  scanning the lines’ current iCode associations.
+
+2026-10-22 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/gen.c,
+	  support/regression/tests/bug-4186.c:
+	  Fix bug #4186.
+
+2026-10-22 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCpeeph.c (notVolatileVariable):
+	  Resolve exact Z80-family direct symbol operands through the symbol
+	  table when checking volatility. Retain the conservative fallback for
+	  indirect accesses, address expressions and unresolved symbols. Restore
+	  redundant-load elimination affected by bug #4149.
+
+2026-10-22 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/regression/MakeList: Enable qct/0036-notneg.c on MCS51
+	  and DS390 (bug #3392).
+	* support/regression/qct/0036-notneg.c: Identify the bug tested.
+	* support/regression/tests/bug-3392.c: Remove the duplicate test.
+
+2026-10-21 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCicode.h (enum pointerCheckKind): Add POINTER_RELATIONAL.
+	* src/SDCCicode.c (picPointerCheck, geniCodeLogic):
+	  Record relational pointer checks before the common type can add
+	  _Optional to the other operand (bug #4169).
+	* src/SDCCopt.c (checkStaticArrayParams):
+	  Diagnose the recorded source operands instead of the converted
+	  comparison operands.
+	* support/valdiag/tests/bug-4169.c: Test all four operators in both
+	  operand orders, checked and unchecked optional operands, equality
+	  comparisons and an explicit cast to an optional target type.
+
+2026-10-21 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/gen.c:
+	  Fix bug #4166, inspired by patch by Christopher Bazley.
+	* support/regression/tests/bug-4166.c:
+	  Test for bug #4166, patch by Christopher Bazley.
+
+2026-10-21 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/include/stdbit.h: fixed parentheses in macros,
+	  removed signed _BitInt(1) case because of warning 315,
+	  check __SDCC_BITINT_MAXWIDTH >= 64 for stdc_rotate_left/right,
+	  picked from patch for bug #4147 by zeynelsagcan
+	* device/lib/__stdc_bit_ceilull.c,
+	* device/lib/__stdc_bit_width.c,
+	* device/lib/__stdc_count_ones.c,
+	* device/lib/__stdc_first_leading_one.c,
+	* device/lib/__stdc_first_trailing_one.c,
+	* device/lib/__stdc_leading_zeros.c,
+	* device/lib/__stdc_trailing_ones.c: define ULLONG_WIDTH if non-existent,
+	  always include assert.h
+	* device/lib/pic16/libc/Makefile.am,
+	* device/lib/pic16/libc/Makefile.in: added __stdc_* sources
+
+2026-10-21 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-4051.c:
+	  Test diagnostics for the reported malformed declarations produced by an
+	  undefined concatenation macro (bug #4051).
+
+2026-10-21 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/regression/tests/bug-3862.c:
+	  Test a compound literal using inline function parameters and check the
+	  returned pointer and structure members (bug #3862).
+
+2026-10-21 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* device/include/stdbit.h:
+	  Pick some bits from patch for bug #4147 by zeynelsagcan.
+
+2026-10-21 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-3835.c:
+	  Compile both reduced memory-mapped member-access examples from the
+	  discussion without executing them (bug #3835).
+
+2026-10-21 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/regression/tests/bug-3470.c:
+	  Correct the test heading, check the returned value and enable the existing
+	  reproducer for MCS51 with stack parameters (bug #3470).
+
+2026-10-21 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/regression/tests/bug-3408.c:
+	  Test a local structure used in an aggregate initialiser (bug #3408).
+
+2026-10-21 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/regression/tests/bug-3392.c:
+	  Test the reported constant-folded logical and arithmetic negations
+	  (bug #3392).
+
+2026-10-21 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-3370.c:
+	  Test diagnostics for excess aggregate initialisers following a function
+	  definition (bug #3370).
+
+2026-10-21 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4123-2.c:
+	  Further test for z80 peephole optimizer rules, fix bug #4123.
+	* src/z80/peeph.def:
+	  Remove peephole optimizer rule for which no tests were found.
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-3053.c:
+	  Compile the DS390 va_list pointer reproducer without executing its
+	  undefined behaviour (bug #3053).
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-3037.c:
+	  Compile the reported inline extern reference and diagnose the duplicate
+	  parameter name from the discussion (bug #3037).
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-3016.c:
+	  Test diagnostics for the original malformed file-scope array bound
+	  (bug #3016).
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-2860.c:
+	  Compile both reported identifier-list declarations without executing the
+	  function with no return statement (bug #2860).
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-2843.c:
+	  Test the absence of an unreachable-code diagnostic for the reported switch
+	  (bug #2843).
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-2660.c:
+	  Test the absence of a spurious pointer-type diagnostic for a function
+	  address cast in a static aggregate initialiser (bug #2660).
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/regression/tests/bug-2497.c:
+	  Test a static function declared through a function typedef and called
+	  through a pointer (bug #2497).
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-2152.c:
+	  Test overflow diagnostics for the reported delay calculation (bug #2152).
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-2147.c:
+	  Test diagnostics for excess scalar initialisers (bug #2147).
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/valdiag/tests/bug-1102.c:
+	  Test diagnostics for an initialiser for an incomplete structure (bug #1102).
+
+2026-10-20 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4123-2.c:
+	  Further tests for z80 peephole optimizer rules, towards fixing bug #4123.
+	* src/z80/peeph.def:
+	  Remove peephole optimizer rule for which no tests were found.
+
+2026-10-20 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/mcs51/gen.c (genPointerPush): fix mov r1,@r0 bug found in bug-4131.c
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCval.c: Preserve signed integer values when converting a
+	  constexpr initialiser from integer to float type (bug #4144).
+	  Obtain the value as double through floatFromVal, which respects
+	  the source integer type's signedness. Leave integer conversions
+	  unchanged.
+	* support/regression/tests/bug-4144.c: Test six failing return-context
+	  conversions and six cases that pass before and after the fix.
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCC.y: Diagnose non-integer subscripts in designated
+	  initialisers using E_IDX_NOT_INT (bug #4143).
+	* support/valdiag/tests/bug-4143.c: Test subscripts of floating-point
+	  type, negative and nonconstant subscripts, ordinary array subscripting
+	  and valid test cases with integer expressions and explicit casts.
+
+
+2026-10-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCicode.c (geniCodeStruct): Apply inherited volatile
+	  qualification to the element type of array members, including
+	  arrays of pointers (bug #4161).
+	* support/valdiag/tests/optional-volatile.c: Test volatile pointer
+	  reads and valid single-read copies. Include the reported pointer
+	  array member example.
+
+2026-10-20 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4123-2.c:
+	  Further tests for z80 peephole optimizer rules, towards fixing bug #4123.
+	* src/z80/peeph.def:
+	  Remove peephole optimizer rule for which no tests were found.
+
+2026-10-19 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/ds390/ralloc.c,
+	* src/mcs51/ralloc.c: replaced useReg() & open code by allocThisReg(),
+	  (spillThis): fix bug #4154
+	* support/regression/tests/bug-4154.c: from patch in bug #4154
+
+2026-10-19 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4153.c:
+	  Disable test for pdk14, where it fails due to lack of memory.
+	* src/z80/peeph.def:
+	  Remove peephole optimizer rule for which no tests were found.
+
+2026-10-19 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCC.y: Diagnose invalid atomic array and function types
+	  before accessing specifier fields, and recover with int
+	  (bug #4132). Inspect qualifiers through the type chain and set
+	  the atomic flag on pointer declarators for pointer types.
+	* support/valdiag/tests/bug-4132.c: Test rejection of invalid atomic
+	  types and unsupported atomics, and valid non-atomic declarations.
+
+2026-10-19 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCcse.c: A zero-offset structure member access introduces
+	  a pointer cast. Treating that cast as sensitive to signedness
+	  prevented pointer copy propagation and reuse of the result of a
+	  condition-guarded load of the first member's value. The
+	  dereference therefore used a different temporary from the one
+	  known to be non-null (bug #4148).
+	  Classify casts from pointer types as insensitive to signedness
+	  so that the result of such a member load can be reused.
+	* support/valdiag/tests/bug-4148.c: Test guarded and unsafe member
+	  loads at zero and nonzero offsets.
+
+2026-10-19 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCicode.c (geniCodeStruct): Preserve volatility inherited
+	  from the enclosing structure on the member's outer qualifier
+	  (bug #4149).
+	* src/SDCCcse.c (findCheaperOp): Do not discard volatile target
+	  qualification when substituting a pointer operand.
+	* support/valdiag/tests/bug-4149.c: Test repeated
+	  volatile member reads at zero and nonzero offsets, direct
+	  qualification, and valid single-read local pointer guards.
+
+2026-10-19 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c: Reject non-arithmetic, non-pointer increment
+	  operands (bug #4136).
+	  Check the operand type before marking it as an lvalue for
+	  increment or decrement. This rejects nullptr_t and aggregate
+	  operands for both prefix and postfix forms, while retaining
+	  arithmetic and pointer operations.
+	* support/valdiag/tests/bug-4136.c: Negative tests for increment
+	  and decrement of nullptr_t.  Negative tests for increment of an
+	  object of structure type and a const int.  Positive tests for
+	  increment and decrement of pointer, float and int objects.
+
+2026-10-19 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c,
+	  src/SDCCsymt.c,
+	  src/SDCCsymt.h,
+	  support/valdiag/tests/bug-4126.c,
+	  support/regression/tests/bug-4126.c:
+	  Diagnose incompatible pointer operands of conditional expressions
+	  (bug #4126).
+	  Apply array decay before checking the referenced types of operands
+	  of the conditional operator that have pointer type.  The obvious
+	  way to fix this would be to reuse diagnoseDissimilarPtrTargetTypes
+	  but its style of output is inappropriate because there is no
+	  'from' or 'to' ordering between the two operands.  Instead, a new
+	  function, printWithTypes, is used for both W_INCOMPAT_PTYPES and
+	  the existing potential E_TYPE_MISMATCH.
+
+2026-10-18 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/asxxsrc/asout.c
+	  Partially revert change #16948 to correct bug in lst/rst output.
+
+2026-10-18 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/regression/tests/bug-4107.c: Use explicitly nonbanked
+	  function pointers when testing the distinction from banked pointers
+	  (bug #4107). Functions are banked by default in MCS51 huge mode.
+
+2026-10-18 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c, src/SDCCerr.c, src/SDCCerr.h: Diagnose compatible
+	  types in a generic association list, including unselected
+	  associations (bug #4134).
+	  Identify whichever is the later association and include the earlier
+	  file and line.
+	  Use type compatibility for the comparison so that unspecified and
+	  specified array bounds are handled correctly.
+	* support/valdiag/tests/bug-4134.c: Check duplicate and distinct types,
+	  compatible array bounds and multiline diagnostic locations.
+
+2026-10-18 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/mcs51/ralloc.c: fixed bug #4153
+	* support/regression/tests/bug-4153.c: from patch in bug #4153
+	* support/regression/tests/genptrs.c: fixed warning
+
 2026-10-18 Gabriele Gorla <gorlik@yahoo.com>
 
 	* src/SDCCicode.c,
@@ -19,6 +412,17 @@
 	  sdas/asz80/z80pst.c,
 	  sdas/linksrc/lkarea.c:
 	  More changes from upstream asxxxx V6.10
+	* sdas/linksrc/lkarea.c:
+	  Remove timestamp from linker output.
+	* src/mos6502/peeph.def:
+	  Add dead transfer TXA peephole rule.
+	* src/mos6502/gen.c,
+	  src/mos6502/genlshift.c,
+	  src/mos6502/genrshift.c,
+	  support/regression/bug-4152.c:
+	  Fix bug #4152.
+	* src/mos6502/gen.c:
+	  Improve "neg" for 65c02 and HuC6280.
 
 2026-10-18 Christopher Bazley <chris.bazley.wg14@gmail.com>
 

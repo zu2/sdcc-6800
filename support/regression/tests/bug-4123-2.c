@@ -123,6 +123,44 @@ int g105(int a, char b, char c, char d, char e)
     return a + b + c + d + e;
 }
 
+int f127b(unsigned char y, unsigned char zg) {
+    unsigned char t;
+    t = gb - y;
+    gb = t;
+    if (t == 0) {
+        if (zg) return 2;
+        return 0;
+    }
+    return 1;
+}
+
+void test127b(void)
+{
+    gb = 2;
+    ASSERT(f127b(1, 1) == 1);
+    ASSERT(gb == 1);
+    ASSERT(f127b(1, 1) == 2);
+    ASSERT(gb == 0);
+}
+
+#if !defined(__SDCC_pdk13) && !defined(__SDCC_pdk14) && !defined(__SDCC_pdk15) && !defined(__SDCC_mcs51) // Lack of memory.
+#pragma disable_warning 85
+int f130c(void) {
+    long a[70];
+    volatile long x, y;
+    x = 0x12345678UL;
+    y = 1L;
+    return (int)(x >> 16);
+}
+#endif
+
+void test130x(void)
+{
+#if !defined(__SDCC_pdk13) && !defined(__SDCC_pdk14) && !defined(__SDCC_pdk15) && !defined(__SDCC_mcs51) // Lack of memory.
+    ASSERT(f130c() == 0x1234);
+#endif
+}
+
 void f131b(char *bp, unsigned n) { // rule 131b
   register char *ep = bp + n, *sp;
   while (bp < ep) {
@@ -152,5 +190,94 @@ void test140a(void)
 {
   m140a();
   ASSERT(G == 10);
+}
+
+#if defined(__SDCC_stm8) || defined(__SDCC_z80) || defined(__SDCC_z80n) || defined(__SDCC_z180) || defined(__SDCC_r2k) || defined(__SDCC_r3ka) || defined(__SDCC_sm83)
+#define SDCCCALL0 __sdcccall(0)
+#else
+#define SDCCCALL0
+#endif
+
+int G1, G2;
+void h144(char a, int b) SDCCCALL0 { G1 = a + b; }
+void g144(int x) SDCCCALL0 { G2 = x; }
+void f144(void) SDCCCALL0 { // rule 144
+    h144(1, 2);
+    g144(42);
+}
+
+void test144(void)
+{
+    f144();
+    ASSERT(G1 == 3);
+    ASSERT(G2 == 42);
+}
+
+void h145(char a, int b) SDCCCALL0 { G1 = a + b; }
+void g145(char c1, char c2) SDCCCALL0 { G2 = c1 + c2; }
+void f145(int d1, char p3, char p4) SDCCCALL0 { // rule 145
+    p3 += d1 & p4;
+    p4 += p3;
+    h145(1, 2);
+    g145(p3, p4);
+}
+
+void test145(void)
+{
+    f145(3, 1, 6);
+    ASSERT(G1 == 3);
+    ASSERT(G2 == 12);
+}
+
+void h146(int a) SDCCCALL0 { G1 = a; }
+void g146(char c) SDCCCALL0 { G2 = c; }
+void f146(void) SDCCCALL0 {
+    h146(100);
+    g146(42);
+}
+
+void test146(void)
+{
+    f146();
+    ASSERT(G1 == 100);
+    ASSERT(G2 == 42);
+}
+
+void f156e(void) // rule 156e
+{
+  register int x, y;
+  x = G1;
+  y = G2;
+  y++;
+  x += 2;
+  x -= 2;
+  G1 = x + y;
+}
+
+void test156e(void)
+{
+  G1 = 3;
+  G2 = 4;
+  f156e();
+  ASSERT(G1 == 8);
+}
+
+unsigned long G32;
+
+void f194_2(void) // rule 194-2
+{
+  register int w = G2;
+  unsigned long v = G32;
+  if (v >= 0x1234)
+    G1 = 1;
+  G1 = w;
+}
+
+void test194_2(void)
+{
+  G2 = 3;
+  G32 = 0x1234;
+  f194_2();
+  ASSERT(G1 == 3);
 }
 
