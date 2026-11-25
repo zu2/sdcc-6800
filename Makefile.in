@@ -33,7 +33,7 @@ SDCC_AS        += sdas/as6800
 SDCC_LD        += sdcc-ld6800
 endif
 
-ifneq ($(OPT_DISABLE_MOS6502)$(OPT_DISABLE_MOS65C02), 11)
+ifneq ($(OPT_DISABLE_MOS6502)$(OPT_DISABLE_MOS65C02)$(OPT_DISABLE_HUC6280), 111)
 SDCC_AS        += sdas/as6500
 SDCC_LD        += sdcc-ld6808
 endif
@@ -104,7 +104,7 @@ SDCC_MISC      += sim/ucsim
 PKGS           += $(SDCC_MISC)
 endif
 
-SDCC_BINUTILS   = 
+SDCC_BINUTILS   =
 ifeq ($(OPT_DISABLE_SDBINUTILS), 0)
 TARGETS        += sdcc-sdbinutils
 PKGS           += $(SDCC_SDBINUTILS)
