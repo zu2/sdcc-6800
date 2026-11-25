@@ -52,7 +52,7 @@ addr(struct expr *esp)
 	ip = p;
 
 	if ((c = getnb()) == '#') {
-		expr(esp, 0);
+		expr(esp);
 		esp->e_mode = S_IMMED;
 	} else if (c == ',') {
 		if (admode(axs) != S_X) {
@@ -60,11 +60,11 @@ addr(struct expr *esp)
 		}
 		esp->e_mode = S_IX;
 	} else if (c == '*') {
-		expr(esp, 0);
+		expr(esp);
 		esp->e_mode = S_DIR;
 	} else {
 		unget(c);
-		expr(esp, 0);
+		expr(esp);
 		if (more()) {
 			comma(1);
 			if (admode(axs) != S_X) {

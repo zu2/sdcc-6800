@@ -73,7 +73,7 @@ machine(struct mne *mp)
 		opcycles = OPCY_SDP;
 		espa = NULL;
 		if (more()) {
-			expr(&e1, 0);
+			expr(&e1);
 			if (e1.e_flag == 0 && e1.e_base.e_ap == NULL) {
 				if (e1.e_addr) {
 					err('b');
@@ -109,7 +109,7 @@ machine(struct mne *mp)
 		break;
 
 	case S_BRA:
-		expr(&e1, 0);
+		expr(&e1);
 		outab(op);
 		if (mchpcr(&e1)) {
 			v1 = (int) (e1.e_addr - dot.s_addr - 1);
