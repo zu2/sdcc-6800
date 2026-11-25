@@ -26,10 +26,10 @@
 ;-------------------------------------------------------------------------
 
 	.module _divmodlong
-	.globl __divulong
-	.globl __modulong
-	.globl __divslong
-	.globl __modslong
+	.globl ___divulong
+	.globl ___modulong
+	.globl ___divslong
+	.globl ___modslong
 	.globl REGTEMP2
 	.globl REGTEMP3
 	.globl REGTEMP4
@@ -43,7 +43,7 @@
 	.area CSEG (CODE)
 
 ; Return the 32-bit quotient or remainder in ret0..ret3.
-__divulong:
+___divulong:
 	tsx
 	ldaa 2,x
 	staa *REGTEMP6
@@ -71,7 +71,7 @@ __divulong:
 	ldaa *(REGTEMP6+0)
 	staa *___SDCC_mc6800_ret3
 	rts
-__modulong:
+___modulong:
 	tsx
 	ldaa 2,x
 	staa *REGTEMP6
@@ -103,7 +103,7 @@ __modulong:
 	ldaa *(REGTEMP6+0)
 	staa *___SDCC_mc6800_ret3
 	rts
-__divslong:
+___divslong:
 	tsx
 	ldaa 2,x
 	staa *REGTEMP6
@@ -152,7 +152,7 @@ divslong_result_positive:
 	ldaa *(REGTEMP6+0)
 	staa *___SDCC_mc6800_ret3
 	rts
-__modslong:
+___modslong:
 	tsx
 	ldaa 2,x
 	staa *REGTEMP6

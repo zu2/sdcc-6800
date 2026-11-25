@@ -26,20 +26,20 @@
 ;-------------------------------------------------------------------------
 
 	.module _mulint
-	.globl __mulint
-	.globl __muluchar
+	.globl ___mulint
+	.globl ___muluchar
 	.globl REGTEMP2
 	.globl REGTEMP3
 	.area CSEG (CODE)
 
 ; A:B: first operand; 2-3,x: second operand after TSX.
-__mulint:
+___mulint:
 	tsx
 	staa *REGTEMP2
 	oraa 2,x
 	bne 00001$
 	ldaa 3,x
-	jmp __muluchar
+	jmp ___muluchar
 00001$:
 	stab *(REGTEMP2+1)
 	ldx 2,x

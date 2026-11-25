@@ -26,26 +26,26 @@
 ;-------------------------------------------------------------------------
 
 	.module _mulint
-	.globl __mulint
-	.globl __muluchar
+	.globl ___mulint
+	.globl ___muluchar
 	.globl REGTEMP2
 	.globl REGTEMP3
-	.globl __mulint_PARM_2
+	.globl ___mulint_PARM_2
 	.area XSEG
-__mulint_PARM_2:
+___mulint_PARM_2:
 	.ds 2
 	.area CSEG (CODE)
 
-; A:B: first operand; __mulint_PARM_2: second operand.
-__mulint:
+; A:B: first operand; ___mulint_PARM_2: second operand.
+___mulint:
 	staa *REGTEMP2
-	oraa __mulint_PARM_2
+	oraa ___mulint_PARM_2
 	bne 00001$
-	ldaa __mulint_PARM_2+1
-	jmp __muluchar
+	ldaa ___mulint_PARM_2+1
+	jmp ___muluchar
 00001$:
 	stab *(REGTEMP2+1)
-	ldx __mulint_PARM_2
+	ldx ___mulint_PARM_2
 	stx *REGTEMP3
 	ldx #8
 	clrb

@@ -26,20 +26,20 @@
 ;-------------------------------------------------------------------------
 
 	.module _divmodchar
-	.globl __divuchar
-	.globl __moduchar
-	.globl __divschar
-	.globl __divuschar
-	.globl __divsuchar
-	.globl __modschar
-	.globl __moduschar
-	.globl __modsuchar
+	.globl ___divuchar
+	.globl ___moduchar
+	.globl ___divschar
+	.globl ___divuschar
+	.globl ___divsuchar
+	.globl ___modschar
+	.globl ___moduschar
+	.globl ___modsuchar
 	.globl REGTEMP2
 	.globl REGTEMP4
 	.area CSEG (CODE)
 
 ; B: dividend, A: divisor; A:B: result.
-__divuchar:
+___divuchar:
 	clr REGTEMP4
 	staa *REGTEMP2
 	jsr divmod8_core
@@ -52,7 +52,7 @@ divmod8_neg_0:
 	negb
 	sbca #0
 	rts
-__moduchar:
+___moduchar:
 	clr REGTEMP4
 	staa *REGTEMP2
 	jsr divmod8_core
@@ -66,7 +66,7 @@ divmod8_neg_1:
 	negb
 	sbca #0
 	rts
-__divschar:
+___divschar:
 	clr REGTEMP4
 	tsta
 	bpl divschar_y_pos
@@ -89,7 +89,7 @@ divmod8_neg_2:
 	negb
 	sbca #0
 	rts
-__divuschar:
+___divuschar:
 	clr REGTEMP4
 	tsta
 	bpl divuschar_y_pos
@@ -107,7 +107,7 @@ divmod8_neg_3:
 	negb
 	sbca #0
 	rts
-__divsuchar:
+___divsuchar:
 	clr REGTEMP4
 	tstb
 	bpl divsuchar_x_pos
@@ -125,7 +125,7 @@ divmod8_neg_4:
 	negb
 	sbca #0
 	rts
-__modschar:
+___modschar:
 	clr REGTEMP4
 	tsta
 	bpl modschar_y_pos
@@ -148,7 +148,7 @@ divmod8_neg_5:
 	negb
 	sbca #0
 	rts
-__moduschar:
+___moduschar:
 	clr REGTEMP4
 	tsta
 	bpl moduschar_y_pos
@@ -166,7 +166,7 @@ divmod8_neg_6:
 	negb
 	sbca #0
 	rts
-__modsuchar:
+___modsuchar:
 	clr REGTEMP4
 	tstb
 	bpl modsuchar_x_pos

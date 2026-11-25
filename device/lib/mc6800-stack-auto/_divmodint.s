@@ -26,17 +26,17 @@
 ;-------------------------------------------------------------------------
 
 	.module _divmodint
-	.globl __divuint
-	.globl __moduint
-	.globl __divsint
-	.globl __modsint
+	.globl ___divuint
+	.globl ___moduint
+	.globl ___divsint
+	.globl ___modsint
 	.globl REGTEMP2
 	.globl REGTEMP3
 	.globl REGTEMP4
 	.area CSEG (CODE)
 
 ; A:B: dividend; second operand in memory or on the stack.
-__divuint:
+___divuint:
 	staa *REGTEMP2
 	stab *(REGTEMP2+1)
 	tsx
@@ -58,7 +58,7 @@ divmod16_neg_0:
 	negb
 	sbca #0
 	rts
-__moduint:
+___moduint:
 	staa *REGTEMP2
 	stab *(REGTEMP2+1)
 	tsx
@@ -76,7 +76,7 @@ divmod16_neg_1:
 	negb
 	sbca #0
 	rts
-__divsint:
+___divsint:
 	staa *REGTEMP2
 	stab *(REGTEMP2+1)
 	tsx
@@ -120,7 +120,7 @@ divmod16_neg_2:
 	negb
 	sbca #0
 	rts
-__modsint:
+___modsint:
 	staa *REGTEMP2
 	stab *(REGTEMP2+1)
 	tsx

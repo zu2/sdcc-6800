@@ -26,15 +26,15 @@
 ;-------------------------------------------------------------------------
 
 	.module _mulschar
-	.globl __mulschar
-	.globl __muluschar
-	.globl __mulsuchar
-	.globl __muluchar
+	.globl ___mulschar
+	.globl ___muluschar
+	.globl ___mulsuchar
+	.globl ___muluchar
 	.globl REGTEMP3
 	.area CSEG (CODE)
 
 ; First operand in B, second in A; result in A:B.
-__mulschar:
+___mulschar:
 	staa *REGTEMP3
 	bpl muls_a_positive
 	nega
@@ -46,21 +46,21 @@ muls_a_positive:
 	bra muls_do
 
 ; Unsigned B times signed A.
-__muluschar:
+___muluschar:
 	staa *REGTEMP3
 	bpl muls_do
 	nega
 	bra muls_do
 
 ; Signed B times unsigned A.
-__mulsuchar:
+___mulsuchar:
 	stab *REGTEMP3
 	tstb
 	bpl muls_do
 	negb
 
 muls_do:
-	jsr __muluchar
+	jsr ___muluchar
 	tst REGTEMP3
 	bpl muls_return
 	nega

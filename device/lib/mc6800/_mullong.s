@@ -26,7 +26,7 @@
 ;-------------------------------------------------------------------------
 
 	.module _mullong
-	.globl __mullong
+	.globl ___mullong
 	.globl REGTEMP2
 	.globl REGTEMP3
 	.globl REGTEMP4
@@ -37,24 +37,24 @@
 	.globl ___SDCC_mc6800_ret1
 	.globl ___SDCC_mc6800_ret2
 	.globl ___SDCC_mc6800_ret3
-	.globl __mullong_PARM_1
-	.globl __mullong_PARM_2
+	.globl ___mullong_PARM_1
+	.globl ___mullong_PARM_2
 	.area XSEG
-__mullong_PARM_1:
+___mullong_PARM_1:
 	.ds 4
-__mullong_PARM_2:
+___mullong_PARM_2:
 	.ds 4
 	.area CSEG (CODE)
 
 ; Return the low 32 bits of the product.
-__mullong:
-	ldx __mullong_PARM_1
+___mullong:
+	ldx ___mullong_PARM_1
 	stx *REGTEMP4
-	ldx __mullong_PARM_1+2
+	ldx ___mullong_PARM_1+2
 	stx *REGTEMP5
-	ldx __mullong_PARM_2
+	ldx ___mullong_PARM_2
 	stx *REGTEMP3
-	ldx __mullong_PARM_2+2
+	ldx ___mullong_PARM_2+2
 	stx *REGTEMP6
         ldx #0
         stx *REGTEMP2

@@ -26,12 +26,12 @@
 ;-------------------------------------------------------------------------
 
 	.module _muluchar
-	.globl __muluchar
+	.globl ___muluchar
 	.globl REGTEMP2
 	.area CSEG (CODE)
 
 ; B and A: unsigned 8-bit operands; A:B: 16-bit result.
-__muluchar:
+___muluchar:
 	ldx #8
 	staa *REGTEMP2
 	clra

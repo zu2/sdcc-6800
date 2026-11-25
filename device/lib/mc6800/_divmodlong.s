@@ -26,10 +26,10 @@
 ;-------------------------------------------------------------------------
 
 	.module _divmodlong
-	.globl __divulong
-	.globl __modulong
-	.globl __divslong
-	.globl __modslong
+	.globl ___divulong
+	.globl ___modulong
+	.globl ___divslong
+	.globl ___modslong
 	.globl REGTEMP2
 	.globl REGTEMP3
 	.globl REGTEMP4
@@ -40,42 +40,42 @@
 	.globl ___SDCC_mc6800_ret1
 	.globl ___SDCC_mc6800_ret2
 	.globl ___SDCC_mc6800_ret3
-	.globl __divulong_PARM_1
-	.globl __divulong_PARM_2
-	.globl __modulong_PARM_1
-	.globl __modulong_PARM_2
-	.globl __divslong_PARM_1
-	.globl __divslong_PARM_2
-	.globl __modslong_PARM_1
-	.globl __modslong_PARM_2
+	.globl ___divulong_PARM_1
+	.globl ___divulong_PARM_2
+	.globl ___modulong_PARM_1
+	.globl ___modulong_PARM_2
+	.globl ___divslong_PARM_1
+	.globl ___divslong_PARM_2
+	.globl ___modslong_PARM_1
+	.globl ___modslong_PARM_2
 	.area XSEG
-__divulong_PARM_1:
+___divulong_PARM_1:
 	.ds 4
-__divulong_PARM_2:
+___divulong_PARM_2:
 	.ds 4
-__modulong_PARM_1:
+___modulong_PARM_1:
 	.ds 4
-__modulong_PARM_2:
+___modulong_PARM_2:
 	.ds 4
-__divslong_PARM_1:
+___divslong_PARM_1:
 	.ds 4
-__divslong_PARM_2:
+___divslong_PARM_2:
 	.ds 4
-__modslong_PARM_1:
+___modslong_PARM_1:
 	.ds 4
-__modslong_PARM_2:
+___modslong_PARM_2:
 	.ds 4
 	.area CSEG (CODE)
 
 ; Return the 32-bit quotient or remainder in ret0..ret3.
-__divulong:
-	ldx __divulong_PARM_1
+___divulong:
+	ldx ___divulong_PARM_1
 	stx *REGTEMP6
-	ldx __divulong_PARM_1+2
+	ldx ___divulong_PARM_1+2
 	stx *REGTEMP7
-	ldx __divulong_PARM_2
+	ldx ___divulong_PARM_2
 	stx *REGTEMP4
-	ldx __divulong_PARM_2+2
+	ldx ___divulong_PARM_2+2
 	stx *REGTEMP5
 	jsr div32_core
 	ldaa *(REGTEMP6+3)
@@ -87,14 +87,14 @@ __divulong:
 	ldaa *(REGTEMP6+0)
 	staa *___SDCC_mc6800_ret3
 	rts
-__modulong:
-	ldx __modulong_PARM_1
+___modulong:
+	ldx ___modulong_PARM_1
 	stx *REGTEMP6
-	ldx __modulong_PARM_1+2
+	ldx ___modulong_PARM_1+2
 	stx *REGTEMP7
-	ldx __modulong_PARM_2
+	ldx ___modulong_PARM_2
 	stx *REGTEMP4
-	ldx __modulong_PARM_2+2
+	ldx ___modulong_PARM_2+2
 	stx *REGTEMP5
 	jsr div32_core
 	staa *REGTEMP7
@@ -110,14 +110,14 @@ __modulong:
 	ldaa *(REGTEMP6+0)
 	staa *___SDCC_mc6800_ret3
 	rts
-__divslong:
-	ldx __divslong_PARM_1
+___divslong:
+	ldx ___divslong_PARM_1
 	stx *REGTEMP6
-	ldx __divslong_PARM_1+2
+	ldx ___divslong_PARM_1+2
 	stx *REGTEMP7
-	ldx __divslong_PARM_2
+	ldx ___divslong_PARM_2
 	stx *REGTEMP4
-	ldx __divslong_PARM_2+2
+	ldx ___divslong_PARM_2+2
 	stx *REGTEMP5
 	clr REGTEMP3
 	tst REGTEMP6
@@ -150,14 +150,14 @@ divslong_result_positive:
 	ldaa *(REGTEMP6+0)
 	staa *___SDCC_mc6800_ret3
 	rts
-__modslong:
-	ldx __modslong_PARM_1
+___modslong:
+	ldx ___modslong_PARM_1
 	stx *REGTEMP6
-	ldx __modslong_PARM_1+2
+	ldx ___modslong_PARM_1+2
 	stx *REGTEMP7
-	ldx __modslong_PARM_2
+	ldx ___modslong_PARM_2
 	stx *REGTEMP4
-	ldx __modslong_PARM_2+2
+	ldx ___modslong_PARM_2+2
 	stx *REGTEMP5
 	clr REGTEMP3
 	tst REGTEMP6

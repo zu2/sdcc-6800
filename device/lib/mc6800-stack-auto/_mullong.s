@@ -26,7 +26,7 @@
 ;-------------------------------------------------------------------------
 
 	.module _mullong
-	.globl __mullong
+	.globl ___mullong
 	.globl REGTEMP2
 	.globl REGTEMP3
 	.globl REGTEMP4
@@ -40,7 +40,7 @@
 	.area CSEG (CODE)
 
 ; Return the low 32 bits of the product.
-__mullong:
+___mullong:
 	tsx
 	ldaa 2,x
 	staa *REGTEMP4
