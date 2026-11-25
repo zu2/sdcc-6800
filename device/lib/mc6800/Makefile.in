@@ -9,7 +9,7 @@ include $(srcdir)/../common_files.mk
 
 PORT ?= mc6800
 MODELFLAGS ?= -mmc6800
-VPATH = $(std_lib_dirs)
+VPATH = $(srcdir):$(std_lib_dirs)
 AS = $(top_builddir)/bin/sdas6800
 EXTRA_CFLAGS = --max-allocs-per-node 25000
 PORT_CRT = crt0.rel
@@ -27,8 +27,7 @@ PORT_SDCC = $(filter-out _divmixchar _divschar _divuchar _modmixchar _modschar _
   _divmodlong \
   _mulschar \
   _muluchar \
-  _ret \
-  _startup
+  _ret
 
 PORT_FLOAT = $(COMMON_FLOAT)
 
