@@ -15,18 +15,16 @@ EXTRA_CFLAGS = --max-allocs-per-node 25000
 PORT_CRT = crt0.rel
 LIB = mc6800.lib
 
-# Keep the configured library type when library_build.mk sets its debug default.
 LIB_TYPE = @LIB_TYPE@
-override LIB_TYPE := $(LIB_TYPE)
 
-PORT_SDCC = $(filter-out _divslong _divulong _modslong _modulong,$(COMMON_SDCC)) \
+PORT_SDCC = $(filter-out _divmixchar _divschar _divuchar _modmixchar _modschar _moduchar \
+  _divsint _divuint _modsint _moduint _divslong _divulong _modslong _modulong,$(COMMON_SDCC)) \
   $(COMMON_SDCC_LL) \
   $(COMMON_SDCC_LL_SHIFT) \
   __sdcc_regs \
   _divmodchar \
   _divmodint \
   _divmodlong \
-  _mulint \
   _mulschar \
   _muluchar \
   _ret \
