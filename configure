@@ -669,6 +669,7 @@ OPT_DISABLE_PDK14
 OPT_DISABLE_PDK13
 OPT_DISABLE_STM8
 OPT_DISABLE_S08
+OPT_DISABLE_MC6800
 OPT_DISABLE_HC08
 OPT_DISABLE_PIC16
 OPT_DISABLE_PIC14
@@ -813,6 +814,7 @@ enable_ds400_port
 enable_pic14_port
 enable_pic16_port
 enable_hc08_port
+enable_mc6800_port
 enable_s08_port
 enable_stm8_port
 enable_pdk13_port
@@ -1508,6 +1510,7 @@ Optional Features:
   --disable-pic14-port    Excludes the PIC14 port
   --disable-pic16-port    Excludes the PIC16 port
   --disable-hc08-port     Excludes the HC08 port
+  --disable-mc6800-port   Excludes the MC6800 port
   --disable-s08-port      Excludes the S08 port
   --disable-stm8-port     Excludes the STM8 port
   --disable-pdk13-port    Excludes the PDK13 port
@@ -7710,6 +7713,31 @@ printf "%s\n" "#define OPT_DISABLE_HC08 $OPT_DISABLE_HC08" >>confdefs.h
   fi
 
 
+  # Check whether --enable-mc6800-port was given.
+if test ${enable_mc6800_port+y}
+then :
+  enableval=$enable_mc6800_port;
+fi
+
+
+  if test "$enable_mc6800_port" = "no"; then
+    OPT_DISABLE_MC6800=1
+  else
+    enable_mc6800_port="yes"
+    OPT_DISABLE_MC6800=0
+  fi
+
+
+printf "%s\n" "#define OPT_DISABLE_MC6800 $OPT_DISABLE_MC6800" >>confdefs.h
+
+
+
+  echo mc6800 >>ports.all
+  if test $OPT_DISABLE_MC6800 = 0; then
+    echo mc6800 >>ports.build
+  fi
+
+
   # Check whether --enable-s08-port was given.
 if test ${enable_s08_port+y}
 then :
@@ -8553,6 +8581,13 @@ if test $OPT_DISABLE_HC08 = 0 || test $OPT_DISABLE_S08 = 0; then
   ac_config_files="$ac_config_files src/hc08/Makefile sdas/as6808/Makefile"
 
   test $OPT_DISABLE_DEVICE_LIB = 0 && ac_config_files="$ac_config_files device/lib/hc08/Makefile device/lib/s08/Makefile device/lib/s08-stack-auto/Makefile"
+
+fi
+
+if test $OPT_DISABLE_MC6800 = 0; then
+  ac_config_files="$ac_config_files src/mc6800/Makefile sdas/as6800/Makefile"
+
+  test $OPT_DISABLE_DEVICE_LIB = 0 && ac_config_files="$ac_config_files device/lib/mc6800/Makefile device/lib/mc6800-stack-auto/Makefile"
 
 fi
 
@@ -9401,6 +9436,10 @@ do
     "device/lib/hc08/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/hc08/Makefile" ;;
     "device/lib/s08/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/s08/Makefile" ;;
     "device/lib/s08-stack-auto/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/s08-stack-auto/Makefile" ;;
+    "src/mc6800/Makefile") CONFIG_FILES="$CONFIG_FILES src/mc6800/Makefile" ;;
+    "sdas/as6800/Makefile") CONFIG_FILES="$CONFIG_FILES sdas/as6800/Makefile" ;;
+    "device/lib/mc6800/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mc6800/Makefile" ;;
+    "device/lib/mc6800-stack-auto/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mc6800-stack-auto/Makefile" ;;
     "src/mos6502/Makefile") CONFIG_FILES="$CONFIG_FILES src/mos6502/Makefile" ;;
     "sdas/as6500/Makefile") CONFIG_FILES="$CONFIG_FILES sdas/as6500/Makefile" ;;
     "device/lib/mos6502/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mos6502/Makefile" ;;
