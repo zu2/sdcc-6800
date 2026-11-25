@@ -389,6 +389,9 @@ EXCLUDE_ARCH_hc08 += \
 # fail
 EXCLUDE_hc08 += \
 	gte_memcpy-1
+# does not compile on mc6800
+EXCLUDE_mc6800 += gte_memcpy-1
+EXCLUDE_mc6800-stack-auto += gte_memcpy-1
 # compile issue - test is malformed unless STACK_SIZE is defined
 EXCLUDE_ARCH_mos6502 += \
 	gte_memcpy-1
