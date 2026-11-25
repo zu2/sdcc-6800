@@ -1330,8 +1330,13 @@ sepStrToUll (const char *nptr, char **endptr, int base)
 {
   wassert (base >= 2 && base <= 16);
 
-  unsigned long long ret = 0ull;
+  TYPE_TARGET_ULONGLONG ret = 0;
+  const TYPE_TARGET_ULONGLONG max = (TYPE_TARGET_ULONGLONG)-1;
   bool separated = false;
+  bool overflow = false;
+
+  /* The target long long must match its internal representation. */
+  wassert (LONGLONGSIZE * 8 == sizeof (ret) * CHAR_BIT);
 
   for(;;nptr++)
     {
@@ -1357,9 +1362,16 @@ sepStrToUll (const char *nptr, char **endptr, int base)
       if (!(next >= 0 && next < base))
         break;
 
+      /* Detect overflow before accumulating the digit, but retain the
+         existing accumulated result. */
+      if (ret > (max - next) / base)
+        overflow = true;
       ret *= base;
       ret += next;
     }
+
+  if (overflow)
+    werror (W_CONST_RANGE, "for a 64-bit integer literal");
 
   if(separated && !options.std_c23)
     werror (W_DIGIT_SEPARATOR_C23);
@@ -2638,7 +2650,12 @@ valMult (value * lval, value * rval, bool reduceType)
     SPEC_CVAL (val->type).v_ulong = (TYPE_TARGET_ULONG) ulFromVal (lval) * (TYPE_TARGET_ULONG) ulFromVal (rval);
   else if (SPEC_USIGN (val->type))      /* unsigned int */
     {
-      TYPE_TARGET_ULONG ul = (TYPE_TARGET_UINT) ulFromVal (lval) * (TYPE_TARGET_UINT) ulFromVal (rval);
+      /* Preserve the full product for the target overflow diagnostic. */
+      _Static_assert (ULONG_MAX / ((TYPE_TARGET_UINT) -1) >=
+                      (TYPE_TARGET_UINT) -1,
+                      "host unsigned long cannot hold a target uint product");
+      unsigned long ul = (unsigned long) (TYPE_TARGET_UINT) ulFromVal (lval) *
+        (unsigned long) (TYPE_TARGET_UINT) ulFromVal (rval);
 
       SPEC_CVAL (val->type).v_uint = (TYPE_TARGET_UINT) ul;
       if (ul != (TYPE_TARGET_UINT) ul)
@@ -2654,6 +2671,21 @@ valMult (value * lval, value * rval, bool reduceType)
     }
 
   return reduceType ? cheapestVal (val) : val;
+}
+
+/* Recognise minimum divided by minus one in the computed signed type.
+   Handle it before host division: 32- and 64-bit host operations can
+   overflow, and narrower _BitInt results need correct sign extension. */
+static bool
+valDivisionOverflow (value *val, value *lval, value *rval)
+{
+  if (!IS_INTEGRAL (val->type) || SPEC_USIGN (val->type) || IS_CHAR (val->type))
+    return false;
+
+  TYPE_TARGET_ULONGLONG sign = 1ULL << (bitsForType (val->type) - 1);
+  TYPE_TARGET_ULONGLONG mask = sign | (sign - 1);
+  return (ullFromVal (lval) & mask) == sign &&
+    (ullFromVal (rval) & mask) == mask;
 }
 
 /*------------------------------------------------------------------*/
@@ -2674,6 +2706,22 @@ valDiv (value * lval, value * rval, bool reduceType)
   val = newValue ();
   val->type = val->etype = computeType (lval->etype, rval->etype, RESULT_TYPE_INT, '/');
   SPEC_SCLS (val->etype) = S_LITERAL;   /* will remain literal */
+
+  if (valDivisionOverflow (val, lval, rval))
+    {
+      /* Return the signed minimum value for the overflowing quotient.
+         This avoids host overflow. */
+      TYPE_TARGET_LONGLONG minimum =
+        -1 - (TYPE_TARGET_LONGLONG) ((1ULL << (bitsForType (val->type) - 1)) - 1);
+      if (SPEC_LONGLONG (val->type) || IS_BITINT (val->type))
+        SPEC_CVAL (val->etype).v_longlong = minimum;
+      else if (SPEC_LONG (val->type))
+        SPEC_CVAL (val->etype).v_long = (TYPE_TARGET_LONG) minimum;
+      else
+        SPEC_CVAL (val->etype).v_int = (TYPE_TARGET_INT) minimum;
+      return reduceType ? cheapestVal (val) : val;
+    }
+
 
   if (IS_FLOAT (val->type))
     SPEC_CVAL (val->type).v_float = floatFromVal (lval) / floatFromVal (rval);
@@ -2725,6 +2773,14 @@ valMod (value * lval, value * rval, bool reduceType)
   val = newValue ();
   val->type = val->etype = computeType (lval->etype, rval->etype, RESULT_TYPE_INT, '%');
   SPEC_SCLS (val->etype) = S_LITERAL;   /* will remain literal */
+
+  if (valDivisionOverflow (val, lval, rval))
+    {
+      /* Return zero for the remainder without evaluating host remainder. */
+      SPEC_CVAL (val->etype).v_ulonglong = 0;
+      return reduceType ? cheapestVal (val) : val;
+    }
+
 
   if (SPEC_LONGLONG (val->type) || IS_BITINT (val->type))
     {
@@ -3002,94 +3058,69 @@ valCompare (value * lval, value * rval, int ctype, bool reduceType)
       SPEC_USIGN (val->type) = 0;
     }
 
+  bool less, equal, greater;
+  if (IS_FLOAT (lval->etype) || IS_FLOAT (rval->etype) ||
+      IS_FIXED16X16 (lval->etype) || IS_FIXED16X16 (rval->etype))
+    {
+      double l = floatFromVal (lval);
+      double r = floatFromVal (rval);
+      less = l < r;
+      equal = l == r;
+      greater = l > r;
+    }
+  else
+    {
+      /* Promote reduced character literals before finding the common
+         arithmetic type; integer comparisons must not round via double. */
+      sym_link *ltype = IS_CHAR (lval->type) || IS_BOOLEAN (lval->type) ?
+        newIntLink () : lval->type;
+      sym_link *rtype = IS_CHAR (rval->type) || IS_BOOLEAN (rval->type) ?
+        newIntLink () : rval->type;
+      sym_link *common = computeType (ltype, rtype, RESULT_TYPE_INT, ctype);
+      TYPE_TARGET_ULONGLONG l = ullFromVal (lval);
+      TYPE_TARGET_ULONGLONG r = ullFromVal (rval);
+
+      /* Only the low word goes through the double argument. Wide casts
+         use the full integer argument, without rounding or overflow. */
+      l = ullFromVal (valCastLiteral (common, (TYPE_TARGET_ULONG) l, l));
+      r = ullFromVal (valCastLiteral (common, (TYPE_TARGET_ULONG) r, r));
+
+      if (IS_PTR (common) || IS_UNSIGNED (common))
+        {
+          less = l < r;
+          equal = l == r;
+          greater = l > r;
+        }
+      else
+        {
+          TYPE_TARGET_LONGLONG sl = (TYPE_TARGET_LONGLONG) l;
+          TYPE_TARGET_LONGLONG sr = (TYPE_TARGET_LONGLONG) r;
+          less = sl < sr;
+          equal = sl == sr;
+          greater = sl > sr;
+        }
+    }
+
   switch (ctype)
     {
-    /* FIXME: need to add long long support to inequalities */
     case '<':
-      SPEC_CVAL (val->type).v_int = floatFromVal (lval) < floatFromVal (rval);
+      SPEC_CVAL (val->type).v_int = less;
       break;
-
     case '>':
-      SPEC_CVAL (val->type).v_int = floatFromVal (lval) > floatFromVal (rval);
+      SPEC_CVAL (val->type).v_int = greater;
       break;
-
     case LE_OP:
-      SPEC_CVAL (val->type).v_int = floatFromVal (lval) <= floatFromVal (rval);
+      SPEC_CVAL (val->type).v_int = less || equal;
       break;
-
     case GE_OP:
-      SPEC_CVAL (val->type).v_int = floatFromVal (lval) >= floatFromVal (rval);
+      SPEC_CVAL (val->type).v_int = greater || equal;
       break;
-
     case EQ_OP:
-      if (SPEC_NOUN (lval->type) == V_FLOAT || SPEC_NOUN (rval->type) == V_FLOAT)
-        {
-          SPEC_CVAL (val->type).v_int = floatFromVal (lval) == floatFromVal (rval);
-        }
-      else if (SPEC_NOUN (lval->type) == V_FIXED16X16 || SPEC_NOUN (rval->type) == V_FIXED16X16)
-        {
-          SPEC_CVAL (val->type).v_int = floatFromVal (lval) == floatFromVal (rval);
-        }
-      else
-        {
-          /* integrals: ignore signedness */
-          TYPE_TARGET_ULONGLONG l, r;
-
-          l = (TYPE_TARGET_ULONGLONG) ullFromVal (lval);
-          r = (TYPE_TARGET_ULONGLONG) ullFromVal (rval);
-          /* In order to correctly compare 'signed int' and 'unsigned int' it's
-             necessary to strip them to 16 bit.
-             Literals are reduced to their cheapest type, therefore left and
-             right might have different types. It's necessary to find a
-             common type: int (used for char too) or long */
-          if (!IS_LONGLONG (lval->etype) && !IS_BITINT (lval->etype) && !IS_LONGLONG (rval->etype) && !IS_BITINT (rval->etype))
-            {
-              r = (TYPE_TARGET_ULONG) r;
-              l = (TYPE_TARGET_ULONG) l;
-            }
-          if (!IS_LONG (lval->etype) && !IS_LONG (rval->etype))
-            {
-              r = (TYPE_TARGET_UINT) r;
-              l = (TYPE_TARGET_UINT) l;
-            }
-          SPEC_CVAL (val->type).v_int = l == r;
-        }
+      SPEC_CVAL (val->type).v_int = equal;
       break;
     case NE_OP:
-      if (SPEC_NOUN (lval->type) == V_FLOAT || SPEC_NOUN (rval->type) == V_FLOAT)
-        {
-          SPEC_CVAL (val->type).v_int = floatFromVal (lval) != floatFromVal (rval);
-        }
-      else if (SPEC_NOUN (lval->type) == V_FIXED16X16 || SPEC_NOUN (rval->type) == V_FIXED16X16)
-        {
-          SPEC_CVAL (val->type).v_int = floatFromVal (lval) != floatFromVal (rval);
-        }
-      else
-        {
-          /* integrals: ignore signedness */
-          TYPE_TARGET_ULONGLONG l, r;
-
-          l = (TYPE_TARGET_ULONGLONG) ullFromVal (lval);
-          r = (TYPE_TARGET_ULONGLONG) ullFromVal (rval);
-          /* In order to correctly compare 'signed int' and 'unsigned int' it's
-             necessary to strip them to 16 bit.
-             Literals are reduced to their cheapest type, therefore left and
-             right might have different types. It's necessary to find a
-             common type: int (used for char too) or long */
-          if (!IS_LONGLONG (lval->etype) && !IS_BITINT (lval->etype) && !IS_LONGLONG (rval->etype) && !IS_BITINT (rval->etype))
-            {
-              r = (TYPE_TARGET_ULONG) r;
-              l = (TYPE_TARGET_ULONG) l;
-            }
-          if (!IS_LONG (lval->etype) && !IS_LONG (rval->etype))
-            {
-              r = (TYPE_TARGET_UINT) r;
-              l = (TYPE_TARGET_UINT) l;
-            }
-          SPEC_CVAL (val->type).v_int = l != r;
-        }
+      SPEC_CVAL (val->type).v_int = !equal;
       break;
-
     }
 
   return val;
@@ -3740,6 +3771,17 @@ checkParameterTypeList (value *forward_declaration, value *parameters)
     }
   for (value *p = parameters; p; p = p->next)
     {
+      /* Adjust function parameters before checking qualifiers or binding
+         their symbols, so the parameter denotes a pointer object. */
+      if (IS_FUNC (p->type))
+        {
+          sym_link *pointer = newLink (DECLARATOR);
+          DCL_TYPE (pointer) = UPOINTER;
+          pointer->next = p->type;
+          p->type = pointer;
+          if (p->sym)
+            p->sym->type = pointer;
+        }
       changePointer (p->type);
       checkQualifiers (p->sym, p->type, false, true);
       if (p->sym)

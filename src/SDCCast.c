@@ -593,6 +593,15 @@ isAstEqual (ast * t1, ast * t2)
         {
           if (t2->opval.val->sym)
             return false;
+          /* Matching literal values with different signedness can give
+             enclosing expressions different arithmetic conversions.
+             Reject such matches even when the literals compare equal;
+             isAstEqual tests expression equivalence, not C equality. */
+          else if (IS_INTEGRAL (t1->opval.val->etype) &&
+                   IS_INTEGRAL (t2->opval.val->etype))
+            return IS_UNSIGNED (t1->opval.val->etype) ==
+                     IS_UNSIGNED (t2->opval.val->etype) &&
+                   ullFromVal (t1->opval.val) == ullFromVal (t2->opval.val);
           else
             return (floatFromVal (t1->opval.val) == floatFromVal (t2->opval.val));
         }
@@ -1112,7 +1121,11 @@ processParms (ast * func, value * defParm, ast ** actParm, int *parmNumber,     
       return 1;
     }
 
-  if (IS_PTR (defParm->type) && (IS_PTR (actualType) || IS_FUNC (actualType)))
+  /* Both checks diagnose atomic and nested qualifier mismatches. Run the
+     referenced-type check first and skip qualifier checking if it diagnoses. */
+  if (!diagnoseDissimilarPtrTargetTypes (defParm->type, actualType,
+                                       (*actParm)->filename, (*actParm)->lineno) &&
+      IS_PTR (defParm->type) && (IS_PTR (actualType) || IS_FUNC (actualType)))
     checkPtrTargetQualifiers (defParm->type, actualType);
 
   if (convertedActual)
@@ -2120,7 +2133,7 @@ constExprTree (ast *cexpr)
           // the offset of a struct field will never change
           return true;
         }
-      if (IS_AST_SYM_VALUE (cexpr) && SPEC_CONSTEXPR (AST_SYMBOL (cexpr)->type))
+      if (IS_AST_SYM_VALUE (cexpr) && SPEC_CONSTEXPR (AST_SYMBOL (cexpr)->etype))
         {
           // a C23 constexpr is by definition a constant expression
           return true;
@@ -3351,7 +3364,8 @@ checkPtrCast (sym_link *newType, sym_link *orgType, bool implicit, bool orgIsNul
   if (IS_ARRAY (orgType))
     {
       value *val;
-      val = aggregateToPointer (valFromType (orgType));
+      val = valFromType (orgType);
+      convertArrayToPointerType (val->type);
       orgType = val->type;
       Safe_free (val);
     }
@@ -5001,7 +5015,8 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
 
       /* if the left & right are equal then zero */
       if (!hasSEFcalls(tree->left) && !hasSEFcalls(tree->right) &&
-        isAstEqual (tree->left, tree->right))
+        isAstEqual (tree->left, tree->right) &&
+        !(IS_PTR (LTYPE (tree)) && isOptional (LTYPE (tree)->next)))
         {
           tree->type = EX_VALUE;
           tree->opval.val = valZeroResultFromOp(LTYPE (tree), RTYPE (tree), tree->opval.op, reduceTypeAllowed);
@@ -5203,7 +5218,7 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
 
     case LEFT_OP:
     case RIGHT_OP:
-      if (!IS_INTEGRAL (LTYPE (tree)) || !IS_INTEGRAL (tree->left->etype))
+      if (!IS_INTEGRAL (LTYPE (tree)) || !IS_INTEGRAL (RTYPE (tree)))
         {
           werrorfl (tree->filename, tree->lineno, E_SHIFT_OP_INVALID);
           werrorfl (tree->filename, tree->lineno, W_CONTINUE, "left & right types are ");
@@ -5320,7 +5335,8 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
 
       /* if 'from' and 'to' are the same remove the superfluous cast,
        * this helps other optimizations */
-      if (compareTypeExact (LTYPE (tree), RTYPE (tree), -1, true) == 1)
+      if (!tree->values.cast.semDeref &&
+          compareTypeExact (LTYPE (tree), RTYPE (tree), -1, true) == 1)
         {
           /* mark that the explicit cast has been removed,
            * for proper processing (no integer promotion) of explicitly typecasted variable arguments */
@@ -5422,7 +5438,7 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
 #endif
 
       /* if the right is a literal replace the tree */
-      if (IS_LITERAL (RETYPE (tree)))
+      if (!tree->values.cast.semDeref && IS_LITERAL (RETYPE (tree)))
         {
 #if 0
           if (IS_PTR (LTYPE (tree)) && !IS_GENPTR (LTYPE (tree)))
@@ -5672,7 +5688,8 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
 
       /* if (unsigned value) > 0 then '(unsigned value) ? 1 : 0' */
       if (tree->opval.op == '>' &&
-          SPEC_USIGN (LETYPE (tree)) && IS_LITERAL (RTYPE (tree)) && ((int) ulFromVal (valFromType (RETYPE (tree)))) == 0)
+          SPEC_USIGN (LETYPE (tree)) && IS_LITERAL (RTYPE (tree)) &&
+          isEqualVal (valFromType (RETYPE (tree)), 0))
         {
           if ((resultType == RESULT_TYPE_IFX) || (resultType == RESULT_TYPE_BOOL))
             {
@@ -5878,6 +5895,15 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
       /* the type is value of the colon operator (on the right) */
       assert (IS_COLON_OP (tree->right));
 
+      /* Array and function operands are subject to pointer conversion. */
+      if (!IS_ARITHMETIC (LTYPE (tree)) && !IS_PTR (LTYPE (tree)) &&
+          !IS_ARRAY (LTYPE (tree)) && !IS_FUNC (LTYPE (tree)) &&
+          !IS_NULLPTR (LTYPE (tree)))
+        {
+          werrorfl (tree->filename, tree->lineno, E_INVALID_OP, "conditional");
+          goto errorTreeReturn;
+        }
+
       propagateConstExpr (&tree->left, resultType, reduceTypeAllowed);
 
       /* If already known then replace the tree : optimizer will do it
@@ -5966,7 +5992,12 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
             if (IS_DECL (type))
               {
                 if (IS_ARRAY (type))
-                  type = aggregateToPointer (valFromType (type))->type;
+                  {
+                    value *converted = valFromType (type);
+                    convertArrayToPointerType (converted->type);
+                    type = converted->type;
+                    Safe_free (converted);
+                  }
 
                 if (IS_FUNC (type))
                   type = ptrTypeFromType (type);
@@ -5979,6 +6010,8 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
                 if (SPEC_SCLS_IMPLICITINTRINSIC (type))
                   SPEC_SCLS (type) = S_FIXED;
               }
+            /* Nonbanked function pointers use the code-pointer kind. */
+            changePointer (type);
             removeQualifiers (type);
           }
 
@@ -6221,6 +6254,13 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
       else if (IS_ARRAY (RTYPE (tree)) && IS_REGISTER (RTYPE (tree)->next))
         werrorfl (tree->filename, tree->lineno, E_ILLEGAL_ADDR, "address of register variable");
 
+      /* Report each atomic or nested qualifier mismatch once. */
+      if (!diagnoseDissimilarPtrTargetTypes (LTYPE (tree), RTYPE (tree),
+                                            tree->filename,
+                                            tree->lineno ? tree->lineno :
+                                              tree->right->lineno))
+        checkPtrTargetQualifiersAfterDecay (LTYPE (tree), tree->right->ftype);
+
       /* if the left side of the tree is of type void
          then report error */
       if (IS_VOID (LTYPE (tree)))
@@ -6339,6 +6379,13 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
           typecompat = compareType (currFunc->type->next, RTYPE (tree), false);
 
           propagateConstExpr (&tree->right, resultType, reduceTypeAllowed);
+
+          /* Report each atomic or nested qualifier mismatch once. */
+          if (!diagnoseDissimilarPtrTargetTypes (currFunc->type->next,
+                                                RTYPE (tree), tree->filename,
+                                                tree->lineno))
+            checkPtrTargetQualifiersAfterDecay (currFunc->type->next,
+                                              tree->right->ftype);
 
           /* if there is going to be a casting required then add it */
           if (typecompat == -1)
@@ -6548,14 +6595,23 @@ sym_link *
 typeofOp (ast *tree)
 {
   ++noAlloc;
-  tree = decorateType (resolveSymbols (tree), RESULT_TYPE_NONE, false);
+  tree = resolveSymbols (tree);
+  /* Preserve object qualification even when a constexpr value is folded. */
+  bool object_const = IS_AST_SYM_VALUE (tree) && !IS_LITERAL (AST_SYMBOL (tree)->etype) &&
+    isConst (AST_SYMBOL (tree)->type);
+  tree = decorateType (tree, RESULT_TYPE_NONE, false);
   tree->decorated = 0; // Reset, so we redecorate parameters later at CALL node to ensure that register parameters get marked correctly.
   --noAlloc;
   sym_link *type = copyLinkChain (tree->ftype);
   sym_link *spec_type;
   for (spec_type = type; !IS_SPEC (spec_type); spec_type = spec_type->next);
+  /* Const on a scalar literal is internal value metadata, not a qualifier
+     of the expression's C type. Do not transfer it into a declaration. */
+  if (IS_SPEC (type) && IS_LITERAL (spec_type) && !object_const)
+    SPEC_CONST (spec_type) = 0;
   SPEC_SCLS (spec_type) = 0;
   SPEC_STAT (spec_type) = 0;
+  SPEC_EXTR (spec_type) = 0;
   return type;
 }
 

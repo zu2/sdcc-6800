@@ -1,3 +1,416 @@
+2026-10-18 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/SDCCicode.c,
+	  src/mcs51/gen.c:
+	  Change true/false to lowercase, fix typo.
+
+2026-10-18 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.c, src/SDCCerr.c, src/SDCCerr.h:
+	  Require complete parameters in function definitions (bug #4135).
+	  Check adjusted by-value structure and union parameters in
+	  checkFunction, which is called for definitions, before
+	  allocating target-specific storage.
+	* support/valdiag/tests/bug-4135.c:
+	  Test incomplete structures and unions, later parameter positions,
+	  and valid declarations, adjusted parameters and complete types.
+
+2026-10-18 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.c, src/SDCC.y, src/SDCCerr.c, src/SDCCerr.h:
+	  Diagnose non-integer array length expressions (bug #4142).
+	  Recover with length one instead of converting an invalid expression.
+	* support/valdiag/tests/bug-4142.c: Test that errors are
+	  reported for invalid named and abstract array declarations,
+	  and for negative lengths, but not for valid cases.
+
+2026-10-18 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCval.c: Detect overflow while accumulating each digit
+	  of an integer literal (bug #4127).  Produce one range warning
+	  per literal.
+	  Do not alter SDCC's previous interpretation of the accumulated
+	  value.  Use the target's unsigned long long representation and
+	  check that it matches LONGLONGSIZE.
+	* support/regression/tests/bug-4127.c: Test that valid boundary
+	  values are parsed correctly by using arithmetic to make the
+	  tests independent of <limits.h>.
+	* support/valdiag/tests/bug-4127.c: Test that overflowing literal
+	  values are diagnosed with each supported radix and with digit
+	  separators.
+	  Test that valid boundary values and literals with a huge number
+	  of leading zeros are not incorrectly diagnosed.
+
+2026-10-18 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c:
+	  Require a scalar first operand of a conditional expression
+	  allowing array and function conversion (bug #4084).
+	  Diagnose structure, union and void conditions; preserve valid
+	  arithmetic, pointer and nullptr_t conditions.
+	* support/valdiag/tests/bug-4084.c:
+	  Add test cases for invalid usage of structure, union and void types.
+	  Add test cases for valid usage of int, float, pointer, array and
+	  function types; also a test case for valid usage of nullptr_t.
+
+2026-10-18 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c, src/SDCCsymt.c: Use consistent function-pointer kinds
+	  for type names and converted _Generic controlling expressions, so
+	  equivalent types compare correctly (bug #4107).
+	* support/valdiag/tests/bug-4107.c:
+	  Test rejection of duplicate compatible function-pointer associations
+	  in generic selections.
+	* support/regression/tests/bug-4107.c:
+	  Test equivalent function-pointer spellings, function-designator
+	  conversion and pointers to function pointers.
+	  Test banked function pointers and distinct object address spaces on
+	  MCS51.
+
+2026-10-18 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCC.y: Append leading pointers after the complete direct abstract
+	  declarator, preserving array dimensions in unnamed parameters and type
+	  names (bug #4105).
+	* support/regression/tests/bug-4105.c: Add regression tests for
+	  equivalent declarations, array parameter adjustment, qualifiers,
+	  pointer depth and array sizes. Test indexing, pointer arithmetic and
+	  calls through unnamed parameter declarations.
+
+2026-10-17 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4123-3.c:
+	  Further tests for z80 peephole optimizer rules, towards fixing bug #4123.
+
+2026-10-17 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCC.y,
+	* src/SDCCsymt.h,
+	* src/SDCCerr.c,
+	* src/SDCCerr.h:
+	Track member lists under construction, including C23 redefinitions.
+	Diagnose a nested definition before it can complete the enclosing
+	type, and retain a separate type for error recovery (bug #4116).
+	* support/valdiag/tests/bug-4116.c:
+	Test that an error is reported for union and struct redefinitions
+	nested within themselves, including indirectly and when a struct
+	tag is reused for a nested union or vice versa.
+	Test that no error is reported for a struct or union definition
+	that contains a pointer to itself, and other valid cases.
+
+2026-10-17 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (constExprTree): Read the constexpr flag from the
+	  symbol's type specifier, including for pointer objects (bug #4151).
+	* support/regression/tests/bug-4151.c: Test compound literals with
+	  pointer initialisers supplied by parameters and local variables.
+
+2026-10-17 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/scripts/sdcc.nsi:
+	  Include HuC6280 port in Windows installer, fix bug #4114.
+	* support/regression/tests/bug-4123-2.c:
+	  Further tests for z80 peephole optimizer rules, towards fixing bug #4123.
+
+2026-10-17 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* support/valdiag/tests/bug-4139.c: fixed for pdk13 & pdk15
+	* support/regression/tests/bug2783061.c: fixed warning 357 instead of ignoring it,
+	  enabled for all targets
+
+2026-10-17 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCgenconstprop.cc: Do not add a fall-through edge after calls
+	  to _Noreturn functions in the value-analysis graph. Avoid spurious
+	  _Optional dereference diagnostics after a null guard (bug #4146).
+	* support/valdiag/tests/bug-4146.c: Test guarded calls and
+	  conditional expressions, with unsafe and early-return controls.
+
+2026-10-14 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* support/regression/tests/bug-4130.c,
+	* support/regression/tests/bug-4139.c,
+	* support/regression/tests/bug-4140.c,
+	* support/regression/tests/bug-4141.c: check whether the compiler is C23 compatible
+
+2026-10-14 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4123-2.c:
+	  Another test for z80 peephole optimizer rules, towards fixing bug #4123.
+	* src/z80/peeph.def:
+	  Remove some untested peephole optimizer rules, for which no tests were found, towards fixing bugs #4123, #4115.
+	* support/regression/tests/bug-2810.c:
+	  Add a test for a bug that was fixed a while ago along with a different one.
+
+2026-10-13 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.c: Copy function parameter values and symbols when
+	  inferring a function-pointer type, so processing the new declaration
+	  cannot rename the original function's parameters (bug #4141).
+	* support/regression/tests/bug-4141.c: Test inferred pointers and
+	  direct calls after inference, including two-argument reentrant calls.
+
+2026-10-13 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c,
+	  support/valdiag/tests/bug-4125.c,
+	  support/regression/tests/bug-4125.c:
+	  Require integer types for both shift operands, patch by Christopher Bazley.
+
+2026-10-13 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCC.y, src/SDCCsymt.c:
+	  Require the same member types in repeated aggregate definitions
+	  (bug #4133). Check scalar qualifiers before exact comparison of
+	  bit-precise types can return. Patch by Christopher Bazley.
+	* support/valdiag/tests/bug-4133.c:
+	  Test array bounds, member and pointer-target qualifiers, typedefs
+	  and adjusted function parameter types. Patch by Christopher Bazley.
+	* src/SDCCast.c:
+	  Do not transfer artificial scalar-literal const qualification into
+	  typeof declarations (bug #4130). Preserve genuine const objects,
+	  including constexpr objects whose values are folded. Patch by Christopher Bazley.
+	* support/valdiag/tests/bug-4130.c,
+	  support/regression/tests/bug-4130.c:
+	  Test literal-derived objects and return types, object qualification
+	  and pointer targets. Patch by Christopher Bazley.
+
+2026-10-13 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCsymt.c:
+	  Infer auto types only when no type specifier is present. Keep
+	  ordinary initialisation for explicitly typed auto declarations,
+	  including length and signedness specifiers that imply int (bug #4140), patch by Christopher Bazley.
+	* support/valdiag/tests/bug-4140.c,
+	  support/regression/tests/bug-4140.c:
+	  Test explicit types, conversions, qualifiers and inference controls, patch by Christopher Bazley.
+
+2026-10-13 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4139.c:
+	  Suppress the expected non-const string-literal warning in the
+	  runtime test without changing the inferred pointer type, patch by Christopher Bazley.
+	* support/regression/tests/bug-4123.c,
+	  support/regression/tests/bug-4123-2.c:
+	  Add tests for peephole optimizer rules, part of bug #4123.
+
+2026-10-12 Gabriele Gorla <gorlik@yahoo.com>
+
+	* support/regression/tests/bug-4139.c:
+	  Fix test for all pdk.
+	* sdas/as6808/m08pst.c,
+	  src/SDCCglue.c,
+	  src/hc08/main.c:
+	  Renamed .cs08 to .hcs08
+
+2026-10-12 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.c: Apply initialiser conversions before auto type
+	  inference (bug #4139). Inspect a copy of the initialiser and retain
+	  the final specifier for inferred pointer types.
+	* support/valdiag/tests/bug-4139.c,
+	  support/regression/tests/bug-4139.c: Test qualification, array and
+	  function conversions, explicit qualifiers and initialiser evaluation.
+
+2026-10-11 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/lib/_strpbrk.c,
+	* device/lib/bsearch.c: fixed new warnings
+	* src/mcs51/gen.c (pointerCode): changed parameter from sym_link* to operand*
+	* src/ds390/gen.c: synced to mcs51
+
+2026-10-09 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/peeph.def:
+	  Remove some peephole optimizer rules that do not improve the code in any regression tests, fix some others.
+	* support/regression/tests/bug-4123.c:
+	  Add new tests for some peephole optimizer rules no longer triggered in other tests.
+
+2026-10-09 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCsymt.c,
+	  src/SDCCerr.h,
+	  src/SDCCerr.c,
+	  support/valdiag/tests/bug-4117.c,
+	  support/regression/tests/bug-4117.c:
+	  Diagnose derived enum underlying types, based on patch by Christopher Bazley.
+
+2026-10-09 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCval.c,
+	  support/regression/tests/bug-4119.c,
+	  support/valdiag/tests/bug-4119.c:
+	  Avoid host overflow when folding signed minimum divided by minus
+	  one or its remainder. Store recovered _BitInt quotients with the
+	  correct sign extension. Patch by Christopher Bazley.
+
+2026-10-09 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/pic16/glue.c:
+	  Fix an issue in inline function handling, bug #4122, patch by zeynelsagcan.
+	* device/lib/pic16/libsdcc/fixed16x16/fps16x16_eq.c,
+	  device/lib/pic16/libsdcc/fixed16x16/fps16x16_gt.c,
+	  device/lib/pic16/libsdcc/fixed16x16/fps16x16_gteq.c,
+	  device/lib/pic16/libsdcc/fixed16x16/fps16x16_lt.c,
+	  device/lib/pic16/libsdcc/fixed16x16/fps16x16_lteq.c,
+	  device/lib/pic16/libsdcc/fixed16x16/fps16x16_neq.c,
+	  src/SDCCsymt.c:
+	  Make fixed-point comparison support functions return unsigned char.
+	* support/regression/tests/bug-4002.c,
+	  support/regression/tests/bug-4003.c,
+	  support/regression/tests/bug-4005.c:
+	  Disable some tests for host, where we can't assume _Optional support.
+
+2026-10-08 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* device/include/stdbit.h,
+	  device/lib/__stdc_bit_width.c,
+	  device/lib/__stdc_count_ones.c,
+	  device/lib/__stdc_first_leading_one.c,
+	  device/lib/__stdc_first_trailing_one.c,
+	  device/lib/__stdc_leading_zeros.c,
+	  device/lib/__stdc_trailing_ones.c:
+	  Make stdbit.h usable without _BitInt, patch by  zeynelsagcan.
+	* src/z80/peeph-sm83.def,
+	  src/z80/peeph.def:
+	  Peephole optimizer rule fixes.
+
+2026-10-08 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/peeph-sm83.def,
+	  src/z80/peeph.def:
+	  Remove some untested (i.e. they apply for no regression test) peephole optimizer rules suspected to be broken.
+
+2026-10-08 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/peeph.def,
+	  support/regression/tests/bug-4115.c:
+	  Fix bug #4115 (the reproducible part).
+
+2026-10-08 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCval.c:
+	  Adjust function parameters to pointers before qualifier checking and
+	  symbol binding, fixing indirect calls (bug #3028, related to #3358), patch by Christopher Bazley.
+	* support/regression/tests/bug-3028.c,
+	  support/valdiag/tests/bug-3028.c:
+	  Test named and unnamed parameters, redeclarations, calls and _Optional, patch by Christopher Bazley.
+
+2026-10-08 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c,
+	  src/SDCCerr.c,
+	  src/SDCCerr.h,
+	  support/regression/tests/typeof.c,
+	  support/valdiag/tests/bug-4000.c:
+	  Fix bug #4000, patch by Christopher Bazley.
+
+2026-10-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c, src/SDCCicode.c, src/SDCCicode.h, src/SDCCopt.c,
+	  src/SDCCsymt.c, src/SDCCsymt.h, support/valdiag/tests/bug-3953.c,
+	  support/valdiag/tests/bug-4006.c:
+	  Check referenced qualifiers after expression decay on assignments and
+	  returns (bug #4006). Avoid repeating incompatible-type diagnostics.
+	  Remove the late iCode qualifier checker and unused restrict-loss flag.
+	  Patch by Christopher Bazley.
+
+2026-10-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c, src/SDCCicode.c, src/SDCCsymt.c, src/SDCCsymt.h,
+	  support/regression/tests/bug-4005.c,
+	  support/valdiag/tests/_Optional-draft-2026-04-17.c:
+	  Centralise expression array decay and remove _Optional from its
+	  referenced element type (bug #4005), patch by Christopher Bazley.
+
+2026-10-07 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/as8051/i51mch.c,
+	  sdas/asf8/f8adr.c,
+	  sdas/asgb/gb.h,
+	  sdas/asxxsrc/asexpr.c,
+	  sdas/asxxsrc/asmain.c,
+	  sdas/asxxsrc/asout.c,
+	  sdas/asxxsrc/asxxxx.h,
+	  sdas/asz80/z80mch.c:
+	  Update the "A_" area constants to match upstream asxxxx.
+
+2026-10-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4002.c,
+	  support/valdiag/tests/_Optional-draft-2026-04-17.c,
+	  support/valdiag/tests/bug-4002.c:
+	  Tests for bug #4002 (which was fixed along with #4003 earlier today), patch by Christopher Bazley.
+
+2026-10-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCC.y, src/SDCCast.c, src/SDCCast.h, src/SDCCcse.c,
+	  src/SDCCicode.c, src/SDCCicode.h, src/SDCCopt.c:
+	  Record non-null checks for arithmetic and dereferences in
+	  diagnostic-only iCode (bug #4003). Replace operand semantic-
+	  dereference markers and deferred deletion from the preliminary fix;
+	  Diagnose after value analysis and remove checks before loop
+	  optimisation, without an extra CSE pass that can introduce spills, patch by Christopher Bazley.
+	* support/regression/tests/bug-4003.c,
+	  support/valdiag/tests/bug-4003.c:
+	  Test folding, guards, discarded operations and single evaluation, patch by Christopher Bazley.
+
+2026-10-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c, src/SDCCsymt.c, src/SDCCsymt.h:
+	  Diagnose incompatible implicit pointer conversions (bug #3952).
+	  Compare types without object storage metadata, check function return
+	  types and restore parameter comparison in compareTypeExact, patch by Christopher Bazley.
+	  Print pointer type details only when warning 244 is emitted.
+	* support/valdiag/tests/bug-3952.c,
+	  support/valdiag/tests/function-type-parameters.c,
+	  support/regression/tests/function-type-parameters.c:
+	  Add diagnostic and runtime coverage, patch by Christopher Bazley.
+	* support/valdiag/tests/bug-4004.c, support/valdiag/tests/pointers.c:
+	  Update diagnostic expectations, patch by Christopher Bazley.
+	* support/regression/tests/p99-conformance.c:
+	  Suppress expected warning 244 without changing the tested code, patch by Christopher Bazley.
+
+2026-10-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCsymt.c,
+	  support/valdiag/tests/bug-4094.c,
+	  support/regression/tests/bug-2102.c:
+	  Fix bug #4094, based on patch by Christopher Bazley.
+
+2026-10-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCval.c,
+	  support/regression/tests/bug-4102.c:
+	  Fix bug #4102: fold unsigned int products in host unsigned long to
+	  avoid signed integer promotion. Assert that its range holds the
+	  full target product needed by the overflow diagnostic, patch by Christopher Bazley.
+
+2026-10-07 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCsymt.c:
+	  Insert multi-element declarator chains before the terminal specifier
+	  in addDecl, fixing function typedefs with pointer returns (#4104), patch by Christopher Bazley.
+	* support/regression/tests/bug-4104.c,
+	  support/valdiag/tests/bug-4104.c:
+	  Test reentrant function typedefs, indirect calls, null assignment,
+	  pointer depth, access qualifiers and address-space qualification, patch by Christopher Bazley.
+
+2026-10-06 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c:
+	  Compare integral AST literals without conversion to double;
+	  test the full literal before simplifying unsigned comparisons, patch by Christopher Bazley.
+	* src/SDCCval.c:
+	  Share folding for all six comparison operators after arithmetic
+	  conversion, preserving wide integer values and signedness (#4113), patch by Christopher Bazley.
+	* src/SDCCicode.c:
+	  Reuse valCompare for comparisons and valBitwise for bitwise folding
+	  to avoid rounding and truncating wide literal operands, patch by Christopher Bazley.
+	* support/regression/tests/bug-4113.c:
+	  Test wide comparisons, integer conversion, bitwise folding,
+	  floating operands and signed versus unsigned division, based on patch by Christopher Bazley.
+
 2026-10-06 Philipp Klaus Krause <philipp@colecovision.eu>
 
 	* src/SDCCast.c,

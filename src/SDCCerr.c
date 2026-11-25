@@ -692,7 +692,7 @@ struct
   { E_COMPLIT_SCLASS_C23, ERROR_LEVEL_ERROR,
     "compound literals with storage class specifier require ISO C23 or later", 0 },
   { W_ENUM_UNDERLYING_BITINT, ERROR_LEVEL_WARNING,
-    "enum's underlying type may not be a bit-precise type in ISO C23", 0 },
+    "enum's underlying bit-precise type requires ISO C2y or later", 0 },
   { W_BITINTWIDTH_1_C2Y, ERROR_LEVEL_WARNING,
     "signed bit-precise integer type of width 1 requires ISO C2y or later", 0 },
   { E_ATOMIC_ARRAY, ERROR_LEVEL_ERROR,
@@ -704,7 +704,7 @@ struct
   { E_ATOMIC_SPEC_QUALIFIED, ERROR_LEVEL_ERROR,
      "_Atomic specifier on qualified type", 0 },
   { E_BLOCK_SCOPE_EXTERN_INIT, ERROR_LEVEL_ERROR,
-     "block-scope variable'%s' declared extern and intialized", 0},
+     "block-scope variable '%s' declared extern and initialized", 0},
   { E_BLOCK_SCOPE_FUNC_SCLASS, ERROR_LEVEL_ERROR,
      " Function declared at block scope with explicit storage-class specifier other than extern", 0 },
   { W_PTR2INT_NOREPRESENT, ERROR_LEVEL_WARNING,
@@ -799,6 +799,12 @@ struct
      "function '%s' has function return type", 0},
   {W_ALIGNOF_INCOMPLETE_ARRAY_C2Y, ERROR_LEVEL_WARNING,
      "alignof applied to an incomplete array requires ISO C2y or later", 0},
+  {E_STRUCT_DEF_NESTED, ERROR_LEVEL_ERROR,
+     "nested definition of struct/union '%s'", 0},
+  {E_ARRAY_LENGTH_NON_INTEGER, ERROR_LEVEL_ERROR,
+     "array length not an integer", 0},
+  {E_INCOMPLETE_PARAMETER, ERROR_LEVEL_ERROR,
+     "parameter %d of function '%s' has incomplete type", 0},
 };
 
 /* -------------------------------------------------------------------------------

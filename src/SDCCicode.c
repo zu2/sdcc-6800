@@ -66,6 +66,7 @@ PRINTFUNC (picSetValueAtAddr);
 PRINTFUNC (picAddrOf);
 PRINTFUNC (picGeneric);
 PRINTFUNC (picGenericOne);
+PRINTFUNC (picPointerCheck);
 PRINTFUNC (picCast);
 PRINTFUNC (picAssign);
 PRINTFUNC (picLabel);
@@ -124,6 +125,7 @@ iCodeTable codeTable[] = {
   {RECEIVE, "recv", picReceive, NULL},
   {SEND, "send", picGenericOne, NULL},
   {ARRAYINIT, "arrayInit", picGenericOne, NULL},
+  {POINTER_NONNULL_CHECK, "check non-null", picPointerCheck, NULL},
   {DUMMY_READ_VOLATILE, "dummy = (volatile)", picDummyRead, NULL},
   {CRITICAL, "critical_start", picCritical, NULL},
   {ENDCRITICAL, "critical_end", picEndCritical, NULL},
@@ -200,14 +202,15 @@ dbuf_printOperand (operand * op, struct dbuf_s *dbuf)
 //#if REGA      /* { */
       if (REGA && !getenv ("PRINT_SHORT_OPERANDS"))
         {
-          dbuf_printf (dbuf, "%s [k%d lr%d:%d so:%d]{ ia%d a2p%d re%d rm%d nos%d ru%d dp%d oe%d sdr%d myp%d}",   /*{ar%d rm%d ru%d p%d a%d u%d i%d au%d k%d ks%d}"  , */
+          dbuf_printf (dbuf, "%s [k%d lr%d:%d so:%d]{ ia%d a2p%d re%d "
+                       "rm%d nos%d ru%d dp%d oe%d myp%d}",
                        (OP_SYMBOL (op)->rname[0] ? OP_SYMBOL (op)->rname : OP_SYMBOL (op)->name),
                        op->key,
                        OP_LIVEFROM (op), OP_LIVETO (op),
                        OP_SYMBOL (op)->stack,
                        op->isaddr, op->aggr2ptr, OP_SYMBOL (op)->isreqv,
                        OP_SYMBOL (op)->remat, OP_SYMBOL (op)->noSpilLoc, OP_SYMBOL (op)->ruonly, OP_SYMBOL (op)->dptr,
-                       op->isOptionalEliminated, op->isSemDeref, OP_SYMBOL (op)->ismyparm);
+                       op->isOptionalEliminated, OP_SYMBOL (op)->ismyparm);
           {
             dbuf_append_char (dbuf, '{');
             dbuf_printTypeChain (operandType (op), dbuf);
@@ -498,6 +501,19 @@ PRINTFUNC (picReceive)
   dbuf_append_char (dbuf, '\n');
 }
 
+PRINTFUNC (picPointerCheck)
+{
+  dbuf_printf (dbuf, "\t%s (%s) ", s,
+               ic->pointerCheck == POINTER_ARITHMETIC ? "arithmetic" : "dereference");
+  if (IC_LEFT (ic))
+    dbuf_printOperand (IC_LEFT (ic), dbuf);
+  if (IC_LEFT (ic) && IC_RIGHT (ic))
+    dbuf_append_str (dbuf, ", ");
+  if (IC_RIGHT (ic))
+    dbuf_printOperand (IC_RIGHT (ic), dbuf);
+  dbuf_append_char (dbuf, '\n');
+}
+
 PRINTFUNC (picDummyRead)
 {
   dbuf_append_char (dbuf, '\t');
@@ -693,7 +709,7 @@ newiCodeParm (int op, operand *left, value *param, sym_link *ftype, int *stack)
             (*stack)++;
           else if (IFFUNC_ISDYNAMICC (ftype) && getSize (argtype)  == 3 && IS_FARPTR (argtype)) // Dynamic C passes pointers to __far as 32 bits.
             (*stack)++;
-          else if (TARGET_PDK_LIKE && getSize (argtype) % 2) // pdk needs even-oligned stack.
+          else if (TARGET_PDK_LIKE && getSize (argtype) % 2) // pdk needs even-aligned stack.
             (*stack)++;
         }
     }
@@ -800,6 +816,7 @@ copyiCode (iCode * ic)
   nic->block = ic->block;
   nic->level = ic->level;
   nic->parmBytes = ic->parmBytes;
+  nic->pointerCheck = ic->pointerCheck;
 
   /* deal with the special cases first */
   switch (ic->op)
@@ -1508,73 +1525,21 @@ operandOperation (operand * left, operand * right, int op, sym_link * type)
       retval = operandFromValue (valRecastLitVal (type, valShift (OP_VALUE (left), OP_VALUE (right), 0, true)), false);
       break;
     case EQ_OP:
-      if (IS_FLOAT (let) || IS_FLOAT (ret))
-        {
-          retval = operandFromLit (operandLitValue (left) == operandLitValue (right));
-        }
-      else if (IS_FIXED16X16 (let) || IS_FIXED16X16 (ret))
-        {
-          retval = operandFromLit (operandLitValue (left) == operandLitValue (right));
-        }
-      else if (IS_PTR (operandType (left)) || IS_PTR (operandType (right)))
-        {
-          retval = operandFromLit (operandLitValue (left) == operandLitValue (right));
-        }
-      else
-        {
-          /* this op doesn't care about signedness */
-          TYPE_TARGET_ULONG l, r;
-
-          l = (TYPE_TARGET_ULONG) double2ul (operandLitValue (left));
-          r = (TYPE_TARGET_ULONG) double2ul (operandLitValue (right));
-          /* In order to correctly compare 'signed int' and 'unsigned int' it's
-             necessary to strip them to 16 bit.
-             Literals are reduced to their cheapest type, therefore left and
-             right might have different types. It's necessary to find a
-             common type: int (used for char too) or long */
-          if (!IS_LONG (let) && !IS_LONG (ret))
-            {
-              r = (TYPE_TARGET_UINT) r;
-              l = (TYPE_TARGET_UINT) l;
-            }
-          retval = operandFromLit (l == r);
-        }
-      break;
-    case '<':
-      retval = operandFromLit (operandLitValue (left) < operandLitValue (right));
-      break;
-    case LE_OP:
-      retval = operandFromLit (operandLitValue (left) <= operandLitValue (right));
-      break;
     case NE_OP:
-      retval = operandFromLit (operandLitValue (left) != operandLitValue (right));
-      break;
+    case '<':
     case '>':
-      retval = operandFromLit (operandLitValue (left) > operandLitValue (right));
-      break;
+    case LE_OP:
     case GE_OP:
-      retval = operandFromLit (operandLitValue (left) >= operandLitValue (right));
+      retval = operandFromValue (valCompare (OP_VALUE (left), OP_VALUE (right),
+                                            op, true), false);
       break;
     case BITWISEAND:
-      retval = operandFromValue (valCastLiteral (type,
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (left)) &
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (right)),
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (left)) &
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (right))), false);
-      break;
     case '|':
-      retval = operandFromValue (valCastLiteral (type,
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (left)) |
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (right)),
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (left)) |
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (right))), false);
-      break;
     case '^':
-      retval = operandFromValue (valCastLiteral (type,
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (left)) ^
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (right)),
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (left)) ^
-                                                 (TYPE_TARGET_ULONG) double2ul (operandLitValue (right))), false);
+      /* Fold at the operand width without rounding through double. */
+      retval = operandFromValue (valRecastLitVal (type,
+        valBitwise (OP_VALUE (left), OP_VALUE (right),
+                    op == BITWISEAND ? '&' : op, false)), false);
       break;
     case AND_OP:
       retval = operandFromLit (operandLitValue (left) && operandLitValue (right));
@@ -1744,9 +1709,7 @@ operandFromOperand (operand * op)
   nop->usesDefs = op->usesDefs;
   nop->isParm = op->isParm;
   nop->isConstEliminated = op->isConstEliminated;
-  nop->isRestrictEliminated = op->isRestrictEliminated;
   nop->isOptionalEliminated = op->isOptionalEliminated;
-  nop->isSemDeref = op->isSemDeref;
 
   switch (nop->type)
     {
@@ -2164,33 +2127,6 @@ geniCodeRValue (operand * op, bool force)
 }
 
 /*-----------------------------------------------------------------*/
-/* checkPtrQualifiers - check for lost pointer qualifiers          */
-/*-----------------------------------------------------------------*/
-static void
-checkPtrQualifiers (sym_link *ltype, sym_link *rtype, operand *op)
-{
-  // Also checking array rtypes is a hack (workaround for pointer decay not having happened earlier).
-  if (IS_PTR (ltype) && (IS_PTR (rtype) || IS_ARRAY (rtype)) && !IS_FUNCPTR (ltype) && !op->isConstEliminated)
-    {
-      if (!isConst (ltype->next) && isConst (rtype->next))
-        werror (W_TARGET_LOST_QUALIFIER, "const");
-#if 0
-      // disabled because SDCC will make all union fields volatile
-      // but your ptr to it need not be
-      if (!IS_VOLATILE (ltype->next) && IS_VOLATILE (rtype->next))
-        werror (W_TARGET_LOST_QUALIFIER, "volatile");
-#endif
-    }
-  if (IS_PTR (ltype) && IS_PTR (rtype))
-    {
-      if (!op->isRestrictEliminated && !isRestrict (ltype->next) && isRestrict (rtype->next))
-        werror (W_TARGET_LOST_QUALIFIER, "restrict");
-      if (!op->isOptionalEliminated && !isOptional (ltype->next) && isOptional (rtype->next))
-        werror (W_TARGET_LOST_QUALIFIER, "_Optional");
-    }
-}
-
-/*-----------------------------------------------------------------*/
 /* geniCodeCast - changes the value from one type to another       */
 /*-----------------------------------------------------------------*/
 static operand *
@@ -2219,7 +2155,6 @@ geniCodeCast (sym_link *type, operand *op, bool implicit)
     if (IS_PTR (type))
       {
         op->isConstEliminated = (isConst (opetype) && !isConst (getSpec (type)));
-        op->isRestrictEliminated = (isRestrict (opetype) && !isRestrict (getSpec (type)));
         op->isOptionalEliminated = (isOptional (opetype) && !isOptional (getSpec (type)));
       }
     if (IS_PTR (type) && compareTypeExact (type, optype, -1, true) != 1 &&
@@ -2436,6 +2371,30 @@ geniCodeModulus (operand * left, operand * right, RESULT_TYPE resultType)
   return IC_RESULT (ic);
 }
 
+/* Capture the pointer before its qualifiers or operand type change. */
+static operand *
+optionalPointerOperand (operand *op)
+{
+  return op && IS_PTR (operandType (op)) &&
+    isOptional (operandType (op)->next) && !op->isOptionalEliminated ?
+    operandFromOperand (op) : NULL;
+}
+
+/* Keep the diagnostic at the source operation's position. */
+static void
+recordPointerCheck (operand *left, operand *right,
+                    enum pointerCheckKind kind)
+{
+  operand *l = optionalPointerOperand (left);
+  operand *r = optionalPointerOperand (right);
+  if (l || r)
+    {
+      iCode *ic = newiCode (POINTER_NONNULL_CHECK, l, r);
+      ic->pointerCheck = kind;
+      ADDTOCHAIN (ic);
+    }
+}
+
 /*-----------------------------------------------------------------*/
 /* geniCodePtrPtrSubtract - subtracts pointer from pointer         */
 /*-----------------------------------------------------------------*/
@@ -2445,6 +2404,8 @@ geniCodePtrPtrSubtract (operand * left, operand * right)
   iCode *ic;
   operand *result;
   LRTYPE;
+
+  recordPointerCheck (left, right, POINTER_ARITHMETIC);
 
   /* if they are both literals then */
   if (IS_LITERAL (letype) && IS_LITERAL (retype))
@@ -2481,6 +2442,8 @@ geniCodeSubtract (operand * left, operand * right, RESULT_TYPE resultType)
   /* if they are both pointers then */
   if ((IS_PTR (ltype) || IS_ARRAY (ltype)) && (IS_PTR (rtype) || IS_ARRAY (rtype)))
     return geniCodePtrPtrSubtract (left, right);
+
+  recordPointerCheck (left, right, POINTER_ARITHMETIC);
 
   /* if they are both literal then we know the result */
   if (IS_LITERAL (letype) && IS_LITERAL (retype) && left->isLiteral && right->isLiteral)
@@ -2540,14 +2503,26 @@ geniCodeAdd (operand *left, operand *right, RESULT_TYPE resultType, int lvl)
   bool indexUnsigned;
   LRTYPE;
 
+  recordPointerCheck (left, right, POINTER_ARITHMETIC);
+
   /* if the right side is LITERAL zero */
   /* return the left side              */
   if (IS_LITERAL (retype) && right->isLiteral && !floatFromVal (valFromType (rtype)))
-    return left;
+    {
+      left = operandFromOperand (left);
+      if (IS_PTR (ltype))
+        left->isOptionalEliminated = true;
+      return left;
+    }
 
   /* if left is literal zero return right */
   if (!IS_PTR (ltype) && IS_LITERAL (letype) && left->isLiteral && !floatFromVal (valFromType (ltype)))
-    return right;
+    {
+      right = operandFromOperand (right);
+      if (IS_PTR (rtype))
+        right->isOptionalEliminated = true;
+      return right;
+    }
 
   /* if left is a pointer then size */
   if (IS_PTR (ltype) || IS_ARRAY (ltype))
@@ -2683,6 +2658,14 @@ geniCodeArray2Ptr (operand * op)
 
   /* set the pointer depending on the storage class */
   DCL_TYPE (optype) = PTR_TYPE (SPEC_OCLS (opetype));
+
+  /* Array-to-pointer conversion removes _Optional from the
+     referenced element type. */
+  if (IS_SPEC (optype->next))
+    SPEC_OPTIONAL (optype->next) = false;
+  else
+    DCL_PTR_OPTIONAL (optype->next) = false;
+
   /* now remove the storage class from this itemp */
   SPEC_SCLS (opetype) = S_FIXED;
   SPEC_OCLS (opetype) = NULL;
@@ -2856,6 +2839,8 @@ geniCodePostInc (operand * op)
       else
         werror (W_SIZEOF_VOID);
     }
+  recordPointerCheck (srcOp, NULL, POINTER_ARITHMETIC);
+
   if (IS_FLOAT (rvtype))
     ic = newiCode ('+', srcOp, operandFromValue (constFloatVal ("1.0"), false));
   else if (IS_FIXED16X16 (rvtype))
@@ -2902,6 +2887,8 @@ geniCodePreInc (operand * op, bool lvalue)
       else
         werror (W_SIZEOF_VOID);
     }
+  recordPointerCheck (rop, NULL, POINTER_ARITHMETIC);
+
   if (IS_FLOAT (roptype))
     ic = newiCode ('+', rop, operandFromValue (constFloatVal ("1.0"), false));
   else if (IS_FIXED16X16 (roptype))
@@ -2965,6 +2952,8 @@ geniCodePostDec (operand * op)
       else
         werror (W_SIZEOF_VOID);
     }
+  recordPointerCheck (srcOp, NULL, POINTER_ARITHMETIC);
+
   if (IS_FLOAT (rvtype))
     ic = newiCode ('-', srcOp, operandFromValue (constFloatVal ("1.0"), false));
   else if (IS_FIXED16X16 (rvtype))
@@ -3011,6 +3000,8 @@ geniCodePreDec (operand * op, bool lvalue)
       else
         werror (W_SIZEOF_VOID);
     }
+  recordPointerCheck (rop, NULL, POINTER_ARITHMETIC);
+
   if (IS_FLOAT (roptype))
     ic = newiCode ('-', rop, operandFromValue (constFloatVal ("1.0"), false));
   else if (IS_FIXED16X16 (roptype))
@@ -3068,7 +3059,6 @@ geniCodeAddressOf (operand *op)
     {
       op = operandFromOperand (op);
       op->isaddr = 0;
-      op->isSemDeref = isOptional (optype->next);
       return op;
     }
 
@@ -3165,6 +3155,17 @@ geniCodeDerefPtr (operand *op, int lvl)
 
   // just in case someone screws up
   wassert (IS_PTR (optype));
+
+  recordPointerCheck (op, NULL, POINTER_DEREFERENCE);
+
+  if (IS_FUNCPTR (optype))
+    {
+      /* A function designator uses the same pointer value. Keep its type
+         for non-null analysis rather than changing the shared symbol. */
+      op = operandFromOperand (op);
+      op->isOptionalEliminated = true;
+      return op;
+    }
 
   if (IS_TRUE_SYMOP (op) || IS_OP_LITERAL (op))
     {
@@ -3548,7 +3549,6 @@ checkTypes (operand * left, operand * right)
         }
       right = geniCodeCast (ltype, right, true);
     }
-  checkPtrQualifiers (ltype, rtype, right);
   return right;
 }
 
@@ -3918,6 +3918,7 @@ geniCodeCall (operand * left, ast * parms, int lvl)
   /* now call : if symbol then pcall */
   if (IS_OP_POINTER (left) || IS_ITEMP (left))
     {
+      recordPointerCheck (left, NULL, POINTER_DEREFERENCE);
       ic = newiCode (PCALL, left, NULL);
     }
   else
@@ -4089,10 +4090,6 @@ geniCodeReturn (operand *op)
   /* return in _Noreturn function */ 
   if (currFunc && IFFUNC_ISNORETURN (currFunc->type))
     werror (W_NORETURNRETURN);
-
-  /* check if a cast is needed */
-  if (op && currFunc && currFunc->type && currFunc->type->next)
-    checkPtrQualifiers (currFunc->type->next, operandType (op), op);
 
   /* if the operand is present force an rvalue */
   if (op)
@@ -4707,6 +4704,9 @@ ast2iCode (ast * tree, int lvl)
       {
         sym_link *pType;
         pType = operandType (left);
+        operand *pointer = operandFromOperand (left);
+        pointer->isaddr = 0;
+        recordPointerCheck (pointer, NULL, POINTER_DEREFERENCE);
         left = geniCodeRValue (left, true);
 
         setOClass (pType, getSpec (operandType (left)));
@@ -4791,9 +4791,10 @@ ast2iCode (ast * tree, int lvl)
       }
 #else // bug #604575, is it a bug ????
       {
-        operand *op = geniCodeCast (operandType (left), geniCodeRValue (right, false), false);
-        op->isSemDeref |= tree->values.cast.semDeref;
-        return op;
+        operand *source = geniCodeRValue (right, false);
+        if (tree->values.cast.semDeref)
+          recordPointerCheck (source, NULL, POINTER_DEREFERENCE);
+        return geniCodeCast (operandType (left), source, false);
       }
 #endif
 

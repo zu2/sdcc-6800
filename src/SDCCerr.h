@@ -341,13 +341,13 @@ enum {
   E_INVALID_OCTAL               = 311, /* \o{...} used without valid octal digits */
   E_SELECTION_DECLARATION_C2Y   = 312, /* declaration within selection header requires ISO C2y or later */
   E_COMPLIT_SCLASS_C23          = 313, // compound literals with storage class specifier require ISO C23 or later
-  W_ENUM_UNDERLYING_BITINT      = 314, // enum's underlying type may not be a bit-precise type in ISO C23
+  W_ENUM_UNDERLYING_BITINT      = 314, // enum's underlying bit-precise type requires ISO C2y or later
   W_BITINTWIDTH_1_C2Y           = 315, // signed bit-precise integer type of width 1 requires ISO C2y or later
   E_ATOMIC_ARRAY                = 316, // _Atomic array
   E_ATOMIC_FUNCTION             = 317, // _Atomic function
   E_ATOMIC_SPEC_ATOMIC          = 318, // _Atomic specifier on atomic type
   E_ATOMIC_SPEC_QUALIFIED       = 319, // _Atomic specifier on qualified type
-  E_BLOCK_SCOPE_EXTERN_INIT     = 320, // block scope variable declared extern and intialized
+  E_BLOCK_SCOPE_EXTERN_INIT     = 320, // block-scope variable declared extern and initialized
   E_BLOCK_SCOPE_FUNC_SCLASS     = 321, // Function declared at block scope with explicit storage-class specifier other than extern
   W_PTR2INT_NOREPRESENT         = 322, // Cast of pointer to integer type that cannot represent all values of the pointer type
   W_MAIN_TYPE                   = 323, // Function main should be void main(void) or int main(void)
@@ -395,6 +395,9 @@ enum {
   E_INCOMPLETE_RETURN           = 365, // function has incomplete return type
   E_FUNC_RETURN                 = 366, // function '%s' has function return type
   W_ALIGNOF_INCOMPLETE_ARRAY_C2Y = 367, // alignof applied to an incomplete array requires ISO C2y or later
+  E_STRUCT_DEF_NESTED           = 368, // defining declarations of the same struct or union are nested
+  E_ARRAY_LENGTH_NON_INTEGER    = 369, // array length not an integer
+  E_INCOMPLETE_PARAMETER        = 370, // function definition has an incomplete parameter type
 
   // If you get a merge conflict here, some #pragma disable_warning in support/valdiag and support/regression will likely need to be adapted to the resolution. Check there!
 

@@ -69,6 +69,7 @@ typedef struct structdef
   int type;                     /* STRUCT or UNION            */
   bool b_flexArrayMember;       /* has got a flexible array member,
                                    only needed for syntax checks */
+  bool being_defined;           /* member list is currently being parsed */
   bool redefinition;            /* is a redefinition only needed for syntax checks */
   struct symbol *tagsym;        /* tag symbol (NULL if no tag) */
 }
@@ -747,6 +748,9 @@ sym_link *newBoolLink ();
 sym_link *newPtrDiffLink ();
 sym_link *newVoidLink ();
 int compareType (sym_link *, sym_link *, bool ignoreimplicitintrinsic);
+bool compatibleTypes (sym_link *, sym_link *);
+bool similarTypes (sym_link *, sym_link *);
+bool diagnoseDissimilarPtrTargetTypes (sym_link *, sym_link *, const char *, int);
 int compareTypeExact (sym_link *, sym_link *, long level, bool check_top_std_qual);
 int compareTypeInexact (sym_link *, sym_link *);
 int checkFunction (symbol *, symbol *);
@@ -786,12 +790,14 @@ sym_link *newEnumType (symbol *enumlist, sym_link *userRequestedType);
 void promoteAnonStructs (structdef *);
 sym_link *argumentTypeAfterDecay (sym_link *, value **);
 void checkPtrTargetQualifiers (sym_link *, sym_link *);
+void checkPtrTargetQualifiersAfterDecay (sym_link *, sym_link *);
 bool isConst (sym_link *type);
 bool isVolatile (sym_link *type);
 bool isRestrict (sym_link *type);
 bool isAtomic (sym_link *type);
 bool isOptional (sym_link *type);
 value *aggregateToPointer (value *);
+void convertArrayToPointerType (sym_link *);
 void leaveBlockScope (int block);
 void mergeKRDeclListIntoFuncDecl (symbol *funcDecl, symbol *kr_decls);
 symbol *prepareDeclarationSymbol (attribute *attr, sym_link *declSpecs, symbol *initDeclList);
