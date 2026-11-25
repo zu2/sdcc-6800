@@ -25,6 +25,24 @@
 #include "asxxxx.h"
 #include "mc6800.h"
 
+char	mode0[32] = {	/* R_NORM */
+	'\200',	'\201',	'\202',	'\203',	'\204',	'\205',	'\206',	'\207',
+	'\210',	'\211',	'\212',	'\213',	'\214',	'\215',	'\216',	'\217',
+	'\220',	'\221',	'\222',	'\223',	'\224',	'\225',	'\226',	'\227',
+	'\230',	'\231',	'\232',	'\233',	'\234',	'\235',	'\236',	'\237'
+};
+
+struct	mode	mode[1] = {
+    {	&mode0[0],	0,	0x0000FFFF,	0x0000FFFF	}
+};
+
+struct	mode	*modep[16] = {
+	&mode[0],	NULL,		NULL,		NULL,
+	NULL,		NULL,		NULL,		NULL,
+	NULL,		NULL,		NULL,		NULL,
+	NULL,		NULL,		NULL,		NULL
+};
+
 /*
  * Mnemonic Structure
  */
