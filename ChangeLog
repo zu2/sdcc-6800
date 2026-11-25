@@ -1,3 +1,37 @@
+2026-08-07 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/SDCC.y,
+	* src/SDCCsymt.h,
+	* src/SDCCsymt.c (compStructSize, promoteAnonStructs): removed parameter su,
+	  use sdef->type instead
+
+2026-08-06 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* Merge fuzzing branch.
+
+2026-08-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/Makefile.in:
+	  Fuzzing infrastructure fix.
+
+2026-08-02 Benedikt Freisen <b.freisen AT gmx.net>
+
+	* src/SDCCast.c,
+	  support/regression/tests/compound-literal.c:
+	  Fix compound literals in declaration initializers via patch #509 by Howard M. Harte.
+
+2026-08-01 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/mcs51/gen.c (genUnpackDBits): added to handle bitfields in direct
+	    addressable data storgae space
+	  (genDataPointerGet): added Ifx just in case,
+	    call genUnpackDBits() for bitfields
+	  (genNearPointerGet): call genDataPointerGet() also for bitfields unless post-inc,
+	    use IPOINTER for idata
+	* support/regression/fwk/lib/testfwk.c (__printu): bugfix buf size for >16 bit int
+	* support/regression/tests/bug-4039.c: make inline functions static as there
+	  are no external definitions and aarch64-linux-gnu chooses not to inline
+
 2026-07-31 Maarten Brock <sourceforge.brock AT dse.nl>
 
 	* support/regression/tests/bug-3393.c: fix stm8, hc08 & s08 endianness
@@ -30,10 +64,10 @@
 2026-07-29 Gabriele Gorla <gorlik@yahoo.com>
 
 	* src/mos6502/gen.h,
-      src/mos6502/gen.c:
-      Implement smarter tsxUseful().
-    * src/mos6502/peeph.def:
-      Fix reorder copy rules.
+	  src/mos6502/gen.c:
+	  Implement smarter tsxUseful().
+	* src/mos6502/peeph.def:
+	  Fix reorder copy rules.
 
 2026-07-29 Maarten Brock <sourceforge.brock AT dse.nl>
 
@@ -98,7 +132,7 @@
 2026-07-28 Gabriele Gorla <gorlik@yahoo.com>
 
 	* src/mos6502/gen.c:
-      Fix bug #4038
+	  Fix bug #4038
 	* src/mos6502/peeph.def:
 	  Add LXA2 rule.
 
