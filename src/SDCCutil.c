@@ -22,6 +22,7 @@
    what you give them.   Help stamp out software-hoarding!
 -------------------------------------------------------------------------*/
 
+#include <errno.h>
 #include <math.h>
 #include <string.h>
 #include <ctype.h>
@@ -1027,8 +1028,176 @@ delimitedOctalEscape (const char **src)
   return value;
 }
 
+
+/* Decode one escape and leave src at the first character after it. */
+escapeValue
+parseEscape (const char **src)
+{
+  escapeValue escape = {0, ESCAPE_SIMPLE, false};
+  int saved_errno = errno;
+
+  errno = 0;
+  switch ((*src)[0])
+    {
+    case 'n':
+      escape.value = '\n';
+      break;
+    case 't':
+      escape.value = '\t';
+      break;
+    case 'v':
+      escape.value = '\v';
+      break;
+    case 'b':
+      escape.value = '\b';
+      break;
+    case 'r':
+      escape.value = '\r';
+      break;
+    case 'f':
+      escape.value = '\f';
+      break;
+    case 'a':
+      escape.value = '\a';
+      break;
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+      escape.kind = ESCAPE_NUMERIC;
+      escape.value = octalEscape (src);
+      break;
+    case 'o':
+      if (options.std_c2y && (*src)[1] == '{')
+        {
+          escape.kind = ESCAPE_NUMERIC;
+          escape.value = delimitedOctalEscape (src);
+        }
+      else
+        {
+          escape.value = 'o';
+        }
+      break;
+    case 'x':
+      escape.kind = ESCAPE_NUMERIC;
+      escape.value = hexEscape (src);
+      break;
+    case 'u':
+    case 'U':
+      escape.kind = ESCAPE_UNIVERSAL;
+      escape.value = universalEscape (src, (*src)[0] == 'u' ? 4 : 8);
+      break;
+    default:
+      escape.value = (unsigned char)(*src)[0];
+      break;
+    }
+
+  if (escape.kind == ESCAPE_SIMPLE && (*src)[0])
+    {
+      ++*src;
+    }
+  escape.overflow = errno == ERANGE;
+  errno = saved_errno;
+  return escape;
+}
+
+/* Check numeric code units before narrowing; UCNs denote code points. */
+unsigned long
+escapeValueInRange (escapeValue escape, unsigned long limit)
+{
+  if (escape.kind == ESCAPE_NUMERIC && (escape.overflow || escape.value > limit))
+    {
+      werror (W_ESC_SEQ_OOR_FOR_CHAR);
+      return 0;
+    }
+  return escape.value;
+}
+
+const uint32_t *utf_32_from_utf_8 (size_t *utf_32_len, const char *utf_8, size_t utf_8_len)
+{
+  size_t allocated = 0;
+  uint32_t *utf_32 = 0;
+  unsigned char first_byte;
+  uint32_t codepoint;
+  size_t seqlen;
+
+  for (*utf_32_len = 0; utf_8_len; (*utf_32_len)++)
+    {
+      if (allocated == *utf_32_len)
+        {
+          utf_32 = realloc (utf_32, sizeof(uint32_t) * (*utf_32_len + 16));
+          wassert (utf_32);
+          allocated = *utf_32_len + 16;
+        }
+
+      first_byte = *utf_8;
+      seqlen = 1;
+      if (first_byte & 0x80)
+        {
+          while (first_byte & (0x80 >> seqlen))
+            seqlen++;
+          first_byte &= (0xff >> (seqlen + 1));
+        }
+      wassert (seqlen <= 6); // seqlen 5 and 6 are deprecated in current unicode standard, but for now, allow them.
+
+      codepoint = first_byte;
+      utf_8++;
+      utf_8_len--;
+      seqlen--;
+
+      for(; seqlen; seqlen--)
+        {
+          codepoint <<= 6;
+          codepoint |= (*utf_8 & 0x3f);
+          utf_8++;
+          utf_8_len--;
+        }
+
+      utf_32[*utf_32_len] = codepoint;
+    }
+  return (utf_32);
+}
+
+const uint16_t *utf_16_from_utf_32 (size_t *utf_16_len, const uint32_t *utf_32, size_t utf_32_len)
+{
+  size_t allocated = 0;
+  uint16_t *utf_16 = 0;
+  uint32_t codepoint;
+
+  for (*utf_16_len = 0; utf_32_len; utf_32_len--, utf_32++)
+    {
+      if (allocated <= *utf_16_len + 2)
+        {
+          utf_16 = realloc (utf_16, sizeof(uint16_t) * (*utf_16_len + 16));
+          wassert (utf_16);
+          allocated = *utf_16_len + 16;
+        }
+
+      codepoint = *utf_32;
+
+      if (codepoint < 0xd7ff || codepoint >= 0xe000 && codepoint <= 0xffff) // Code in basic multilingual plane.
+        {
+          utf_16[(*utf_16_len)++] = codepoint;
+          continue;
+        }
+
+      // Code point in supplementary plane.
+      wassert (codepoint >= 0x100000 && codepoint <= 0x10ffff);
+      codepoint -= 0x100000;
+
+      utf_16[(*utf_16_len)++] = ((codepoint >> 10) & 0x3ff) + 0xd800;
+      utf_16[(*utf_16_len)++] = (codepoint & 0x3ff) + 0xdc00;
+    }
+
+  return (utf_16);
+}
+
 /*!
-  /fn const char *copyStr (const char *src, size_t *size)
+  /fn const char *copyStrWithEscapeLimit (const char *src, size_t *size, unsigned long limit)
 
   Copies source string to a dynamically allocated buffer interpreting
   escape sequences and special characters
@@ -1039,7 +1208,7 @@ delimitedOctalEscape (const char **src)
 */
 
 const char *
-copyStr (const char *src, size_t *size)
+copyStrWithEscapeLimit (const char *src, size_t *size, unsigned long limit)
 {
   const char *begin = NULL;
   struct dbuf_s dbuf;
@@ -1060,95 +1229,16 @@ copyStr (const char *src, size_t *size)
         }
       else if (*src == '\\')
         {
-          unsigned long int c;
-          bool universal = false;
-
           if (begin)
             {
-              /* copy what we have until now */
               dbuf_append (&dbuf, begin, src - begin);
               begin = NULL;
             }
           ++src;
-          switch (*src)
-            {
-            case 'n':
-              c = '\n';
-              break;
+          escapeValue escape = parseEscape (&src);
+          unsigned long c = limit ? escapeValueInRange (escape, limit) : escape.value;
+          bool universal = escape.kind == ESCAPE_UNIVERSAL;
 
-            case 't':
-              c = '\t';
-              break;
-
-            case 'v':
-              c = '\v';
-              break;
-
-            case 'b':
-              c = '\b';
-              break;
-
-            case 'r':
-              c = '\r';
-              break;
-
-            case 'f':
-              c = '\f';
-              break;
-
-            case 'a':
-              c = '\a';
-              break;
-
-            case '0':
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7':
-              c = octalEscape (&src);
-              --src;
-              break;
-
-            case 'o':
-              if (options.std_c2y && src[1] == '{')
-                {
-                  c = delimitedOctalEscape (&src);
-                  --src;
-                }
-              else
-                {
-                  c = *src;
-                }
-              break;
-
-            case 'x':
-              c = hexEscape (&src);
-              --src;
-              break;
-
-            case 'u':
-              c = universalEscape (&src, 4);
-              universal = true;
-              --src;
-              break;
-
-            case 'U':
-              c = universalEscape (&src, 8);
-              universal = true;
-              --src;
-              break;
-
-            case '\\':
-            case '\?':
-            case '\'':
-            case '\"':
-            default: // Just pass it on unmodified. This allows even non-UTF-8 extended ASCII source, which has non-ASCII chharacters in string literals, to pass here.
-              c = *src;
-              break;
-            }
           // Encode one utf-32 character to utf-8. If outside of current UTF-8 standard range (UTF-8 up to 4 bytes),
           // emit a warning, and encode according to 1993 UTF-8 standard s(UTF-8 up to 6 bytes).
           if (universal)
@@ -1201,8 +1291,6 @@ copyStr (const char *src, size_t *size)
             }
           else
             dbuf_append_char (&dbuf, (char)c);
-
-          ++src;
         }
       else
         {
@@ -1227,6 +1315,13 @@ copyStr (const char *src, size_t *size)
     }
 
   return dbuf_detach_c_str (&dbuf);
+}
+
+/* Non-literal users, including inline assembly, retain unrestricted escapes. */
+const char *
+copyStr (const char *src, size_t *size)
+{
+  return copyStrWithEscapeLimit (src, size, 0);
 }
 
 static char prefix[256] = "";

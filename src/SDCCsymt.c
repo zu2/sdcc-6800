@@ -861,6 +861,7 @@ mergeSpec (sym_link * dest, sym_link * src, const char *name)
   SPEC_BSTR (dest) |= SPEC_BSTR (src);
   SPEC_TYPEDEF (dest) |= SPEC_TYPEDEF (src);
   SPEC_ENUM (dest) |= SPEC_ENUM (src);
+  SPEC_ENUM_FIXED (dest) |= SPEC_ENUM_FIXED (src);
   if (SPEC_ARGREG (src) && !SPEC_ARGREG (dest))
     SPEC_ARGREG (dest) = SPEC_ARGREG (src);
 
@@ -954,26 +955,33 @@ mergeDeclSpec (sym_link * dest, sym_link * src, const char *name)
         }
     }
 
-  // for pointers, type qualifiers go in the declarator
-  if (DCL_TYPE (decl) != ARRAY && DCL_TYPE (decl) != FUNCTION)
+  /* Array typedef qualifiers apply to their elements. For pointer
+     elements, put the qualifiers on the pointer, not its target. */
+  lnk = decl;
+  while (IS_ARRAY (lnk))
+    lnk = lnk->next;
+  if (IS_PTR (lnk))
     {
-      DCL_PTR_CONST (decl) |= SPEC_CONST (spec);
-      DCL_PTR_VOLATILE (decl) |= SPEC_VOLATILE (spec);
-      DCL_PTR_RESTRICT (decl) |= SPEC_RESTRICT (spec);
-      DCL_PTR_ATOMIC (decl) |= SPEC_ATOMIC (spec);
-      DCL_PTR_OPTIONAL (decl) |= SPEC_OPTIONAL (spec);
-      if (DCL_PTR_ADDRSPACE (decl) && SPEC_ADDRSPACE (spec) &&
-        strcmp (DCL_PTR_ADDRSPACE (decl)->name, SPEC_ADDRSPACE (spec)->name))
-        werror (E_SYNTAX_ERROR, yytext);
-      if (SPEC_ADDRSPACE (spec))
-        DCL_PTR_ADDRSPACE (decl) = SPEC_ADDRSPACE (spec);
+      DCL_PTR_CONST (lnk) |= SPEC_CONST (spec);
+      DCL_PTR_VOLATILE (lnk) |= SPEC_VOLATILE (spec);
+      DCL_PTR_RESTRICT (lnk) |= SPEC_RESTRICT (spec);
+      DCL_PTR_ATOMIC (lnk) |= SPEC_ATOMIC (spec);
+      DCL_PTR_OPTIONAL (lnk) |= SPEC_OPTIONAL (spec);
+      if (IS_PTR (decl))
+        {
+          if (DCL_PTR_ADDRSPACE (decl) && SPEC_ADDRSPACE (spec) &&
+            strcmp (DCL_PTR_ADDRSPACE (decl)->name, SPEC_ADDRSPACE (spec)->name))
+            werror (E_SYNTAX_ERROR, yytext);
+          if (SPEC_ADDRSPACE (spec))
+            DCL_PTR_ADDRSPACE (decl) = SPEC_ADDRSPACE (spec);
+          SPEC_ADDRSPACE (spec) = 0;
+        }
 
       SPEC_CONST (spec) = 0;
       SPEC_VOLATILE (spec) = 0;
       SPEC_RESTRICT (spec) = 0;
       SPEC_ATOMIC (spec) = 0;
       SPEC_OPTIONAL (spec) = 0;
-      SPEC_ADDRSPACE (spec) = 0;
     }
   else if (DCL_TYPE (decl) == FUNCTION)
     {
@@ -5681,6 +5689,7 @@ newEnumType (symbol *enumlist, sym_link *userRequestedType)
   symbol *sym;
   sym_link *type = newLink (SPECIFIER);
   SPEC_ENUM (type) = 1;
+  SPEC_ENUM_FIXED (type) = userRequestedType != NULL;
 
   /* Catch user-requested types that make no sense for an enum; provide fallback if none specified */
   if (userRequestedType)

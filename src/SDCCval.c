@@ -1672,8 +1672,6 @@ constCharacterVal (unsigned long v, char type)
     case '8': // u8 character constant of type char8_t, a typedef for unsigned char.
       if (!options.std_c23)
         werror (E_U8_CHAR_C23);
-      if (v >= 128)
-        werror (E_U8_CHAR_INVALID);
       SPEC_NOUN (val->type) = V_CHAR;
       SPEC_USIGN (val->type) = 1;
       SPEC_CVAL (val->type).v_int = (unsigned char) v;
@@ -1735,96 +1733,24 @@ constNullptrVal (void)
   return val;
 }
 
-// TODO: Move this function to SDCCutil?
-static const uint32_t *utf_32_from_utf_8 (size_t *utf_32_len, const char *utf_8, size_t utf_8_len)
-{
-  size_t allocated = 0;
-  uint32_t *utf_32 = 0;
-  unsigned char first_byte;
-  uint32_t codepoint;
-  size_t seqlen;
-
-  for (*utf_32_len = 0; utf_8_len; (*utf_32_len)++)
-    {
-      if (allocated == *utf_32_len)
-        {
-          utf_32 = realloc (utf_32, sizeof(uint32_t) * (*utf_32_len + 16));
-          wassert (utf_32);
-          allocated = *utf_32_len + 16;
-        }
-
-      first_byte = *utf_8;
-      seqlen = 1;
-      if (first_byte & 0x80)
-        {
-          while (first_byte & (0x80 >> seqlen))
-            seqlen++;
-          first_byte &= (0xff >> (seqlen + 1));
-        }
-      wassert (seqlen <= 6); // seqlen 5 and 6 are deprecated in current unicode standard, but for now, allow them.
-
-      codepoint = first_byte;
-      utf_8++;
-      utf_8_len--;
-      seqlen--;
-
-      for(; seqlen; seqlen--)
-        {
-          codepoint <<= 6;
-          codepoint |= (*utf_8 & 0x3f);
-          utf_8++;
-          utf_8_len--;
-        }
-
-      utf_32[*utf_32_len] = codepoint;
-    }
-  return (utf_32);
-}
-
-// TODO: Move this function to SDCCutil?
-static const uint16_t *utf_16_from_utf_32 (size_t *utf_16_len, const uint32_t *utf_32, size_t utf_32_len)
-{
-  size_t allocated = 0;
-  uint16_t *utf_16 = 0;
-  uint32_t codepoint;
-
-  for (*utf_16_len = 0; utf_32_len; utf_32_len--, utf_32++)
-    {
-      if (allocated <= *utf_16_len + 2)
-        {
-          utf_16 = realloc (utf_16, sizeof(uint16_t) * (*utf_16_len + 16));
-          wassert (utf_16);
-          allocated = *utf_16_len + 16;
-        }
-
-      codepoint = *utf_32;
-
-      if (codepoint < 0xd7ff || codepoint >= 0xe000 && codepoint <= 0xffff) // Code in basic multilingual plane.
-        {
-          utf_16[(*utf_16_len)++] = codepoint;
-          continue;
-        }
-
-      // Code point in supplementary plane.
-      wassert (codepoint >= 0x100000 && codepoint <= 0x10ffff);
-      codepoint -= 0x100000;
-
-      utf_16[(*utf_16_len)++] = ((codepoint >> 10) & 0x3ff) + 0xd800;
-      utf_16[(*utf_16_len)++] = (codepoint & 0x3ff) + 0xdc00;
-    }
-
-  return (utf_16);
-}
-
 /*------------------------------------------------------------------*/
 /* strVal - converts a string constant to a value                   */
 /*------------------------------------------------------------------*/
+/* Numeric escapes name code units of the literal's corresponding unsigned type. */
+static unsigned long
+literalEscapeLimit (char prefix)
+{
+  return prefix == 'u' ? 0xffffUL :
+    prefix == 'U' || prefix == 'L' ? 0xffffffffUL : 0xffUL;
+}
+
 value *
 strVal (const char *s)
 {
   value *val;
   const char *utf_8;
   size_t utf_8_size;
+  unsigned long escapeLimit = literalEscapeLimit (s[0] == 'u' && s[1] == '8' ? '8' : s[0]);
 
   val = newValue ();
 
@@ -1842,7 +1768,7 @@ strVal (const char *s)
   if (s[0] == '"' || explicit_u8) // UTF-8 string literal
     {
       // Convert input string (mixed UTF-8 and UTF-32) to UTF-8 (handling all escape sequences, etc).
-      utf_8 = copyStr (s[0] == '"' ? s : s + 2, &utf_8_size);
+      utf_8 = copyStrWithEscapeLimit (s[0] == '"' ? s : s + 2, &utf_8_size, escapeLimit);
 
       SPEC_NOUN (val->etype) = V_CHAR;
       if (options.std_c23 && explicit_u8) // In C23, u8-prefixed string literals are of type char8_t *, ad char8_t is a typedef for unsigned char.
@@ -1858,7 +1784,7 @@ strVal (const char *s)
   else
     {
       // Convert input string (mixed UTF-8 and UTF-32) to UTF-8 first (handling all escape sequences, etc).
-      utf_8 = copyStr (s + 1, &utf_8_size);
+      utf_8 = copyStrWithEscapeLimit (s + 1, &utf_8_size, escapeLimit);
 
       size_t utf_32_size;
       // Convert to UTF-32 next, since converting UTF-32 to UTF-16 is easier than UTF-8 to UTF-16.
@@ -2018,8 +1944,6 @@ charVal (const char *s)
     type = *s++;
   else if (s[0] == 'u' && s[1] == '8' && s[2] == '\'')
     {
-      if (s[4] != '\'')
-        werror (E_U8_CHAR_INVALID);
       type = '8';
       s += 2;
     }
@@ -2031,64 +1955,26 @@ charVal (const char *s)
   /* if \ then special processing */
   if (*s == '\\')
     {
-      switch (*++s)             /* go beyond the backslash  */
+      ++s;
+      escapeValue escape = parseEscape (&s);
+      unsigned long c = escapeValueInRange (escape, literalEscapeLimit (type));
+
+      /* u8 literals contain exactly one code unit, including after an escape. */
+      if (type == '8' && (*s != '\'' || s[1] ||
+                         escape.kind == ESCAPE_UNIVERSAL && c >= 128))
         {
-        case 'n':
-          return constCharacterVal ('\n', type);
-        case 't':
-          return constCharacterVal ('\t', type);
-        case 'v':
-          return constCharacterVal ('\v', type);
-        case 'b':
-          return constCharacterVal ('\b', type);
-        case 'r':
-          return constCharacterVal ('\r', type);
-        case 'f':
-          return constCharacterVal ('\f', type);
-        case 'a':
-          return constCharacterVal ('\a', type);
-        case '\\':
-          return constCharacterVal ('\\', type);
-        case '\?':
-          return constCharacterVal ('\?', type);
-        case '\'':
-          return constCharacterVal ('\'', type);
-        case '\"':
-          return constCharacterVal ('\"', type);
-
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6':
-        case '7':
-          return constCharacterVal (octalEscape (&s), type);
-
-        case 'o':
-          if (options.std_c2y && s[1] == '{')
-            return constCharacterVal (delimitedOctalEscape (&s), type);
-          else
-            return constCharacterVal (*s, type);
-
-        case 'x':
-          return constCharacterVal (hexEscape (&s), type);
-
-        case 'u':
-          return constCharacterVal (universalEscape (&s, 4), type);
-
-        case 'U':
-          return constCharacterVal (universalEscape (&s, 8), type);
-
-        default:
-          return constCharacterVal (*s, type);
+          werror (E_U8_CHAR_INVALID);
         }
+      return constCharacterVal (c, type);
     }
   else if (type) // Wide character constant
     {
       size_t ulen;
       const uint32_t *ustr = utf_32_from_utf_8 (&ulen, s, strlen(s) - 1);
+      if (type == '8' && (ulen != 1 || *ustr >= 128))
+        {
+          werror (E_U8_CHAR_INVALID);
+        }
       value *val = constCharacterVal (*ustr, type);
       free ((void *)ustr);
       return (val);

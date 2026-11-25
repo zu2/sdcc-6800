@@ -1,7 +1,295 @@
+2026-11-03 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdas/linksrc/lkmain.c:
+	  Fix bug #4238 by reducing the diff to upstream asxxxx 6.10.
+
+2026-11-03 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCval.c (utf_32_from_utf_8, utf_16_from_utf_32): Move to
+	  SDCCutil.c without changing their implementations.
+	* src/SDCCutil.c: Define the moved conversion functions.
+	* src/SDCCutil.h: Include stdint.h and declare both functions.
+
+2026-11-02 Gabriele Gorla <gorlik@yahoo.com>
+
+	* configure,
+	  configure.ac,
+	  device/lib/Makefile.in,
+	  device/lib/clean.mk,
+	  device/lib/mos6502/Makefile.in,
+	  src/mcs51/main.c,
+	  support/regression/ports/mcs51-common/spec.mk,
+	  support/regression/ports/mcs51-huge/spec.mk,
+	  support/regression/ports/mcs51-large/spec.mk,
+	  support/regression/ports/mcs51-large-stack-auto/spec.mk,
+	  support/regression/ports/mcs51-medium/spec.mk,
+	  support/regression/ports/mcs51-small/spec.mk,
+	  support/regression/ports/mcs51-small-stack-auto/spec.mk,
+	  device/lib/mcs51-common,
+	  device/lib/mcs51-common/atomic_flag_clear.s,
+	  device/lib/mcs51-common/crtbank.s,
+	  device/lib/mcs51-common/crtcall.s,
+	  device/lib/mcs51-common/crtclear.s,
+	  device/lib/mcs51-common/crtpagesfr.s,
+	  device/lib/mcs51-common/crtstart.s,
+	  device/lib/mcs51-common/crtxclear.s,
+	  device/lib/mcs51-common/crtxinit.s,
+	  device/lib/mcs51-common/crtxpop.s,
+	  device/lib/mcs51-common/crtxpush.s,
+	  device/lib/mcs51-common/crtxstack.s,
+	  device/lib/mcs51-common/gptr_cmp.s,
+	  device/lib/mcs51-common/sdcc_atomic_maybe_rollback.s,
+	  device/lib/mcs51-huge,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mcs51-small-xstack-auto,
+	  device/lib/mcs51-small-xstack-auto/Makefile.in:
+	  Merge mcs51 libraries into single file. First step of RFE #327
+	* mos6502/Makefile.in,
+	  r800/Makefile.in,
+	  z180/Makefile.in,
+	  z80/Makefile.in,
+	  z80n/Makefile.in,
+	  r800/config.inc,
+	  z180/config.inc,
+	  z80/config.inc,
+	  z80n/config.inc,
+	  z80-common,
+	  z80-common/README,
+	  z80-common/__itoa.s,
+	  z80-common/__ltoa.s,
+	  z80-common/__sdcc_bcall.s,
+	  z80-common/__sdcc_call_hl.s,
+	  z80-common/__sdcc_call_iy.s,
+	  z80-common/__strreverse.s,
+	  z80-common/__uitobcd.s,
+	  z80-common/__ultobcd.s,
+	  z80-common/abs.s,
+	  z80-common/atomic_flag_test_and_set.s,
+	  z80-common/crtenter.s,
+	  z80-common/divmixed.s,
+	  z80-common/divsigned.s,
+	  z80-common/divunsigned.s,
+	  z80-common/heap.s,
+	  z80-common/memcpy.s,
+	  z80-common/memmove.s,
+	  z80-common/modmixed.s,
+	  z80-common/modsigned.s,
+	  z80-common/modunsigned.s,
+	  z80-common/setjmp.s,
+	  z80-common/strcpy.s,
+	  z80-common/strlen.s:
+	  Move all z80 common library files into z80-common. Step 2 of RFE #327
+	* mcs51-common/_autobaud.c,
+	  mcs51-common/_bp.c,
+	  mcs51-common/_bpx.c,
+	  mcs51-common/_decdptr.c,
+	  mcs51-common/_gptrget.c,
+	  mcs51-common/_gptrgetc.c,
+	  mcs51-common/_gptrput.c,
+	  mcs51-common/_ser.c,
+	  mcs51-common/_spx.c,
+	  mcs51-common/serial.c,
+	  mcs51-huge/Makefile.in,
+	  mcs51-large/Makefile.in,
+	  mcs51-large-stack-auto/Makefile.in,
+	  mcs51-medium/Makefile.in,
+	  mcs51-small/Makefile.in,
+	  mcs51-small-stack-auto/Makefile.in:
+	  Move more files to mcs51-common.
+	* Makefile.in,
+	  _modsint.c,
+	  abs.c,
+	  labs.c,
+	  strlen.c,
+	  mcs51-common/abs.s,
+	  mcs51-common/labs.s,
+	  mcs51-common/strlen.s,
+	  mcs51-small/_modsint.s,
+	  mcs51-small-stack-auto/_modsint.s,
+	  mcs51-huge/config.inc,
+	  mcs51-large/config.inc,
+	  mcs51-large-stack-auto/config.inc,
+	  mcs51-medium/config.inc,
+	  mcs51-small/config.inc,
+	  mcs51-small-stack-auto/config.inc,
+	  mcs51-small-xstack-auto/config.inc:
+	  Remove inline assembly from abs, labs, strlen and _modsint.
+	* ds390/Makefile.in,
+	  ds400/Makefile.in,
+	  hc08/Makefile.in,
+	  huc6280/Makefile.in,
+	  mos6502/Makefile.in,
+	  mos6502-stack-auto/Makefile.in,
+	  mos65c02/Makefile.in,
+	  mos65c02-stack-auto/Makefile.in,
+	  s08/Makefile.in,
+	  s08-stack-auto/Makefile.in,
+	  hc08/setjmp.c,
+	  mcs51-common/setjmp.c,
+	  mos-common/setjmp.s,
+	  mos6502-stack-auto/setjmp.s,
+	  mos65c02-stack-auto/setjmp.s,
+	  s08/setjmp.c,
+	  s08-stack-auto/setjmp.c:
+	  Cleanup setjmp naming across ports.
+
+2026-11-02 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.h, src/SDCCsymt.c (newEnumType, mergeSpec): Preserve
+	  whether an enumeration has a fixed underlying type.
+	* src/SDCC.y (simple_typed_enum_decl): Establish the tagged
+	  enumeration type in declarations without an enumerator list.
+	  (enum_specifier, simple_typed_enum_decl): Diagnose incompatible
+	  underlying types and changes of fixedness in the same scope
+	  (bug #4176).
+	* src/SDCCerr.h, src/SDCCerr.c: Add E_ENUM_REDECL.
+	* support/valdiag/tests/bug-4176.c: Check incompatible declarations,
+	  compatible typedefs, definitions, inner-scope shadowing and sibling
+	  blocks at equal nesting levels, including later redeclarations.
+	* support/regression/tests/bug-4176.c: Check object widths, compatible
+	  underlying type and values before and after the enum definition.
+
+2026-11-02 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (hasConstMember, decorateType): Diagnose aggregate
+	  assignments with const-qualified members, recursively including
+	  nested aggregates and array elements. Stop at pointer members and
+	  allow initialisation (bug #4210).
+	* support/valdiag/tests/bug-4210.c: Test nested structures, unions,
+	  arrays, const pointer members, pointers to const and valid
+	  initialisation and member assignments.
+
+2026-11-02 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.c (mergeDeclSpec): Apply qualifiers on an array
+	  typedef to its first non-array element. Put qualifiers on pointer
+	  elements rather than their targets (bug #4164).
+	* support/regression/tests/bug-4164.c: Test const, volatile, restrict
+	  and _Optional qualification of array typedefs, multiple dimensions,
+	  pointer depth and preservation of qualified pointer targets.
+
+2026-11-02 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCutil.c, src/SDCCutil.h (parseEscape, escapeValueInRange,
+	  copyStrWithEscapeLimit, copyStr): Share escape decoding between
+	  character and string literals. Check numeric escapes before narrowing,
+	  including overflow in strtoul. Preserve unrestricted decoding for
+	  non-literal uses such as inline assembly (bug #4179).
+	* src/SDCCval.c (literalEscapeLimit, strVal, charVal,
+	  constCharacterVal): Apply prefix-specific numeric escape limits.
+	  Distinguish numeric byte escapes from universal character names and
+	  require a u8 character literal to end after its single code unit.
+	* src/SDCCerr.c: Reword warning 137 for numeric escapes.
+	* support/valdiag/tests/bug-4179.c: Check numeric limits, overflow,
+	  malformed delimited escapes, trailing characters and valid escapes.
+	  Select tests by language features and wide-character limits.
+	* support/regression/tests/bug-4179.c: Check stored literal values,
+	  simple escapes, delimited escapes and prefix-specific boundaries.
+	  Account for signed wchar_t when checking its unsigned escape value.
+
+2026-11-02 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/pic16/pcode.c:
+	  Fix bug #4236 via patch by zeynelsagcan.
+	* src/z80/gen.c,
+	  support/regression/tests/bug-4206.c:
+	  Fix bug #4206.
+
+2026-11-02 Gabriele Gorla <gorlik@yahoo.com>
+
+	* configure,
+	  configure.ac,
+	  device/lib/Makefile.in,
+	  device/lib/ds390/Makefile.in,
+	  device/lib/ds400/Makefile.in,
+	  device/lib/incl.mk,
+	  src/ds390/main.c,
+	  support/regression/ports/ds390/spec.mk:
+	  Merge the ds390 and ds400 library into one file.
+	* device/lib/f8/Makefile.in,
+	  device/lib/f8l/Makefile.in,
+	  device/lib/hc08/Makefile.in,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos6502-stack-auto/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/mos65c02-stack-auto/Makefile.in,
+	  device/lib/pdk13/Makefile.in,
+	  device/lib/pdk14/Makefile.in,
+	  device/lib/pdk15/Makefile.in,
+	  device/lib/pdk15-stack-auto/Makefile.in,
+	  device/lib/s08/Makefile.in,
+	  device/lib/s08-stack-auto/Makefile.in,
+	  device/lib/sm83/Makefile.in,
+	  device/lib/stm8/Makefile.in,
+	  device/lib/stm8-large/Makefile.in:
+	  Cleanup library makefiles.
+	* device/include/xa51,
+	  device/lib/ds390/examples:
+	  Remove obsolete files.
+
+2026-11-02 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCsalloc.hpp:
+	  Fix bug #4214.
+
+2026-11-01 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/mos6502/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/huc6280/Makefile.in:
+	  Fix bug #4237
+	* device/non-free/lib/pic16/missing:
+	  Update missing script to fix configure warning.
+	* device/lib/pic16/Makefile.in,
+	  device/lib/pic16/aclocal.m4,
+	  device/lib/pic16/configure,
+	  device/lib/pic16/debug/Makefile.am,
+	  device/lib/pic16/debug/Makefile.in,
+	  device/lib/pic16/libc/Makefile.am,
+	  device/lib/pic16/libc/Makefile.in,
+	  device/lib/pic16/libio/Makefile.am,
+	  device/lib/pic16/libio/Makefile.in,
+	  device/lib/pic16/libio/mkmk.sh,
+	  device/lib/pic16/libm/Makefile.am,
+	  device/lib/pic16/libm/Makefile.in,
+	  device/lib/pic16/libsdcc/Makefile.am,
+	  device/lib/pic16/libsdcc/Makefile.in,
+	  device/lib/pic16/startup/Makefile.in,
+	  device/non-free/lib/pic14/configure,
+	  device/non-free/lib/pic14/configure.ac,
+	  device/non-free/lib/pic16/Makefile.am,
+	  device/non-free/lib/pic16/Makefile.in,
+	  device/non-free/lib/pic16/aclocal.m4,
+	  device/non-free/lib/pic16/configure,
+	  device/non-free/lib/pic16/libdev/Makefile.am,
+	  device/non-free/lib/pic16/libdev/Makefile.in,
+	  device/non-free/lib/pic16/libdev/mkmk.sh,
+	  device/non-free/lib/pic16/processors.ac,
+	  device/non-free/lib/pic16/supported-devices.ac:
+	  Update to automake 1.17 and fix bug #2677
+	* clean.mk:
+	  Fix bug #4067
+
 2026-10-30 Gabriele Gorla <gorlik@yahoo.com>
 
 	* device/lib/Makefile.in:
 	  Remove redundant code.
+	* Makefile.common.in,
+	  device/lib/Makefile.in,
+	  device/non-free/lib/Makefile.in,
+	  sdcc_vc.h.in:
+	  Remove obsolete XA51 makefiles.
 
 2026-10-30 Philipp Klaus Krause <philipp@colecovision.eu>
 

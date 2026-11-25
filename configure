@@ -7149,24 +7149,10 @@ printf "%s\n" "#define PREFIX2DATA_DIR DIR_SEPARATOR_STRING \"${prefix2data_dir}
 fi
 
 # standard libs
-
-printf "%s\n" "#define STD_LIB \"libsdcc\"" >>confdefs.h
-
-
-printf "%s\n" "#define STD_INT_LIB \"libint\"" >>confdefs.h
-
-
-printf "%s\n" "#define STD_LONG_LIB \"liblong\"" >>confdefs.h
-
-
-printf "%s\n" "#define STD_FP_LIB \"libfloat\"" >>confdefs.h
-
-
-printf "%s\n" "#define STD_DS390_LIB \"libds390\"" >>confdefs.h
-
-
-printf "%s\n" "#define STD_DS400_LIB \"libds400\"" >>confdefs.h
-
+#AC_DEFINE_UNQUOTED(STD_LIB,       "libsdcc", [XXX])
+#AC_DEFINE_UNQUOTED(STD_INT_LIB,   "libint", [XXX])
+#AC_DEFINE_UNQUOTED(STD_LONG_LIB,  "liblong", [XXX])
+#AC_DEFINE_UNQUOTED(STD_FP_LIB,    "libfloat", [XXX])
 
 # SDCC runtime environment variables
 sdcc_dir_name="SDCC_HOME"
@@ -8601,7 +8587,7 @@ fi
 if test $OPT_DISABLE_MCS51 = 0; then
   ac_config_files="$ac_config_files src/mcs51/Makefile sdas/as8051/Makefile"
 
-  test $OPT_DISABLE_DEVICE_LIB = 0 && ac_config_files="$ac_config_files device/lib/mcs51/Makefile device/lib/small/Makefile device/lib/medium/Makefile device/lib/large/Makefile device/lib/huge/Makefile"
+  test $OPT_DISABLE_DEVICE_LIB = 0 && ac_config_files="$ac_config_files device/lib/mcs51-small/Makefile device/lib/mcs51-medium/Makefile device/lib/mcs51-large/Makefile device/lib/mcs51-huge/Makefile device/lib/mcs51-small-stack-auto/Makefile device/lib/mcs51-large-stack-auto/Makefile device/lib/mcs51-small-xstack-auto/Makefile"
 
 fi
 
@@ -9449,11 +9435,13 @@ do
     "device/lib/huc6280/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/huc6280/Makefile" ;;
     "src/mcs51/Makefile") CONFIG_FILES="$CONFIG_FILES src/mcs51/Makefile" ;;
     "sdas/as8051/Makefile") CONFIG_FILES="$CONFIG_FILES sdas/as8051/Makefile" ;;
-    "device/lib/mcs51/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mcs51/Makefile" ;;
-    "device/lib/small/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/small/Makefile" ;;
-    "device/lib/medium/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/medium/Makefile" ;;
-    "device/lib/large/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/large/Makefile" ;;
-    "device/lib/huge/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/huge/Makefile" ;;
+    "device/lib/mcs51-small/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mcs51-small/Makefile" ;;
+    "device/lib/mcs51-medium/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mcs51-medium/Makefile" ;;
+    "device/lib/mcs51-large/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mcs51-large/Makefile" ;;
+    "device/lib/mcs51-huge/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mcs51-huge/Makefile" ;;
+    "device/lib/mcs51-small-stack-auto/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mcs51-small-stack-auto/Makefile" ;;
+    "device/lib/mcs51-large-stack-auto/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mcs51-large-stack-auto/Makefile" ;;
+    "device/lib/mcs51-small-xstack-auto/Makefile") CONFIG_FILES="$CONFIG_FILES device/lib/mcs51-small-xstack-auto/Makefile" ;;
     "src/pic14/Makefile") CONFIG_FILES="$CONFIG_FILES src/pic14/Makefile" ;;
     "src/pic16/Makefile") CONFIG_FILES="$CONFIG_FILES src/pic16/Makefile" ;;
     "src/z80/Makefile") CONFIG_FILES="$CONFIG_FILES src/z80/Makefile" ;;
@@ -10174,12 +10162,6 @@ if test "$no_recursion" != yes; then
     # parts of a large source tree are present.
     test -d "$srcdir/$ac_dir" || continue
 
-    # set extra flag for sdcpp
-    extra_ac_sub_configure_args=
-    if test "$ac_dir" = "support/cpp"; then
-      extra_ac_sub_configure_args="--with-pkgversion=SDCC"
-    fi
-
     ac_msg="=== configuring in $ac_dir (`pwd`/$ac_dir)"
     printf "%s\n" "$as_me:${as_lineno-$LINENO}: $ac_msg" >&5
     printf "%s\n" "$ac_msg" >&6
@@ -10242,10 +10224,10 @@ printf "%s\n" "$as_me: WARNING: no configuration information is in $ac_dir" >&2;
 	ac_sub_cache_file=$ac_top_build_prefix$cache_file ;;
       esac
 
-      { printf "%s\n" "$as_me:${as_lineno-$LINENO}: running $SHELL $ac_sub_configure $ac_sub_configure_args $extra_ac_sub_configure_args --cache-file=$ac_sub_cache_file --srcdir=$ac_srcdir" >&5
-printf "%s\n" "$as_me: running $SHELL $ac_sub_configure $ac_sub_configure_args $extra_ac_sub_configure_args --cache-file=$ac_sub_cache_file --srcdir=$ac_srcdir" >&6;}
+      { printf "%s\n" "$as_me:${as_lineno-$LINENO}: running $SHELL $ac_sub_configure $ac_sub_configure_args --cache-file=$ac_sub_cache_file --srcdir=$ac_srcdir" >&5
+printf "%s\n" "$as_me: running $SHELL $ac_sub_configure $ac_sub_configure_args --cache-file=$ac_sub_cache_file --srcdir=$ac_srcdir" >&6;}
       # The eval makes quoting arguments work.
-      eval "\$SHELL \"\$ac_sub_configure\" $ac_sub_configure_args $extra_ac_sub_configure_args \
+      eval "\$SHELL \"\$ac_sub_configure\" $ac_sub_configure_args \
 	   --cache-file=\"\$ac_sub_cache_file\" --srcdir=\"\$ac_srcdir\"" ||
 	as_fn_error $? "$ac_sub_configure failed for $ac_dir" "$LINENO" 5
     fi
