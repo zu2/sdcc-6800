@@ -506,6 +506,8 @@ struct	sym
 #define	  I_CODE     0		/* .include */
 #define	  I_BNRY     1		/* .incbin */
 #define	S_AREA		6	/* .area */
+#define	  O_PSH	     1		/* .psharea */
+#define	  O_POP	     2		/* .poparea */
 #define	S_ATYP		7	/* .area type */
 #define	S_ORG		8	/* .org */
 #define	S_RADIX		9	/* .radix */
@@ -952,6 +954,16 @@ struct	memlnk {
 
 extern	int	aserr;		/*	ASxxxx error counter
 				 */
+/* sdas specific */
+extern	int	rlerr;		/*	Relocation error counter
+				 */
+extern	int	rprterr;	/*	report expr() errors
+				 */
+extern	int	ignrerr;	/*	ignore expr() errors
+				 */
+extern	int	rlsym;		/*	Relocation symbol counter
+				 */
+/* end sdas specific */
 extern	int	trcflags;	/*	ASxxxx tracing flags
 				 */
 extern	jmp_buf	jump_env;	/*	compiler dependent structure
@@ -1043,6 +1055,8 @@ extern	int	mcrline;	/*	current macro line number
 extern	int	radix;		/*	current number conversion radix:
 				 *	2 (binary), 8 (octal), 10 (decimal),
 				 *	16 (hexadecimal)
+				 */
+extern	int	expr_radix;	/*	expression process radix
 				 */
 extern	int	line;		/*	current assembler source line number
 				 */
@@ -1369,6 +1383,11 @@ extern	void		term(struct expr *esp);
 extern	char *		BaseFileName(struct asmf *currFile, int spacesToUnderscores);
 extern	void		DefineNoICE_Line(void);
 extern	void		DefineSDCC_Line(void);
+extern	void		prntexpr(struct expr *esp, int flg);
+extern	void		prntsym(struct sym *sp);
+extern	void		prnttsym(struct sym *sp);
+extern	void		prntarea(struct area *ap);
+extern	void		prntbank(struct bank *bp);
 
 /* aslist.c */
 extern	void		list(void);
