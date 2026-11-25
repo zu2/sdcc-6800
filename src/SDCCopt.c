@@ -266,7 +266,7 @@ prependCast (iCode *ic, operand *op, sym_link *type, eBBlock *ebb)
         IC_RIGHT (ic) = newop;
       return;
     }
-            
+
   iCode *newic = newiCode (CAST, operandFromLink (type), op);
   hTabAddItem (&iCodehTab, newic->key, newic);
 
@@ -819,7 +819,7 @@ convilong (iCode *ic, eBBlock *ebp)
       if ((op == '*' || op == '/' || op == '%') && port->hasNativeMulFor && port->hasNativeMulFor (ic, operandType (IC_LEFT (ic)), operandType (IC_RIGHT (ic)))) // Avoid introducing calls to non-existing support functions.
         return;
     }
-  
+
   symbol *func = NULL;
   iCode *ip = ic->next;
   iCode *newic;
@@ -925,7 +925,7 @@ convilong (iCode *ic, eBBlock *ebp)
                     lic->op = '=';
                   OP_SYMBOL (left)->type = newLongLink ();
                   SPEC_USIGN (OP_SYMBOL (left)->type) = 1;
-                }   
+                }
 
               if (!ric)
                 ic->right = operandFromValue (valCastLiteral (roptype, operandLitValue (right), operandLitValueUll (right)), false);
@@ -934,7 +934,7 @@ convilong (iCode *ic, eBBlock *ebp)
                   ric->op = '=';
                   OP_SYMBOL (right)->type = newCharLink ();
                   SPEC_USIGN (OP_SYMBOL (right)->type) = 1;
-                }    
+                }
 
               if (func) // Use support function
                 goto found;
@@ -974,7 +974,7 @@ convilong (iCode *ic, eBBlock *ebp)
                 {
                   lic->op = '=';
                   setOperandType (left, optype);
-                }          
+                }
 
               if (!ric)
                 ic->right = operandFromValue (valCastLiteral (optype, operandLitValue (right), operandLitValueUll (right)), false);
@@ -1910,7 +1910,7 @@ replaceRegEqv (ebbIndex *ebbi)
               if (ic->result && IS_AGGREGATE (operandType (ic->result)))
                 setOperandType (ic->result, aggrToPtr (operandType (ic->result), false));
             }
-          
+
           if (SKIP_IC2 (ic))
             continue;
 
@@ -2094,7 +2094,7 @@ killiCode (eBBlock **ebbs, int i, int count, iCode *ic)
 /* killDeadCode - eliminates dead assignments                      */
 /*-----------------------------------------------------------------*/
 int
-killDeadCode (ebbIndex *ebbi)
+killDeadCode (ebbIndex *ebbi, bool cleanblocks)
 {
   eBBlock **ebbs = ebbi->dfOrder;
   int count = ebbi->count;
@@ -2128,14 +2128,13 @@ killDeadCode (ebbIndex *ebbi)
               int j;
               bool kill = false;
 
-#if 0 // Fix for bug #3998, disabled for SDCC 4.6.0 RC2 since it causes regression in diagnostics.
-              // Get rid of computations in unreachable blocks early, so we don't leave dead defs/uses for iTemps, that might confuse other optimizations.
-              if (ebbs[i]->noPath && (IS_ITEMP (ic->result) || IS_ITEMP (ic->left) || IS_ITEMP (ic->right)))
-                {
-                  kill = true;
-                  goto kill;
-                }
-#endif
+              if (cleanblocks) // Fix for bug #3998, but don't do it too early, toa void a regression in diagnostics.
+                // Get rid of computations in unreachable blocks early, so we don't leave dead defs/uses for iTemps, that might confuse other optimizations.
+                if (ebbs[i]->noPath && (IS_ITEMP (ic->result) || IS_ITEMP (ic->left) || IS_ITEMP (ic->right)))
+                  {
+                    kill = true;
+                    goto kill;
+                  }
 
               if (SKIP_IC (ic) && ic->op != RECEIVE &&
                 !(ic->op == CALL && IS_SYMOP (ic->left) && OP_SYMBOL (ic->left)->funcPure && optimize.purity) ||
@@ -2201,7 +2200,7 @@ killDeadCode (ebbIndex *ebbi)
                   kill = true;
                 }
 
-            kill: // kill this one if required    
+            kill: // kill this one if required
               if (kill)
                 {
                   if (ic->op == CALL) // Also kill parameter passing iCodes
@@ -2277,7 +2276,7 @@ checkStaticArrayParams (ebbIndex *ebbi)
             if ((v.anything || !v.nonnull) && ic->result->isSemDeref)
               werrorfl (ic->filename, ic->lineno, W_OPTIONAL_PTR_DEREF);
           }
-          
+
         if ((ic->op == IPUSH || ic->op == SEND) &&
           ic->right || // variable arguments lack type information (and so do some arguments to builtin functions).
           ic->op == '=' && IS_PARM (ic->result))
@@ -2329,7 +2328,7 @@ checkStaticArrayParams (ebbIndex *ebbi)
                       sym = AST_SYMBOL (ast);
                     else
                       continue;
-                    
+
                     // Find called function
                     iCode *cic;
                     for (cic = ic->next; cic && cic->op != CALL  && cic->op != PCALL; cic = cic->next);
@@ -2376,7 +2375,7 @@ checkStaticArrayParams (ebbIndex *ebbi)
                     long long pargv = (vi.anything || vi.min < 0 || vi.min > ULONG_MAX) ? 0 : vi.min;
                     pargv *= pscale;
                     pargv += poffset;
-                    if (pargv < 1) // Array size expression 
+                    if (pargv < 1) // Array size expression
                       pargv = 0;
                     paramsize = pargv * getSize (paramtype->next);
                   }
@@ -3206,12 +3205,12 @@ optimizeFinalCast (ebbIndex *ebbi)
             continue;
 
           // Not all backends can handle multiple global operands in all operations well.
-          if (IS_OP_GLOBAL (uic->result) && IS_OP_GLOBAL (ic->right) && 
+          if (IS_OP_GLOBAL (uic->result) && IS_OP_GLOBAL (ic->right) &&
             !TARGET_Z80_LIKE && !TARGET_IS_STM8 && !TARGET_F8_LIKE)
             continue;
 
           if (ic->op == CAST)
-            {    
+            {
               sym_link *type1 = operandType (ic->right);
               sym_link *type2 = operandType (ic->left);
 
@@ -3222,7 +3221,7 @@ optimizeFinalCast (ebbIndex *ebbi)
                 sclsFromPtr (type1) == sclsFromPtr (type2) &&
                 getAddrspace (type1) == getAddrspace (type2))
                 ;
-             else 
+             else
                 continue;
 
              if (!IS_PTR (type1) || IS_BITFIELD(type1->next) || !IS_PTR (type2) || IS_BITFIELD(type2->next))
@@ -3320,7 +3319,7 @@ optimizeNegation (eBBlock **ebbs, int count)
                   bitVectUnSetBit (OP_USES (uic->left), uic->key);
                   uic->left = ic->left;
                   bitVectSetBit (OP_USES (uic->left), uic->key);
-                  
+
                   // Make ic assignment to self, which will be optimized out.
                   bitVectUnSetBit (OP_USES (ic->left), ic->key);
                   ic->left = 0;
@@ -3745,29 +3744,32 @@ checkPurity (const iCode *ic)
 static void
 fixParamPassing (iCode *ic)
 {
-  bool change = false;
+  bool change;
   do
-    for (iCode *pic = ic; pic; pic = pic->next)
-      {
-        if (pic->op == CALL || pic->op == PCALL ||
-          pic->op == SEND || pic->op == IPUSH && pic->parmPush || pic->op == IPUSH_VALUE_AT_ADDRESS) 
-          continue;
-        if (!isiCodeInFunctionCall (pic))
-          continue;
-        if (!pic->prev || !(pic->prev->op == CALL || pic->prev->op == PCALL ||
-          pic->prev->op == SEND || pic->prev->op == IPUSH && pic->prev->parmPush || pic->prev->op == IPUSH_VALUE_AT_ADDRESS)) 
-          continue;
+    {
+      change = false;
+      for (iCode *pic = ic; pic; pic = pic->next)
+        {
+          if (pic->op == CALL || pic->op == PCALL || pic->op == SEND ||
+              pic->op == IPUSH && pic->parmPush || pic->op == IPUSH_VALUE_AT_ADDRESS)
+            continue;
+          if (!isiCodeInFunctionCall (pic))
+            continue;
+          if (!pic->prev || !(pic->prev->op == CALL || pic->prev->op == PCALL || pic->prev->op == SEND ||
+              pic->prev->op == IPUSH && pic->prev->parmPush || pic->prev->op == IPUSH_VALUE_AT_ADDRESS))
+            continue;
 
-        // Found some iCode directly after a parameter passing iCodes. swap them.
-        pic->prev->next = pic->next;
-        pic->next->prev = pic->prev;
-        pic->next = pic->prev;
-        pic->prev = pic->prev->prev;
-        pic->prev->next = pic;
-        pic->next->prev = pic;
-        change = true;
-      }
-  while (change--);
+          // Found some iCode directly after a parameter passing iCodes. swap them.
+          pic->prev->next = pic->next;
+          pic->next->prev = pic->prev;
+          pic->next = pic->prev;
+          pic->prev = pic->prev->prev;
+          pic->prev->next = pic;
+          pic->next->prev = pic;
+          change = true;
+        }
+    }
+  while (change);
 }
 
 /*-----------------------------------------------------------------*/
@@ -3834,7 +3836,7 @@ eBBlockFromiCode (iCode *ic)
   /* Burn the corpses, so the dead may rest in peace,
      safe from cse necromancy */
   computeDataFlow (ebbi);
-  killDeadCode (ebbi);
+  killDeadCode (ebbi, false);
 
   /* do common subexpression elimination for each block */
   change = cseAllBlocks (ebbi, FALSE);
@@ -3866,7 +3868,7 @@ eBBlockFromiCode (iCode *ic)
     }
 
   /* kill dead code */
-  kchange = killDeadCode (ebbi);
+  kchange = killDeadCode (ebbi, false);
 
   if (options.dump_i_code)
     dumpEbbsToFileExt (DUMP_DEADCODE, ebbi);
@@ -3887,7 +3889,7 @@ eBBlockFromiCode (iCode *ic)
       computeControlFlow (ebbi);
       loops = createLoopRegions (ebbi);
       computeDataFlow (ebbi);
-      killDeadCode (ebbi);
+      killDeadCode (ebbi, false);
       // Check before loop optimizations, but after dead code elimination and generalized constant propagation, so we can avoid false positives in dead branches, and have the necessary information.
       checkStaticArrayParams (ebbi);
     }
@@ -3915,7 +3917,7 @@ eBBlockFromiCode (iCode *ic)
          dead code elimination once more : this will
          get rid of the extra assignments to the induction
          variables created during loop optimizations */
-      killDeadCode (ebbi);
+      killDeadCode (ebbi, false);
 
       if (options.dump_i_code)
         dumpEbbsToFileExt (DUMP_LOOPD, ebbi);
@@ -3932,7 +3934,7 @@ eBBlockFromiCode (iCode *ic)
       computeControlFlow (ebbi);
       loops = createLoopRegions (ebbi);
       computeDataFlow (ebbi);
-      killDeadCode (ebbi);
+      killDeadCode (ebbi, true);
       if (options.dump_i_code)
         dumpEbbsToFileExt (DUMP_GENCONSTPROP1, ebbi);
     }
@@ -3951,7 +3953,7 @@ eBBlockFromiCode (iCode *ic)
     optimizeCastCast (ebbi->bbOrder, ebbi->count);
   computeDataFlow (ebbi);                                  // Apparently needed here, since otherwise we get some cases of killDeadCode below killing code not actually dead.
   recomputeLiveRanges (ebbi->bbOrder, ebbi->count, false); // Recompute again before killing dead code, since dead code elimination needs updated ic->seq - the old ones might have been invalidated in optimizeOpWidth above.
-  killDeadCode (ebbi);                                     // Ensure lospre doesn't resurrect dead code.
+  killDeadCode (ebbi, false);                               // Ensure lospre doesn't resurrect dead code.
   adjustIChain (ebbi->bbOrder, ebbi->count);
   ic = iCodeLabelOptimize (iCodeFromeBBlock (ebbi->bbOrder, ebbi->count));
   checkPurity (ic);                                        // Check purity - dead code elimination had a chance to eliminate any calls to impure functions by now.
@@ -3983,9 +3985,9 @@ eBBlockFromiCode (iCode *ic)
   computeControlFlow (ebbi);
   loops = createLoopRegions (ebbi);
   computeDataFlow (ebbi);
-  killDeadCode (ebbi);
+  killDeadCode (ebbi, false);
   offsetFoldUse (ebbi->bbOrder, ebbi->count);
-  killDeadCode (ebbi);
+  killDeadCode (ebbi, true);
 
   /* sort it back by block number */
   //qsort (ebbs, saveCount, sizeof (eBBlock *), bbNumCompare);
@@ -4052,6 +4054,7 @@ eBBlockFromiCode (iCode *ic)
       computeControlFlow (ebbi);
       loops = createLoopRegions (ebbi);
       computeDataFlow (ebbi);
+      killDeadCode (ebbi, true);
       recomputeLiveRanges (ebbi->bbOrder, ebbi->count, false);
       ic = iCodeLabelOptimize (iCodeFromeBBlock (ebbi->bbOrder, ebbi->count));
       recomputeValinfos (ic, ebbi, "_2");
@@ -4061,7 +4064,7 @@ eBBlockFromiCode (iCode *ic)
       computeControlFlow (ebbi);
       loops = createLoopRegions (ebbi);
       computeDataFlow (ebbi);
-      killDeadCode (ebbi);
+      killDeadCode (ebbi, true);
       if (options.dump_i_code)
         dumpEbbsToFileExt (DUMP_GENCONSTPROP2, ebbi);
     }
@@ -4082,7 +4085,7 @@ eBBlockFromiCode (iCode *ic)
     computeControlFlow (ebbi);
     loops = createLoopRegions (ebbi);
     computeDataFlow (ebbi);
-    killDeadCode (ebbi); /* iCodeLabelOptimize() above might result in dead code, when both branches of an ifx go to the same destination. */
+    killDeadCode (ebbi, true); // iCodeLabelOptimize() above might result in dead code, when both branches of an ifx go to the same destination.
   }
   while (change);
 
