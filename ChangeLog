@@ -1,3 +1,204 @@
+2026-11-09 Gabriele Gorla <gorlik@yahoo.com>
+
+	* r2k/config.inc,
+	  r2ka/config.inc,
+	  r3ka/config.inc,
+	  r4k/config.inc,
+	  r5k/config.inc,
+	  r6k/config.inc:
+	  Add missing files for the rabbit-common changes.
+	* Makefile.in,
+	  clean.mk,
+	  library_build.mk,
+	  pdk13/Makefile.in,
+	  pdk14/Makefile.in,
+	  pdk15/Makefile.in,
+	  pdk15-stack-auto/Makefile.in,
+	  pdk-common,
+	  pdk-common/__gptrget.s,
+	  pdk-common/__gptrget2.s,
+	  pdk-common/__setjmp.s,
+	  pdk-common/_muluchar.s,
+	  pdk-common/heap.s,
+	  pdk13/config.inc,
+	  pdk14/config.inc,
+	  pdk15/config.inc,
+	  pdk15-stack-auto/config.inc,
+	  ports.mk:
+	  Move pdk common library files into pdk-common.
+
+2026-11-08 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/ds390/Makefile.in,
+	  device/lib/ds400/Makefile.in,
+	  device/lib/hc08/Makefile.in,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/library_build.mk,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mcs51-small-xstack-auto/Makefile.in,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos6502-stack-auto/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/mos65c02-stack-auto/Makefile.in,
+	  device/lib/r800/Makefile.in,
+	  device/lib/s08/Makefile.in,
+	  device/lib/s08-stack-auto/Makefile.in,
+	  device/lib/sm83/Makefile.in,
+	  device/lib/stm8/Makefile.in,
+	  device/lib/stm8-large/Makefile.in,
+	  device/lib/z180/Makefile.in,
+	  device/lib/z80/Makefile.in,
+	  device/lib/z80n/Makefile.in,
+	  device/lib/mcs51-common/Makefile.in:
+	  Use new library build infrastructure for mcs51, s08, stm8, sm83 and z80.
+	* device/lib/ds390/config.inc,
+	  device/lib/ds400/config.inc,
+	  device/lib/r800/config.inc,
+	  device/lib/z180/config.inc,
+	  device/lib/z80n/config.inc:
+	  Add CPU type to config files.
+	* device/lib/hc08/Makefile.in,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/r2k/Makefile.in,
+	  device/lib/r2ka/Makefile.in,
+	  device/lib/r3ka/Makefile.in,
+	  device/lib/r4k/Makefile.in,
+	  device/lib/r5k/Makefile.in,
+	  device/lib/r6k/Makefile.in,
+	  device/lib/r800/Makefile.in,
+	  device/lib/s08/Makefile.in,
+	  device/lib/z180/Makefile.in,
+	  device/lib/z80/Makefile.in,
+	  device/lib/z80n/Makefile.in,
+	  device/lib/rabbit-common,
+	  device/lib/rabbit-common/__sdcc_call_hl.s,
+	  device/lib/rabbit-common/__sdcc_call_iy.s,
+	  device/lib/rabbit-common/abs.s,
+	  device/lib/rabbit-common/atomic_flag_test_and_set.s,
+	  device/lib/rabbit-common/crtenter.s,
+	  device/lib/rabbit-common/divmixed.s,
+	  device/lib/rabbit-common/divsigned.s,
+	  device/lib/rabbit-common/divunsigned.s,
+	  device/lib/rabbit-common/heap.s,
+	  device/lib/rabbit-common/memcpy.s,
+	  device/lib/rabbit-common/memmove.s,
+	  device/lib/rabbit-common/modmixed.s,
+	  device/lib/rabbit-common/modsigned.s,
+	  device/lib/rabbit-common/modunsigned.s,
+	  device/lib/rabbit-common/mulchar.s,
+	  device/lib/rabbit-common/setjmp.s,
+	  device/lib/rabbit-common/strcpy.s:
+	  Move r4k, r5k and r6k common library files into rabbit-common.
+	* device/lib/r2k/Makefile.in,
+	  device/lib/r2k/memcpy.s,
+	  device/lib/r2k/memmove.s,
+	  device/lib/r2ka/Makefile.in,
+	  device/lib/r2ka/memcpy.s,
+	  device/lib/r2ka/memmove.s,
+	  device/lib/r3ka/Makefile.in,
+	  device/lib/rabbit-common/memcpy.s,
+	  device/lib/rabbit-common/memmove.s:
+	  Move r2k, r2ka and r3ka common library files into rabbit-common.
+
+2026-11-07 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/regression/tests/bug-4209.c: Don't use a colon
+	  in the comment at the head of the file because it
+	  upsets the test framework.
+
+2026-11-07 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/lib/mcs51-medium/config.inc: fix .optsdcc
+
+2026-11-06 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/ds390/gptr_cmp.s,
+	  device/lib/ds390/config.inc,
+	  device/lib/mcs51-common/bp.s,
+	  device/lib/mcs51-common/bpx.s,
+	  device/lib/mos6502/config.inc,
+	  device/lib/mos65c02/config.inc,
+	  device/lib/r800/Makefile.in,
+	  device/lib/z180/Makefile.in,
+	  device/lib/z80/Makefile.in,
+	  support/regression/ports/uc6502/spec.mk:
+	  Fix Z80 and MOS6502 build.
+	* device/lib/mcs51-common/atomic_flag_clear.s,
+	  device/lib/ds390/labs.s:
+	  Fix ds390 regression introduced by library merging.
+	* device/lib/Makefile.in,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos6502-stack-auto/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/mos65c02-stack-auto/Makefile.in,
+	  device/lib/common_files.mk,
+	  device/lib/library_build.mk:
+	  New library build infrastructure.
+
+2026-11-05 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/ds390/config.inc,
+	  device/lib/ds400/config.inc,
+	  device/lib/huc6280/config.inc,
+	  device/lib/mcs51-huge/config.inc,
+	  device/lib/mcs51-large/config.inc,
+	  device/lib/mcs51-medium/config.inc,
+	  device/lib/mcs51-small/config.inc,
+	  device/lib/mcs51-small-stack-auto/config.inc,
+	  device/lib/mcs51-small-xstack-auto/config.inc,
+	  device/lib/mos6502/config.inc,
+	  device/lib/mos65c02/config.inc,
+	  device/lib/r800/config.inc,
+	  device/lib/z180/config.inc,
+	  device/lib/z80/config.inc,
+	  device/lib/z80n/config.inc:
+	  Make all library assembly configuration consistent.
+	* device/lib/ds390/Makefile.in,
+	  device/lib/ds390/gptr_cmp.c,
+	  device/lib/ds400/Makefile.in,
+	  device/lib/mcs51-common/abs.s,
+	  device/lib/mcs51-common/crtxpush.s,
+	  device/lib/mcs51-common/gptr_cmp.s,
+	  device/lib/mcs51-common/labs.s,
+	  device/lib/mcs51-common/setjmp.c,
+	  device/lib/mcs51-common/strlen.s,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mcs51-small-xstack-auto/Makefile.in,
+	  device/lib/r800/Makefile.in,
+	  device/lib/z180/Makefile.in,
+	  device/lib/z80/Makefile.in,
+	  src/SDCCmem.c,
+	  src/ds390/gen.c,
+	  src/ds390/main.c,
+	  src/mcs51/gen.c,
+	  support/regression/ports/mcs51-small-stack-auto/spec.mk,
+	  device/lib/mcs51-common/bp.s,
+	  device/lib/mcs51-common/bpx.s:
+	  Hide several internal symbols from C namespace.
+	* support/cpp/libcpp/lex.cc:
+	  Partial fix for bug #4241
+
+
+2026-11-05 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCmain.c (_preCmd): Pass -ffreestanding when invoking the
+	  preprocessor, matching SDCC's documented implementation model
+	  (bug #4209).
+	* support/regression/tests/bug-4209.c: Check __STDC_HOSTED__.
+
 2026-11-04 Gabriele Gorla <gorlik@yahoo.com>
 
 	* device/lib/ds390/Makefile.in,
@@ -65,6 +266,22 @@
 	  device/lib/strspn.c,
 	  device/lib/strstr.c:
 	  Rename atof, memchr, memcmp, memmove, memset and all string functions.
+	* Makefile.in,
+	  _divsint.c,
+	  _divslong.c,
+	  _divuint.c,
+	  memset.c,
+	  mcs51-large/memset.c,
+	  mcs51-small/_divsint.c,
+	  mcs51-small/_divslong.c,
+	  mcs51-small/_divuint.c,
+	  mcs51-small/memset.c,
+	  mcs51-small-stack-auto/_divsint.c,
+	  mcs51-small-stack-auto/_divslong.c,
+	  mcs51-small-stack-auto/_divuint.c,
+	  sm83/memset.c,
+	  z80-common/memset.c:
+	  Move assembly to port specific directories for memset, divsint, divuint, divslong.
 
 2026-11-03 Philipp Klaus Krause <philipp@colecovision.eu>
 

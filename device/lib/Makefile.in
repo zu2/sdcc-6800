@@ -93,7 +93,7 @@ OPT_DISABLE_F8L      = @OPT_DISABLE_F8L@
 
 OEXT            = .rel
 
-include $(srcdir)/incl.mk
+include $(srcdir)/ports.mk
 
 ifeq ($(OPT_DISABLE_DS390), 0)
 TARGETS        += model-ds390
@@ -238,6 +238,13 @@ endif
 objects:
 	$(MAKE) build-dir
 	$(MAKE) port-specific-objects
+	$(MAKE) clean_intermediate
+
+objects-mcs51:
+	$(MAKE) build-dir
+	$(MAKE) $(OBJECTS)
+	$(MAKE) port-specific-objects
+	$(MAKE) $(LIB_FILES)
 	$(MAKE) clean_intermediate
 
 objects-pic14:
@@ -516,6 +523,90 @@ port-specific-objects-pic14:
           done; \
 	fi || :
 
+ifeq ($(LIB_TYPE), SDCCLIB)
+
+$(PORTDIR)/libfloat.lib: $(OBJECTS_FLOAT)
+	$(top_builddir)/bin/sdcclib -a $(PORTDIR)/libfloat.lib $(OBJECTS_FLOAT)
+
+$(PORTDIR)/libint.lib: $(OBJECTS_INT)
+	$(top_builddir)/bin/sdcclib -a $(PORTDIR)/libint.lib $(OBJECTS_INT)
+
+$(PORTDIR)/liblong.lib: $(OBJECTS_LONG)
+	$(top_builddir)/bin/sdcclib -a $(PORTDIR)/liblong.lib $(OBJECTS_LONG)
+
+$(PORTDIR)/liblonglong.lib: $(OBJECTS_LONGLONG)
+	$(top_builddir)/bin/sdcclib -a $(PORTDIR)/liblonglong.lib $(OBJECTS_LONGLONG)
+
+$(PORTDIR)/libsdcc.lib: $(OBJECTS_SDCC)
+	$(top_builddir)/bin/sdcclib -a $(PORTDIR)/libsdcc.lib $(OBJECTS_SDCC)
+
+else
+  ifeq ($(LIB_TYPE), AR)
+
+$(PORTDIR)/libfloat.lib: $(OBJECTS_FLOAT)
+	${SDAR} -rcSD $(PORTDIR)/libfloat.lib $(OBJECTS_FLOAT)
+
+$(PORTDIR)/libint.lib: $(OBJECTS_INT)
+	${SDAR} -rcSD $(PORTDIR)/libint.lib $(OBJECTS_INT)
+
+$(PORTDIR)/liblong.lib: $(OBJECTS_LONG)
+	${SDAR} -rcSD $(PORTDIR)/liblong.lib $(OBJECTS_LONG)
+
+$(PORTDIR)/liblonglong.lib: $(OBJECTS_LONGLONG)
+	${SDAR} -rcSD $(PORTDIR)/liblonglong.lib $(OBJECTS_LONGLONG)
+
+$(PORTDIR)/libsdcc.lib: $(OBJECTS_SDCC)
+	${SDAR} -rcSD $(PORTDIR)/libsdcc.lib $(OBJECTS_SDCC)
+
+  else
+    ifeq ($(LIB_TYPE), RANLIB)
+
+$(PORTDIR)/libfloat.lib: $(OBJECTS_FLOAT)
+	${SDAR} -rcD $(PORTDIR)/libfloat.lib $(OBJECTS_FLOAT)
+
+$(PORTDIR)/libint.lib: $(OBJECTS_INT)
+	${SDAR} -rcD $(PORTDIR)/libint.lib $(OBJECTS_INT)
+
+$(PORTDIR)/liblong.lib: $(OBJECTS_LONG)
+	${SDAR} -rcD $(PORTDIR)/liblong.lib $(OBJECTS_LONG)
+
+$(PORTDIR)/liblonglong.lib: $(OBJECTS_LONGLONG)
+	${SDAR} -rcD $(PORTDIR)/liblonglong.lib $(OBJECTS_LONGLONG)
+
+$(PORTDIR)/libsdcc.lib: $(OBJECTS_SDCC)
+	${SDAR} -rcD $(PORTDIR)/libsdcc.lib $(OBJECTS_SDCC)
+
+    else
+
+$(PORTDIR)/libfloat.lib: $(OBJECTS_FLOAT)
+	rm -f $(PORTDIR)/libfloat.lib
+	for i in $(notdir $(basename $(OBJECTS_FLOAT))); do echo $$i >> $(PORTDIR)/libfloat.lib; done
+	cp $(OBJECTS_FLOAT) $(PORTDIR)
+
+$(PORTDIR)/libint.lib: $(OBJECTS_INT)
+	rm -f $(PORTDIR)/libint.lib
+	for i in $(notdir $(basename $(OBJECTS_INT))); do echo $$i >> $(PORTDIR)/libint.lib; done
+	cp $(OBJECTS_INT) $(PORTDIR)
+
+$(PORTDIR)/liblong.lib: $(OBJECTS_LONG)
+	rm -f $(PORTDIR)/liblong.lib
+	for i in $(notdir $(basename $(OBJECTS_LONG))); do echo $$i >> $(PORTDIR)/liblong.lib; done
+	cp $(OBJECTS_LONG) $(PORTDIR)
+
+$(PORTDIR)/liblonglong.lib: $(OBJECTS_LONGLONG)
+	rm -f $(PORTDIR)/liblonglong.lib
+	for i in $(notdir $(basename $(OBJECTS_LONGLONG))); do echo $$i >> $(PORTDIR)/liblonglong.lib; done
+	cp $(OBJECTS_LONGLONG) $(PORTDIR)
+
+$(PORTDIR)/libsdcc.lib: $(OBJECTS_SDCC)
+	rm -f $(PORTDIR)/libsdcc.lib
+	for i in $(notdir $(basename $(OBJECTS_SDCC))); do echo $$i >> $(PORTDIR)/libsdcc.lib; done
+	cp $(OBJECTS_SDCC) $(PORTDIR)
+
+    endif
+  endif
+endif
+
 clean_intermediate:
 	rm -f $(PORTDIR)/*.lst $(PORTDIR)/*.sym
 
@@ -537,9 +628,9 @@ install: all installdirs
 		$(srcdir)/pdk13 $(srcdir)/pdk14 $(srcdir)/pdk15 \
 		$(srcdir)/f8 $(srcdir)/f8l \
 		$(srcdir)/pic14 $(srcdir)/pic16 $(srcdir)/*.c $(sdcc_libdir)/src
-	$(CP_U) -r mcs51-small mcs51-medium mcs51-large mcs51-huge ds390 ds400 z80 z180 ez80 z80n r2k r2ka r3ka r4k r5k r6k tlcs90 sm83 r800 hc08 s08 mos6502 mos65c02 huc6280 stm8 pdk13 pdk14 pdk15 f8 f8l $(sdcc_libdir)/src
+	$(CP_U) -r $(RELPORTS) $(sdcc_libdir)/src
 
-	for src in mcs51-small mcs51-medium mcs51-large ds390 ds400 z80 z180 ez80 z80n r2k r2ka r3ka r4k r5k r6k tlcs90 sm83 r800 hc08 s08 mos6502 mos65c02 huc6280 stm8 pdk13 pdk14 pdk15 f8 f8l pic14 pic16; do \
+	for src in $(RELPORTS); do \
 	  find $(sdcc_libdir)/src/$$src -depth \
 	    \( -name '*.rel' -o -name '*.dump*' -o -name '*.sym' -o -name '*.o' -o -name '*.lib' -o \
 	    -name '*.lst' -o -name '*.asm' -o -name '.svn' -o -name 'autom4te.cache' -o \
@@ -575,7 +666,7 @@ installdirs:
 	for model in $(MODELS); do \
 	  mkdir -p $(sdcc_libdir)/$$model; \
 	done
-	for libdir in mcs51-small mcs51-medium mcs51-large ds390 ds400 z80 z180 ez80 z80n r2k r2ka r3ka r4k r5k r6k tlcs90 sm83 r800 hc08 s08 mos6502 mos65c02 huc6280 stm8 pdk13 pdk14 pdk15 f8 f8l pic14 pic16; do \
+	for libdir in $(RELPORTS); do \
 	  mkdir -p $(sdcc_libdir)/$$libdir; \
 	done
 	mkdir -p $(sdcc_libdir)/src
