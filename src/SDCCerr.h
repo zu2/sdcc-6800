@@ -276,7 +276,7 @@ enum {
   W_STATIC_ASSERTION_2          = 246, /* static assertion failed */
   E_DECL_AFTER_STATEMENT_C99    = 247, /* declaration after statement requires ISO C99 or later */
   E_SHORTCALL_INVALID_VALUE     = 248, /* Invalid value for a __z88dk_shortcall specifier */
-  E_DUPLICATE_PARAMTER_NAME     = 249, /* duplicate parameter name */
+  E_DUPLICATE_PARAMETER_NAME    = 249, /* duplicate parameter name */
   E_AUTO_FILE_SCOPE             = 250, /* auto in declaration at file scope */
   E_U8_CHAR_C23                 = 251, /* u8 character constant requires ISO C23 or later */
   E_U8_CHAR_INVALID             = 252, /* invalid u8 character constant */
@@ -390,10 +390,16 @@ enum {
   W_NONCONST_STRINGLIT          = 360, // string literal assigned to pointer to non-const
   W_QUALIFIED_RETURN            = 361, // qualifier on return type has no effect
   W_DATA_LOC_RANGE              = 362, // data location is likely out of range
+  E_NEGATIVE_BITFLD_SIZE        = 363, // negative bit-field size
+  E_SIZEOF_BITFLD               = 364, // sizeof applied to bit-field
+  E_INCOMPLETE_RETURN           = 365, // function has incomplete return type
+  E_FUNC_RETURN                 = 366, // function '%s' has function return type
+  W_ALIGNOF_INCOMPLETE_ARRAY_C2Y = 367, // alignof applied to an incomplete array requires ISO C2y or later
+
   // If you get a merge conflict here, some #pragma disable_warning in support/valdiag and support/regression will likely need to be adapted to the resolution. Check there!
 
-  /* don't touch this! */
-  NUMBER_OF_ERROR_MESSAGES             /* Number of error messages */
+  // don't touch this!
+  NUMBER_OF_ERROR_MESSAGES             // Number of error messages
 };
 
 /** sdcc style assertion */

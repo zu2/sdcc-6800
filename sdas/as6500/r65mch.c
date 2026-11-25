@@ -56,8 +56,8 @@ int huc6280;
 #define	OPCY_65C00	((char) (0xFB))
 #define	OPCY_65C02	((char) (0xFA))
 
-/*	OPCY_NONE	((char) (0x80))	*/
-/*	OPCY_MASK	((char) (0x7F))	*/
+#define	OPCY_NONE	((char) (0x80))
+#define	OPCY_MASK	((char) (0x7F))
 
 #define	UN	((char) (OPCY_NONE | 0x00))
 
@@ -189,6 +189,12 @@ machine(struct mne *mp)
 	struct sym *sp;
 	char id[NCPS];
 	int c, v1, v2;
+
+	/*
+	 * Using Internal Format
+	 * For Cycle Counting
+	 */
+	opcycles = OPCY_NONE;
 
 	clrexpr(&e1);
 	clrexpr(&e2);
@@ -782,6 +788,11 @@ machine(struct mne *mp)
 			opcycles = r65pg1[cb[0] & 0xFF];
 		}
 	}
+ 	/*
+	 * Translate To External Format
+	 */
+	if (opcycles == OPCY_NONE) { opcycles  =  CYCL_NONE; } else
+	if (opcycles  & OPCY_NONE) { opcycles |= (CYCL_NONE | 0x3F00); }
 }
 
 /*

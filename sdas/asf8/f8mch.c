@@ -44,8 +44,8 @@ int	bb[NB];
 #define	OPCY_ERR	((char) (0xFE))
 #define	OPCY_SKP	((char)	(0xFD))
 
-/*	OPCY_NONE	((char) (0x80))	*/
-/*	OPCY_MASK	((char) (0x7F))	*/
+#define	OPCY_NONE	((char) (0x80))
+#define	OPCY_MASK	((char) (0x7F))
 
 #define	UN	((char) (OPCY_NONE | 0x00))
 #define	P1	((char) (OPCY_NONE | 0x01))
@@ -172,10 +172,16 @@ static char *Page[5] = {
 void
 machine(struct mne *mp)
 {
+	int op, rf;
 	struct expr e1, e2, e3;
 	int t1, t2, t3;
 	int r1, r2, r3;
-	int op, rf;
+
+	/*
+	 * Using Internal Format
+	 * For Cycle Counting
+	 */
+	opcycles = OPCY_NONE;
 
 	clrexpr(&e1);
 	clrexpr(&e2);
@@ -335,7 +341,7 @@ machine(struct mne *mp)
 		if(!comma(rf != S_2OPWSBC && rf != S_2OPWADC)) { // Handle 1-op variants of sbcw and adcw
 			if (mchtyp == X_F8L)
 				aerr();
-			else if (rf == S_2OPWSBC && t2 == S_ZREL) {
+			else if (rf == S_2OPWSBC && t1 == S_ZREL) {
 				outab(0xa6);
 				outrw(&e1, R_USGN);
 				break;
@@ -1145,7 +1151,7 @@ sex:
 
 	default:
 		opcycles = OPCY_ERR;
-		err('o');
+		xerr('o', "Internal Opcode Error.");
 		break;
 	}
 
@@ -1155,6 +1161,11 @@ sex:
 			opcycles = Page[opcycles & OPCY_MASK][cb[1] & 0xFF];
 		}
 	}
+	/*
+	 * Translate To External Format
+	 */
+	if (opcycles == OPCY_NONE) { opcycles  =  CYCL_NONE; } else
+	if (opcycles  & OPCY_NONE) { opcycles |= (CYCL_NONE | 0x3F00); }
 }
 
 /*
@@ -1291,7 +1302,7 @@ mchpcr(struct expr *esp)
 }
 
 /*
- * Machine specific initialization.
+ * Machine dependent initialization
  */
 void
 minit()

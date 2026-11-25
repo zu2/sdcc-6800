@@ -48,8 +48,8 @@ static int mchtyp;
 #define	OPCY_SDP	((char) (0xFF))
 #define	OPCY_ERR	((char) (0xFE))
 
-/*      OPCY_NONE       ((char) (0x80)) */
-/*      OPCY_MASK       ((char) (0x7F)) */
+#define	OPCY_NONE	((char) (0x80))
+#define	OPCY_MASK	((char) (0x7F))
 
 #define	OPCY_CPU	((char) (0xFD))
 #define	OPCY_AMODE	((char) (0xFC))
@@ -96,6 +96,12 @@ machine(struct mne *mp)
 	a_uint op;
 	struct sym *sp;
 	struct expr e, e1;
+
+	/*
+	 * Using Internal Format
+	 * For Cycle Counting
+	 */
+	opcycles = OPCY_NONE;
 
 	clrexpr(&e);
 	clrexpr(&e1);
@@ -856,6 +862,11 @@ machine(struct mne *mp)
 	if (opcycles == OPCY_NONE) {
 		opcycles = ds8pg1[cb[0] & 0xFF];
 	}
+	/*
+	 * Translate To External Format
+	 */
+	if (opcycles == OPCY_NONE) { opcycles  =  CYCL_NONE; } else
+	if (opcycles  & OPCY_NONE) { opcycles |= (CYCL_NONE | 0x3F00); }
 }
 
 /*

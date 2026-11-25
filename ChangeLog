@@ -1,4 +1,313 @@
-2026-09-24 Gabriele Gorla <gorlik@yahoo.com>
+2026-10-06 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c,
+	  src/SDCCerr.c,
+	  src/SDCCerr.h,
+	  support/valdiag/tests/bug-4087.c:
+	  Fix bug #4087. Diagnose invalid alignof operands and warn for incomplete arrays before C2y, patch by Christopher Bazley.
+
+2026-10-06 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/pdk/gen.c,
+	  src/pdk/peeph.def,
+	  src/pdk/ralloc2.cc:
+	  RFE #609.
+
+2026-10-06 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-2320.c:
+	  Match the address cast to the unsigned char buffer declaration to prepare for fix for bug #3952, patch by Christopher Bazley.
+	* support/regression/tests/bug-2347.c,
+	  support/regression/tests/bug-3728.c,
+	  support/regression/tests/bug3475630.c,
+	  support/regression/tests/falcon-ntt.c,
+	  support/regression/tests/gcc-torture-execute-920429-1.c,
+	  support/regression/tests/gcc-torture-execute-930603-3.c,
+	  support/regression/tests/memory.c.in,
+	  support/regression/tests/snprintf.c.in,
+	  support/valdiag/tests/arraybounds.c:
+	  Suppress expected warning 244 without changing the tested code to prepare for fix for bug #3952, patch by Christopher Bazley.
+
+2026-10-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCgenconstprop.cc,
+	  support/valdiag/tests/bug-4092.c:
+	  Saturate pointer object-size bounds when applying byte offsets to avoid false bounds diagnostics on 32-bit hosts (bug #4092), patch by Christopher Bazley.
+
+2026-10-05 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/SDCCsymt.c: fix bug #4042 by applying patch by Christopher Bazley
+	  uses IS_AUTO() instead of sym->level && !IS_STATIC(sym->etype),
+	  marks block scope function declaration extern
+	* support/valdiag/tests/bug-4042.c: new, added
+
+2026-10-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c,
+	  support/regression/tests/conditional-truth.c:
+	  Fix bug #4101: test the full scalar value when folding a conditional expression, patch by Christopher Bazley.
+
+2026-10-05 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* debugger/mcs51/simi.c: fix bug #4111 by applying patch
+	* sim/ucsim/src/sims/f8.src/disass.cc,
+	* sim/ucsim/src/sims/f8.src/f8.cc: add parentheses to fix warning
+
+2026-10-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCval.c, support/valdiag/tests/bitint-negation.c:
+	  Fix bug #4100: wrap negated unsigned bit-precise constants to their declared width, patch by Christopher Bazley.
+
+2026-10-05 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* support/sdbinutils/bfd/asxxxx.c: Fix bug #4108 by applying patch
+
+2026-10-05 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCopt.c:
+	* support/regression/tests/bug-4109.c,
+	  support/valdiag/tests/bug-4109.c:
+	  Fix bug #4109: defer deletion of semantic dereferences until their diagnostics have been checked,
+	  then clear the markers and remove dead instructions; test pointer copies,
+	  null checks and single evaluation of &*. Patch by Christopher Bazley.
+	* support/regression/tests/bug-2632.c,
+	  support/regression/tests/gcc-torture-execute-20001017-2.c,
+	  support/regression/tests/gcc-torture-execute-980506-3.c,
+	  support/regression/tests/gcc-torture-execute-980617-1.c,
+	  support/regression/tests/gcc-torture-execute-pr20601-1.c:
+	  Pick some regression test changes from the patch for bug #3952 by Christopher Bazley.
+
+2026-10-04 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* device/include/stdbit.h,
+	  device/include/stdckdint.h,
+	  device/lib/strtol.c,
+	  device/lib/strtoll.c,
+	  device/lib/wcstol.c,
+	  device/lib/wcstoll.c:
+	  Pick library fixes from the patch for bug #3952 by Christopher Bazley.
+	* support/regression/tests/bug-1029883.c.in,
+	  support/regression/tests/bug-3641.c,
+	  support/regression/tests/bug-3920.c,
+	  support/regression/tests/lonesha256.c,
+	  support/regression/tests/sha3-256.c,
+	  Pick some regression test changes from the patch for bug #3952 by Christopher Bazley.
+	* support/regression/tests/bug-2320.c:
+	  Prepare a regression test for future changes in fix for bug #3952.
+
+2026-10-03 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c,
+	  support/valdiag/tests/_Optional-draft-2026-04-17.c,
+	  support/regression/tests/bug-3954.c,
+	  support/regression/tests/bug-4071.c:
+	  Fix bugs #3954 and #4071, patch by Christopher Bazley.
+
+2026-10-02 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCsymt.c,
+	  support/valdiag/tests/bug-4004.c:
+	  Fix handling of qualifiers for non-intrinsic named address spaces in the fix for bug #4004.
+
+2026-10-02 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCast.c,
+	  src/SDCCsymt.c,
+	  src/SDCCsymt.h,
+	  support/regression/tests/bitfields-bits1.c.in,
+	  support/regression/tests/bitfields-bits2.c.in,
+	  support/regression/tests/bug-2188.c,
+	  support/regression/tests/bug-2590.c,
+	  support/regression/tests/bug-3495411.c,
+	  support/regression/tests/bug-3560.c,
+	  support/regression/tests/bug-3685.c,
+	  support/regression/tests/bug2823963.c,
+	  support/regression/tests/dynamicc.c,
+	  support/regression/tests/dynamiccasmchk.c,
+	  support/regression/tests/far_rabbit_pointers.c,
+	  support/regression/tests/genptrs.c,
+	  support/regression/tests/largeoddstruct.c.in,
+	  support/regression/tests/memory.c.in,
+	  support/regression/tests/strnlen.c,
+	  support/regression/tests/wcsnlen.c,
+	  support/valdiag/tests/_Optional-draft-2026-04-17.c,
+	  support/valdiag/tests/bug-4004.c:
+	  Fix bug #4004, patch by Christopher Bazley.
+
+2026-10-02 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCsymt.c:
+	  Debug dump fix for unions.
+	* src/z80/peeph.def,
+	  support/regression/tests/bug-4103.c:
+	  Fix bug #4103, based on patch by Ramin Moussavi.
+
+2026-10-02 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCsymt.c,
+	  src/SDCCicode.c,
+	  support/regression/tests/union-volatile.c:
+	  Apply artificial union volatility during iCode generation instead of to the declared member types (bug #4072), patch by Christopher Bazley.
+
+2026-10-01 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdas/as6808/m08adr.c,
+	  sdas/asxxsrc/asdata.c,
+	  sdas/asxxsrc/asexpr.c,
+	  sdas/asxxsrc/aslist.c,
+	  sdas/asxxsrc/asmain.c,
+	  sdas/asxxsrc/asout.c,
+	  sdas/asxxsrc/assubr.c,
+	  sdas/asxxsrc/asxxxx.h,
+	  sdas/asxxsrc/asexpr.c:
+	  Merge some changes from upstream asxxxx into sdas (medium memory model for Rabbit ports depends on them).
+	* src/z80/gen.c:
+	  Preparations for medium memory model for Rabbit ports.
+	* .version,
+	  doc/sdccman.lyx,
+	  sdas/linksrc/aslink.h,
+	  sdas/linksrc/lkdata.c,
+	  sdas/linksrc/lkmain.c,
+	  src/SDCCmain.c:
+	  Merge some changes from upstream asxxxx 5.50 linker into sdas, including the use of -a for area base addresses, to prepare for future merge of asxxxx 6.10 linker (which Rabbit ports need for medium memory model).
+
+2026-09-30 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCC.y,
+	  src/SDCCerr.c,
+	  src/SDCCerr.h,
+	  src/SDCCsymt.c,
+	  support/valdiag/tests/bug-4097.c,
+	  support/valdiag/tests/bug-4099.c:
+	  Fix bugs #4097 and #4099, patches by Christopher Bazley.
+	* src/z80/peep.c,
+	  support/regression/ports/ucr3ka-medium:
+	  Preparations for medium memory model for Rabbit ports.
+
+2026-09-29 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCerr.c,
+	  src/SDCCerr.h,
+	  src/SDCCsymt.c,
+	  support/valdiag/tests/bug-4098.c:
+	  Fix bug #4098, patch by Christopher Bazley.
+	* src/SDCCglue.c,
+	  src/SDCCmem.c,
+	  support/valdiag/tests/bug-4096.c:
+	  Fix bug #4096, patch by Christopher Bazley.
+	* src/SDCCast.c,
+	  support/valdiag/tests/bug-4092.c:
+	  Fix bug #4092, inspired by patch by Christopher Bazley.
+	* src/SDCCopt.c,
+	  support/valdiag/tests/bug-4073.c:
+	  Fix bug #4073, patch by Christopher Bazley.
+
+2026-09-28 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/asxxsrc/aslist.c,
+	  sdas/asxxsrc/asout.c:
+	  Remove outradix().
+
+2026-09-28 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCerr.h,
+	  src/SDCCerr.c,
+	  src/SDCCast.c,
+	  support/valdiag/tests/bug-4091.c:
+	  Fix bug #4091.
+
+2026-09-28 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/SDCCerr.h,
+	  src/SDCCerr.c,
+	  src/SDCC.y,
+	  support/valdiag/tests/bug-4095.c:
+	  Fix bug #4095.
+
+2026-09-27 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/as6808/m08mch.c,
+	  sdas/as8051/i8051.h,
+	  sdas/as8xcxxx/ds8.h,
+	  sdas/asf8/f8adr.c,
+	  sdas/asf8/f8mch.c,
+	  sdas/asxxsrc/asxxxx.h,
+	  sdas/linksrc/aslink.h:
+	  More relocation mode changes from upstream asxxxx.
+	* sdas/as8xcxxx/ds8adr.c:
+	  Add fix order of '<', '>', and '#' from upstream asxxxx.
+	* sdas/asxxsrc/asxxxx.h,
+	  sdas/linksrc/aslink.h:
+	  Change sdas specific area constants to avoid conflict with upstream asxxxx. 
+	* sdas/asxxsrc/asexpr.c,
+	  sdas/asxxsrc/asmain.c,
+	  sdas/asxxsrc/asxxxx.h:
+	  Update asexpr with changes from upstream asxxxx.
+	* sdas/asxxsrc/asexpr.c:
+	  Revert change that makes __sfr16.c fail on mcs51.
+
+2026-09-27 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdas/asf8/f8mch.c:
+	  Fix assembly of sbcw (nn, z), bug #4082.
+
+2026-09-26 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/MakeList:
+	  Disable two tests for targets where they fail due to lack of memory.
+
+2026-09-26 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/as6500/r65mch.c,
+	  sdas/as6808/m08mch.c,
+	  sdas/as8051/i51mch.c,
+	  sdas/as8xcxxx/ds8mch.c,
+	  sdas/asf8/f8mch.c,
+	  sdas/asgb/gbmch.c,
+	  sdas/asrab/rabmch.c,
+	  sdas/asstm8/stm8mch.c,
+	  sdas/astlcs90/t90mch.c,
+	  sdas/asxxsrc/aslist.c,
+	  sdas/asxxsrc/asmain.c,
+	  sdas/asxxsrc/asxxxx.h,
+	  sdas/asz80/z80mch.c:
+	  Initial OPCY_* changes from upstream asxxxx.
+	* sdas/as6500/r65mch.c,
+	  sdas/as6808/m08mch.c,
+	  sdas/as8xcxxx/ds8mch.c,
+	  sdas/asf8/f8mch.c,
+	  sdas/asgb/gbmch.c,
+	  sdas/asrab/rabmch.c,
+	  sdas/asstm8/stm8mch.c,
+	  sdas/astlcs90/t90mch.c,
+	  sdas/asxxsrc/asxxxx.h,
+	  sdas/asz80/z80mch.c:
+	  Final OPCY_* changes from upstream asxxxx.
+	* sdas/as6500/r65pst.c,
+	  sdas/as6808/m08pst.c,
+	  sdas/as8051/i51pst.c,
+	  sdas/asgb/gbpst.c,
+	  sdas/aspdk13/pdk13pst.c,
+	  sdas/aspdk14/pdk14pst.c,
+	  sdas/aspdk15/pdk15pst.c,
+	  sdas/aspdk16/pdk16pst.c,
+	  sdas/asrab/rabpst.c,
+	  sdas/astlcs90/t90pst.c,
+	  sdas/asz80/z80pst.c:
+	  Initial relocation mode changes from upstream asxxxx.
+	* sdas/asgb/gb.h,
+	  sdas/asgb/gbmch.c,
+	  sdas/asgb/gbpst.c:
+	  Update asgb opcode handling from upstream asxxxx.
+
+
+2026-09-25 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/sdbinutils/binutils/Makefile.am,
+	  support/sdbinutils/binutils/Makefile.in:
+	  Disable build of some unneeded (sd)binutils binaries.
+
+2026-09-25 Gabriele Gorla <gorlik@yahoo.com>
 
 	* sdas/asgb/gb.h,
 	  sdas/asgb/gbadr.c,
@@ -15,6 +324,17 @@
 	  sdas/linksrc/lkmain.c,
 	  sdas/linksrc/lkrel.c:
 	  Many trivial changes from upstream asxxxx.
+	* sdas/asxxsrc/asmain.c,
+ 	  sdas/asxxsrc/asxxxx.h,
+	  sdas/asz80/z80mch.c,
+	  sdas/linksrc/aslink.h,
+	  sdas/linksrc/lkbank.c,
+	  sdas/linksrc/lkhead.c,
+	  sdas/linksrc/lknoice.c,
+	  sdas/linksrc/lkrloc.c,
+	  sdas/linksrc/lkrloc3.c,
+	  sdas/linksrc/lksym.c:
+	  More small changes from upstream asxxxx.
 
 2026-09-25 Philipp Klaus Krause <philipp@colecovision.eu>
 

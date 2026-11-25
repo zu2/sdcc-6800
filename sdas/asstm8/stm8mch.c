@@ -42,8 +42,8 @@ int	bb[NB];
 #define	OPCY_ERR	((char) (0xFE))
 #define	OPCY_SKP	((char)	(0xFD))
 
-/*	OPCY_NONE	((char) (0x80))	*/
-/*	OPCY_MASK	((char) (0x7F))	*/
+#define	OPCY_NONE	((char) (0x80))
+#define	OPCY_MASK	((char) (0x7F))
 
 #define	UN	((char) (OPCY_NONE | 0x00))
 #define	P1	((char) (OPCY_NONE | 0x01))
@@ -2031,6 +2031,11 @@ void machine(struct mne *mp)
 			opcycles = Page[opcycles & OPCY_MASK][cb[1] & 0xFF];
 		}
 	}
+	/*
+	 * Translate To External Format
+	 */
+	if (opcycles == OPCY_NONE) { opcycles  =  CYCL_NONE; } else
+	if (opcycles  & OPCY_NONE) { opcycles |= (CYCL_NONE | 0x3F00); }
 }
 
 /*

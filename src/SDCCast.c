@@ -945,6 +945,9 @@ processParms (ast * func, value * defParm, ast ** actParm, int *parmNumber,     
 {
   RESULT_TYPE resultType;
   sym_link *functype;
+  sym_link *actualType;
+  value *convertedActual;
+  int typecompat;
 
   /* if none of them exist */
   if (!defParm && !*actParm)
@@ -1093,17 +1096,33 @@ processParms (ast * func, value * defParm, ast ** actParm, int *parmNumber,     
     }
   resolveSymbols (*actParm);
 
+  actualType = argumentTypeAfterDecay ((*actParm)->ftype, &convertedActual);
+
   /* the parameter type must be at least castable */
-  if (compareType (defParm->type, (*actParm)->ftype, false) == 0)
+  typecompat = compareType (defParm->type, actualType, false);
+  if (typecompat == 0)
     {
       werror (E_INCOMPAT_TYPES);
-      printFromToType ((*actParm)->ftype, defParm->type);
+      printFromToType (actualType, defParm->type);
+      if (convertedActual)
+        {
+          Safe_free (convertedActual->type);
+          Safe_free (convertedActual);
+        }
       return 1;
     }
 
+  if (IS_PTR (defParm->type) && (IS_PTR (actualType) || IS_FUNC (actualType)))
+    checkPtrTargetQualifiers (defParm->type, actualType);
+
+  if (convertedActual)
+    {
+      Safe_free (convertedActual->type);
+      Safe_free (convertedActual);
+    }
+
   /* if the parameter is castable then add the cast */
-  if ((IS_ARRAY((*actParm)->ftype) && IS_PTR(defParm->type)) ||
-      (compareType (defParm->type, (*actParm)->ftype, false) == -1))
+  if ((IS_ARRAY((*actParm)->ftype) && IS_PTR(defParm->type)) || typecompat == -1)
     {
       ast *pTree;
 
@@ -4071,13 +4090,15 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
 
       propagateConstExpr (&tree->right, resultType, reduceTypeAllowed);
 
+      // Check index against bounds, if we can.
       if (IS_LITERAL (RTYPE (tree)))
         {
           int arrayIndex = (int) ulFromVal (valFromType (RETYPE (tree)));
           int arraySize = DCL_ELEM (LTYPE (tree));
           int arrayLimit = findingAddressOf ? arraySize+1 : arraySize;
 
-          if (arraySize && arrayIndex >= arrayLimit)
+          if (arraySize && arrayIndex >= arrayLimit ||
+            IS_ARRAY (LTYPE (tree)) && floatFromVal (valFromType (RETYPE (tree))) < 0.0)
             {
               werrorfl (tree->filename, tree->lineno, W_IDX_OUT_OF_BOUNDS, arrayIndex, arraySize);
             }
@@ -4686,9 +4707,13 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
           TETYPE (tree) = getSpec (TTYPE (tree));
           /* we now have to access the memory allocated for a constexpr */
           SPEC_CONSTEXPR (TETYPE (tree)) = 0;
-          /* adjust the storage class */
+          /* Record where the pointer's target is stored. */
           if (DCL_TYPE (tree->left->ftype) != ARRAY && DCL_TYPE (tree->left->ftype) != FUNCTION)
-            SPEC_SCLS (TETYPE (tree)) = sclsFromPtr (tree->left->ftype);
+            {
+              setOClass (tree->left->ftype, TETYPE (tree));
+              SPEC_SCLS (TETYPE (tree)) = sclsFromPtr (tree->left->ftype);
+              SPEC_ADDRSPACE (TETYPE (tree)) = DCL_PTR_ADDRSPACE (tree->left->ftype);
+            }
 
           return tree;
         }
@@ -5807,6 +5832,8 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
         dbuf_printf (&dbuf, "%d", size);
         if (!size && !IS_VOID (tree->right->ftype))
           werrorfl (tree->filename, tree->lineno, E_SIZEOF_INCOMPLETE_TYPE);
+        if (IS_BITFIELD (tree->right->ftype))
+          werror (E_SIZEOF_BITFLD);
         tree->type = EX_VALUE;
         tree->opval.val = constVal (dbuf_c_str (&dbuf));
         dbuf_destroy (&dbuf);
@@ -5864,7 +5891,7 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
           tree->right = decorateType (tree->right, resultTypeProp, reduceTypeAllowed);
           --noAlloc;
 
-          if (((int) ulFromVal (valFromType (LETYPE (tree)))) != 0)
+          if (!isEqualVal (valFromType (LETYPE (tree)), 0))
             heir = tree->right->left;
           else
             heir = tree->right->right;
@@ -6456,6 +6483,8 @@ sizeofOp (sym_link *type)
   dbuf_printf (&dbuf, "%d", size = getSize (type));
   if (!size && !IS_VOID (type))
     werror (E_SIZEOF_INCOMPLETE_TYPE);
+  if (IS_BITFIELD (type))
+    werror (E_SIZEOF_BITFLD);
 
   /* now convert into value  */
   val = constVal (dbuf_c_str (&dbuf));
@@ -6495,9 +6524,17 @@ value *
 alignofOp (sym_link *type)
 {
   value *val;
+  sym_link *elementType = IS_ARRAY (type) ? type->next : type;
 
   /* make sure the type is complete and sane */
   checkTypeSanity (type, "(_Alignof)");
+  while (IS_ARRAY (elementType) && DCL_ELEM (elementType))
+    elementType = elementType->next;
+  if (IS_ARRAY (elementType) || IS_VOID (elementType) || IS_FUNC (elementType) ||
+      (IS_STRUCT (elementType) && !SPEC_STRUCT (elementType)->fields))
+    werror (E_INVALID_OP, "_Alignof");
+  else if (IS_ARRAY (type) && !DCL_ELEM (type) && !options.std_c2y)
+    werror (W_ALIGNOF_INCOMPLETE_ARRAY_C2Y);
 
   val = constVal ("1");
 
@@ -8964,4 +9001,3 @@ offsetofOp (sym_link *type, ast *snd)
 
   return offsetofOp_rec (type, snd, &result_type);
 }
-

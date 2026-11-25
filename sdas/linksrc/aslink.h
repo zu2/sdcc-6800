@@ -197,6 +197,7 @@
  */
 #define	S_REF	1		/* referenced */
 #define	S_DEF	2		/* defined */
+#define	S_SWX	4		/* symbol with expression */
 
 /*
  * File types
@@ -230,7 +231,6 @@
 #define		DBXMAXBYTES	64	/* NMAX > (  DBXMAXBYTES  ) */
 #define FILSPC  PATH_MAX        /* File spec length */
 
-#define NDATA   16              /* actual data */
 /*
  * NTXT must be defined to have the same value in
  * the ASxxxx assemblers and ASLink.
@@ -250,7 +250,7 @@
 /*
  * Default Page Length Mask  (not used in sdld)
  */
-#define	DEFAULT_PMASK	0xFF	/* 256 Element Boundary / Length */
+#define	DEFAULT_PMASK	0xFF	/* 256 Element Boundary / Length */ 
 
 /*
  * Internal ASxxxx Version Variable
@@ -282,14 +282,14 @@ extern	int	ASxxxx_VERSION;
 
 /* sdld specific */
 /* Additional flags for 8051 address spaces */
-#define A_DATA    0000          /* data space (default)*/
-#define A_CODE    0040          /* code space */
-#define A_XDATA   0100          /* external data space */
-#define A_BIT     0200          /* bit addressable space */
+#define A_DATA  0x000000        /* data space (default)*/
+#define A_CODE  0x020000        /* code space */
+#define A_XDATA 0x040000        /* external data space */
+#define A_BIT   0x080000        /* bit addressable space */
 
 /* Additional flags for hc08 */
-#define A_NOLOAD  0400          /* nonloadable */
-#define A_LOAD    0000          /* loadable (default) */
+#define A_NOLOAD  0x010000      /* nonloadable */
+#define A_LOAD    0x000000      /* loadable (default) */
 /* end sdld specific */
 
 /*
@@ -360,8 +360,8 @@ extern	int	ASxxxx_VERSION;
 /* #define R3_LSB	0000 */		/* output low byte */
 /* #define R3_MSB	0200 */		/* output high byte */
 
-#define R3_J11     (R3_WORD|R3_BYTX)        /* JLH: 11 bit JMP and CALL (8051) */
-#define R3_J19     (R3_WORD|R3_BYTX|R3_MSB) /* BM:  19 bit JMP and CALL (DS80C390) */
+#define	R3_J11		0010		/* JLH: 11 bit JMP and CALL (8051) */
+#define R3_J19		0050		/* BM:	19 bit JMP and CALL (DS80C390) */
 #define R_C24      (R3_WORD|R3_BYT1|R3_MSB) /* 24 bit address (DS80C390) */
 #define R_J19_MASK (R3_BYTE|R3_BYTX|R3_MSB)
 
@@ -653,7 +653,7 @@ struct	bank
  *	area definition found as the REL files are read.  The
  *	struct area contains the name of the area, a flag byte
  *	which contains the area attributes (REL/CON/OVR/ABS),
- *	the area base address set flag byte (-b option), and the
+ *	the area base address set flag byte (-a option), and the
  *	area base address and total size which will be filled
  *	in at the end of the first pass through the REL files.
  *	The area structure also contains a link to the bank
@@ -706,7 +706,7 @@ struct	areax
 	struct	head	*a_bhp;	/* Base header link */
 	a_uint	a_addr;		/* Beginning address of section */
 	a_uint	a_size;		/* Size of the area in section */
-	a_uint	a_bndry;	/* Boundary for this A directive not used in SDLD */
+	a_uint	a_bndry;	/* Boundary for this A directive */
 };
 
 /*
@@ -719,7 +719,7 @@ struct	areax
  *	the symbol was defined.  The sym structure also
  *	contains a link to the area where the symbol was defined.
  *	The sym structures are linked into linked lists using
- *	the symbol link element.   flag value not used in sdld
+ *	the symbol link element.
  */
 struct	sym
 {
@@ -730,6 +730,7 @@ struct	sym
 	a_uint	s_addr;		/* Address */
 	char	*s_id;		/* Name (JLH) */
 	char	*m_id;		/* Module symbol defined in */
+	char	*s_expr;	/* Expression for symbol */
 };
 
 /*
@@ -904,7 +905,7 @@ extern	char	rb[NINPUT];	/*	LST file text line being
 				 *	address relocated
 				 */
 extern	char	ctype[];	/*	array of character types, one per
-                                 *      ASCII/OEM character
+				 *	ASCII character
 				 */
 
 /*
@@ -988,6 +989,12 @@ extern	struct	base  *a_basep;	/*	The pointer to the first
 				 */
 extern	struct	base  *a_bsp;	/*	Pointer to the current
 				 *	area base structure
+				 */
+extern	struct	base  *b_basep;	/*	The pointer to the first
+				 *	bank base structure
+				 */
+extern	struct	base  *b_bsp;	/*	Pointer to the current
+				 *	bank base structure
 				 */
 extern	struct	globl	*globlp;/*	The pointer to the first
 				 *	globl structure
@@ -1221,8 +1228,8 @@ extern	int		parse(void);
 extern	void		doparse(void);
 extern	void		setarea(void);
 extern	void		setgbl(void);
-extern  void            usage(int n);
-extern  void            copyfile (FILE *dest, FILE *src);
+extern	void		usage(void);
+extern	void            copyfile (FILE *dest, FILE *src);
 
 /* lklex.c */
 extern	void		chopcrlf(char *str);
@@ -1367,7 +1374,7 @@ extern	void		relerr4(char *str);
 extern	void		relerp4(char *str);
 
 /* lklibr.c */
-extern  int             addfile(char *path, char *libfil);
+extern  int		addfile(char *path, char *libfil);
 extern	void		addlib(void);
 extern	void		addpath(void);
 extern	int		fndsym(char *name);

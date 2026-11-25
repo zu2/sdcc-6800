@@ -1,7 +1,7 @@
 /* asmain.c */
 
 /*
- *  Copyright (C) 1989-2025  Alan R. Baldwin
+ *  Copyright (C) 1989-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -188,6 +188,8 @@ search_path_fopen(const char *filename, const char *mode)
  *		int	i		argument loop counter
  *		area *	ap		pointer to area structure
  *		def *	dp		pointer to def structure
+ *		char *	relfil		pointer to .rel filename
+ *		char *	relext		pointer to .rel file extension
  *
  *	global variables:
  *		int	aflag		-a, make all symbols global flag
@@ -297,11 +299,13 @@ char relFile[FILSPC];
 int
 main(int argc, char *argv[])
 {
-        char *p = NULL;
-	char *q;
+        char *p;
+	char *q = NULL;
         int c, i;
 	struct area *ap;
 	struct def *dp;
+
+	char *relfil, *relext;
 
         /* sdas specific */
         /* sdas initialization */
@@ -320,13 +324,16 @@ main(int argc, char *argv[])
 
         if (!is_sdas())
                 fprintf(stdout, "\n");
-        q = NULL;
+
+	relfil = "";
+	relext = "rel";
+
 	asmc = NULL;
 	asmp = NULL;
 	for (i=1; i<argc; ++i) {
 		p = argv[i];
 		if (*p == '-') {
-                        if (asmc != NULL) {
+			if (asmp != NULL) {
 				usage();
 				fprintf(stderr, "?ASxxxx-Error-Options come first.\n");
 				asexit(ER_FATAL);
@@ -358,6 +365,7 @@ main(int argc, char *argv[])
 				case 'o':
 				case 'O':
 					++oflag;
+					p = filespec(argc, argv, &i, p, &relfil, &relext, c);
 					break;
 
 				/*
@@ -523,7 +531,7 @@ main(int argc, char *argv[])
 				}
 			}
 		} else {
-                        if (asmc == NULL) {
+                        if (asmp == NULL) {
                                 q = p;
                                 if (++i < argc) {
                                         p = argv[i];
@@ -562,7 +570,7 @@ main(int argc, char *argv[])
         /* sdas specific */
         if (oflag) {
                 ofp = afile(q, (is_sdas() && p != q) ? "" : "rel", 1);
-                // save the file name if we have to delete it on error
+		// save the file name if we have to delete it on error
                 strcpy(relFile,afn);
 	}
         /* end sdas specific */
@@ -638,7 +646,7 @@ main(int argc, char *argv[])
 				fprintf(ofp, "%s\n", ip );
 			}
 
-                        opcycles = OPCY_NONE;
+                        opcycles = CYCL_NONE;
 			if (setjmp(jump_env) == 0)
 				asmbl();
 			if (pass == 2) {
@@ -654,7 +662,7 @@ main(int argc, char *argv[])
 		fprintf(stderr, "              %s\n", geterr('i'));
 	}
 	if (oflag)
-                outchk(ASXHUGE, ASXHUGE);       /* Flush */
+                outchk(HUGE, HUGE);       /* Flush */
 	if (sflag) {
 		lstsym(tfp);
 	} else
@@ -701,7 +709,7 @@ main(int argc, char *argv[])
  *		CONSTANT	NHASH	number of symbol hash buckets
  *		int		pass	current assembler pass
  *		int		passcnt	number of passes completeed
- *		a_uint		passfuz addressing fuzz at end of pass
+ *		int		passfuz addressing fuzz at end of pass
  *		int		passJLH	flag indicating pass to dump NOICE comments
  *		int		passlmt	pass limit value [0 or defined in minit()]
  *		int		tflag	-t option flag
@@ -777,6 +785,7 @@ multipass(void)
 	}
 	passfuz = fuzz;
 }
+#endif
 
 /*)Function	char *	filespec(argc, argv, i, p, nam, ext, opt)
  *
@@ -804,6 +813,7 @@ multipass(void)
  *		fprintf()		c_library
  *		strchr()		c_library
  *		strlen()		c_library
+ *		strsto()		assym.c
  *
  *	side effects:
  *		evaluates an option for a file name and/or extension
@@ -826,7 +836,7 @@ filespec(int argc, char *argv[], int *i, char *p, char **nam, char **ext, int op
 		if ((q = strchr(p + pFile, FSEPX)) != NULL) {
 			if ((p == q) && (*p == FSEPX)) {
 				if (*(++p)) {
-					*ext = p;
+					*ext = strsto(p);
 					p += strlen(p);
 				} else {
 					fprintf(stderr, "?ASxxxx-Error-Blank File Extension For -%c+\n", opt);
@@ -835,18 +845,18 @@ filespec(int argc, char *argv[], int *i, char *p, char **nam, char **ext, int op
 			} else {
 				*q = '\0';
 				if (*p) {
-					*nam = p;
+					*nam = strsto(p);
 					p += strlen(p);
 				}
 				if (*(++q)) {
-					*ext = q;
+					*ext = strsto(q);
 					p = q + strlen(q);
 				}
 			}
 		} else
 		/* Form -*+name */
 		if (*p != '\0') {
-			*nam = p;
+			*nam = strsto(p);
 			p += strlen(p);
 		} else {
 			fprintf(stderr, "?ASxxxx-Error-Missing [name][.ext] After -%c+", opt);
@@ -855,17 +865,16 @@ filespec(int argc, char *argv[], int *i, char *p, char **nam, char **ext, int op
 	}
 	return(p);
 }
-#endif
 
-/*)Function	void	fixrelfil(p, nam)
+/*)Function	void	fixrelfil(p, pthnam)
  *
  *		char *		p	pointer to first path/file/ext
- *		char **		nam	pointer to address of filename address
+ *		char **		pthnam	pointer to address of path/file address
  *
  *	local variables:
  *		char *		q	temporary string pointer
  *		int		i	looping variable
- *		int		pFile	index to beginninf of p filename
+ *		int		pFile	index to beginning of p filename
  *
  *	global variables:
  *		char		ib[]	string
@@ -877,7 +886,7 @@ filespec(int argc, char *argv[], int *i, char *p, char **nam, char **ext, int op
  *
  *	side effects:
  *		evaluates an option for a file name / extension
- *		(1) if relfil has a path/name - use it
+ *		(1) if pthnam has a path/name - use it
  *		      else use p path/name
  *
  *		[Notes]
@@ -892,12 +901,12 @@ filespec(int argc, char *argv[], int *i, char *p, char **nam, char **ext, int op
  *			defaults: .lst, .sym and .hlr
  */
 void
-fixrelfil(char *p, char **relfil)
+fixrelfil(char *p, char **pthnam)
 {
 	char *q;
 	int i, pFile;
 
- 	if (**relfil == '\0') {
+ 	if (**pthnam == '\0') {
 		ip = ib;		/* Use as temporary string */
 		pFile = fndidx(p);	/* Index to file name of p */
 		for (i=0,q=p; i<pFile; i++) {
@@ -908,7 +917,7 @@ fixrelfil(char *p, char **relfil)
 			*ip++ = *q++;
 		}
 		*ip = '\0';
-		*relfil = strsto(ib);
+		*pthnam = strsto(ib);
 	}
 }
 
@@ -1089,9 +1098,9 @@ asexit(int i)
  *		int	m_type		mnemonic type
  *
  *	global variables:
+ *		area *	areap		pointer to an area structure
  *		int	alevel		area stack pointer
  *		struct area *astack[]	area stack
- *		area *	areap		pointer to an area structure
  *		char	ctype[]		array of character types, one per
  *					ASCII character
  *		int	flevel		IF-ELSE-ENDIF flag will be non
@@ -1179,7 +1188,7 @@ asmbl(void)
 	int  equtype;
 	char opt[NCPS];
 	char fn[FILSPC+FILSPC];
-	char *p;
+	char *p, *q;
         int d, uaf, uf;
         a_uint n, v;
         int skp, cnt, flags;
@@ -1278,6 +1287,13 @@ loop:
 		}
 	}
 	getid(id, c);
+	/* Disallow Constants */
+	mp = mlookup(id);
+	if ((mp != NULL) && (mp->m_type == S_CONST)) {
+		xerr('q', "Invalid Use Of A Predefined Constant");
+	}
+	/* Save position for Macro processing */
+	q = ip;
 	/* Skip white space to next character */
 	c = getnb();
 	/*
@@ -1732,6 +1748,7 @@ loop:
 				}
 				if (!iflvl[tlevel]) {
 					lmode = ELIST;
+					eqt_area = NULL;
 					laddr = ifcnd[tlevel];
 					return;
 				}
@@ -1757,6 +1774,7 @@ loop:
 		break;
 
 	case S_LISTING:
+		lmode = NLIST;
 		flags = 0;
 		while ((c=endline()) != 0) {
 			if (c == ',') {
@@ -1780,7 +1798,8 @@ loop:
 						if (symeq(id, "lst", 1)) { flags |= LIST_LST; } else
 						if (symeq(id, "md" , 1)) { flags |= LIST_MD;  } else
 						if (symeq(id, "me" , 1)) { flags |= LIST_ME;  } else
-                                                if (symeq(id, "meb", 1)) { flags |= LIST_MEB; } else {
+						if (symeq(id, "meb", 1)) { flags |= LIST_MEB; } else
+						if (symeq(id, "mel", 1)) { flags |= LIST_MEL; } else {
 							err('u');
 						}
 					}
@@ -2245,7 +2264,7 @@ loop:
 	case S_BLK:
 		clrexpr(&e1);
 		expr(&e1);
-		outchk(ASXHUGE,ASXHUGE);
+		outchk(HUGE,HUGE);
 		dot.s_addr += e1.e_addr*mp->m_valu;
 		lmode = BLIST;
 		break;
@@ -2406,7 +2425,9 @@ loop:
 	 */
 	default:
 		if (np != NULL) {
+			ip = q;
 			macro(np);
+			lmode = SLIST;
 		} else {
 			machine(mp);
 		}
@@ -2668,6 +2689,7 @@ equate(char *id, struct expr *e1, a_uint equtype)
 	struct sym *sp;
 
 	clrexpr(e1);
+	rprterr = 1;
 	expr(e1);
 
 	sp = lookup(id);
@@ -2694,6 +2716,7 @@ equate(char *id, struct expr *e1, a_uint equtype)
 
 		if (e1->e_flag && (e1->e_base.e_sp->s_type == S_NEW)) {
 			rerr();
+			xerr('x', "global argument NOT ALLOWED in an equate");
 		} else {
 			sp->s_area = e1->e_base.e_ap;
 		}
@@ -2705,11 +2728,17 @@ equate(char *id, struct expr *e1, a_uint equtype)
 	lmode = ELIST;
 }
 
-/*)Function	FILE *	afile(fn, ft, wf)
+/*)Function	FILE *	afile(fs, ft, wf)
  *
- *		char *	fn		file specification string
+ *		char *	fs		file specification string
  *		char *	ft		file type string
- *              int     wf              read(0)/write(1) flag
+ *		int	wf		0 ==>> read
+ *					1 ==>> write
+ *					2 ==>> binary read
+ *					3 ==>> binary write
+ *
+ *					add 8 to the wf code to allow
+ *					any extension on a file
  *
  *	The function afile() opens a file for reading or writing.
  *
@@ -2718,6 +2747,7 @@ equate(char *id, struct expr *e1, a_uint equtype)
  *
  *	local variables:
  *		FILE *	fp		file handle for opened file
+ *		char *	frmt		read/write format string
  *
  *	global variables:
  *		char	afn[]		afile() constructed filespec
@@ -2737,29 +2767,22 @@ equate(char *id, struct expr *e1, a_uint equtype)
  */
 
 FILE *
-afile(char *fn, char *ft, int wf)
+afile(char *fs, char *ft, int wf)
 {
 	FILE *fp;
 	char *frmt;
 
-        afilex(fn, ft);
+	afilex(fs, ft, wf);
 
 	/*
 	 * Select (Binary) Read/Write
 	 */
-        switch(wf) {
+	switch(wf & 3) {
 	default:
 	case 0:	frmt = "r";	break;
-        /* open file -- use "b" flag to write LF line endings on all host platforms */
-        /* this is currently set to match old sdas behavior */
-        case 1: frmt = "wb";    break;
-#ifdef  DECUS
-        case 2: frmt = "rn";    break;
-        case 3: frmt = "wn";    break;
-#else
+	case 1:	frmt = "w";	break;
 	case 2:	frmt = "rb";	break;
 	case 3:	frmt = "wb";	break;
-#endif
 	}
 
 	if ((fp = fopen(afntmp, frmt)) == NULL) {
@@ -2773,10 +2796,17 @@ afile(char *fn, char *ft, int wf)
 	return (fp);
 }
 
-/*)Function     void    afilex(fn, ft)
+/*)Function	void	afilex(fs, ft, wf)
  *
- *		char *	fn		file specification string
+ *		char *	fs		file specification string
  *		char *	ft		file type string
+ *		int	wf		0 ==>> read
+ *					1 ==>> write
+ *					2 ==>> binary read
+ *					3 ==>> binary write
+ *
+ *					add 8 to the wf code to allow
+ *					any extension on a file
  *
  *	The function afilex() processes the file specification string:
  *		(1)	If the file type specification string ft
@@ -2813,20 +2843,20 @@ afile(char *fn, char *ft, int wf)
  */
 
 void
-afilex(char *fn, char *ft)
+afilex(char *fs, char *ft, int wf)
 {
 	char *p1, *p2;
 	int c;
 
-	if (strlen(fn) > (FILSPC-7)) {
-		fprintf(stderr, "?ASxxxx-Error-<filspc to long> : \"%s\"\n", fn);
+	if (strlen(fs) > (FILSPC-7)) {
+		fprintf(stderr, "?ASxxxx-Error-<filspc to long> : \"%s\"\n", fs);
 		asexit(ER_FATAL);
 	}
 
 	/*
 	 * Save the File Name Index
 	 */
-	strcpy(afntmp, fn);
+	strcpy(afntmp, fs);
 	afptmp = fndidx(afntmp);
 
 	/*
@@ -2846,7 +2876,7 @@ afilex(char *fn, char *ft)
                         // no extension in fn: use default extension
                         p2 = dsft;
 		} else {
-                        p2 = strrchr(&fn[afptmp], FSEPX) + 1;
+                        p2 = strrchr(&fs[afptmp], FSEPX) + 1;
 		}
 	}
         if (p1 == NULL) {

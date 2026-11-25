@@ -45,8 +45,8 @@ static int ez80_adl = 0;
 #define	OPCY_SDP	((char) (0xFF))
 #define	OPCY_ERR	((char) (0xFE))
 
-/*      OPCY_NONE       ((char) (0x80)) */
-/*      OPCY_MASK       ((char) (0x7F)) */
+#define	OPCY_NONE	((char) (0x80))
+#define	OPCY_MASK	((char) (0x7F))
 
 #define	OPCY_CPU	((char) (0xFD))
 
@@ -399,7 +399,7 @@ static const char  zxnpg4[256] = {  /* P4 == ED */
 
 static const char *zxnPage[7] = {
     z80pg1, z80pg2, z80pg3, zxnpg4,
-    z80pg3, z80pg6, z80pg6
+    z80pg5, z80pg6, z80pg7
 };
 
 /*
@@ -567,6 +567,12 @@ machine(struct mne *mp)
 	int op, t1, t2, t3;
 	struct expr e1, e2;
 	int rf, sf, v1, v2;
+
+	/*
+	 * Using Internal Format
+	 * For Cycle Counting
+	 */
+	opcycles = OPCY_NONE;
 
 	clrexpr(&e1);
 	clrexpr(&e2);
@@ -2057,6 +2063,11 @@ machine(struct mne *mp)
 			break;
 		}
 	}
+	/*
+	 * Translate To External Format
+	 */
+	if (opcycles == OPCY_NONE) { opcycles  =  CYCL_NONE; } else
+	if (opcycles  & OPCY_NONE) { opcycles |= (CYCL_NONE | 0x3F00); }
 }
 
 /*

@@ -561,7 +561,7 @@ struct
     "declaration after statement requires ISO C99 or later", 0 },
   { E_SHORTCALL_INVALID_VALUE, ERROR_LEVEL_ERROR,
     "invalid value for __z88dk_shortcall %s parameter: %x", 0},
-  { E_DUPLICATE_PARAMTER_NAME, ERROR_LEVEL_ERROR,
+  { E_DUPLICATE_PARAMETER_NAME, ERROR_LEVEL_ERROR,
     "duplicate parameter name %s for function %s", 0},
   { E_AUTO_FILE_SCOPE, ERROR_LEVEL_ERROR,
     "auto in declaration at file scope", 0},
@@ -789,6 +789,16 @@ struct
      "qualifier on return type has no effect", 0},
   {W_DATA_LOC_RANGE, ERROR_LEVEL_WARNING,
      "--data-loc (ZP location) should be between 1 and 240", 0},
+  {E_NEGATIVE_BITFLD_SIZE, ERROR_LEVEL_ERROR,
+     "negative bit-field size", 0 },
+  {E_SIZEOF_BITFLD, ERROR_LEVEL_ERROR,
+     "sizeof applied to bit-field", 0 },
+  {E_INCOMPLETE_RETURN, ERROR_LEVEL_ERROR,
+     "function '%s' has incomplete return type", 0},
+  {E_FUNC_RETURN, ERROR_LEVEL_ERROR,
+     "function '%s' has function return type", 0},
+  {W_ALIGNOF_INCOMPLETE_ARRAY_C2Y, ERROR_LEVEL_WARNING,
+     "alignof applied to an incomplete array requires ISO C2y or later", 0},
 };
 
 /* -------------------------------------------------------------------------------

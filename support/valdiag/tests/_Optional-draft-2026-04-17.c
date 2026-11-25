@@ -43,7 +43,7 @@ char *str_from_array(_Optional const char (*paocc)[64])
                          default: 0)); /* IGNORE */ // TODO: implement!
 
   // constraint violation: decayed type is pointer to const char
-  return *paocc; // TODO: implement warning!
+  return *paocc; /* WARNING */
 }
 #endif
 
@@ -709,7 +709,7 @@ void free_str_1(_Optional const char *s)
 void free_str_2(_Optional const char *s)
 {
   // constraint violation: const qualifier is lost
-  free(optional_cast(s)); /* IGNORE */ //BUG: missing diagnostic
+  free(optional_cast(s)); /* WARNING */
 }
 
 // s has the intended type

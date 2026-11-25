@@ -1929,7 +1929,7 @@ linkEdit (char **envp)
     char *c, *segName; \
     segName = Safe_strdup (N); \
     c = strtok (segName, " \t"); \
-    fprintf (lnkfile,"-b %s = 0x%04x\n", c, L); \
+    fprintf (lnkfile,"-a %s = 0x%04x\n", c, L); \
     if (segName) { Safe_free (segName); } \
   }
 
