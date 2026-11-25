@@ -32,7 +32,8 @@ MC6800_LONGLONG = $(COMMON_LONGLONG) \
   _modslonglong.c \
   _modulonglong.c
 
-MC6800_SDCC = $(filter-out _memset.c _memcmp.c _memchr.c _strcat.c _strchr.c _strrchr.c _strncmp.c _strncpy.c _strncat.c _strstr.c strtok.c,$(COMMON_SDCC)) \
+MC6800_SDCC = $(filter-out memchr.c memcmp.c memmove.c memset.c \
+  strcat.c strchr.c strcmp.c strcpy.c strncat.c strncmp.c strncpy.c strrchr.c strstr.c strtok.c,$(COMMON_SDCC)) \
   __itoa.c \
   __ltoa.c \
   _startup.c \
