@@ -534,7 +534,7 @@ _ds390_genInitStartup (FILE *of)
     {
       fprintf (of, "\tmov\tP2,#0x%02x\n",
                (((unsigned int) options.xdata_loc) >> 8) & 0xff);
-      fprintf (of, "\tmov\t_spx,#0x%02x\n",
+      fprintf (of, "\tmov\tspx,#0x%02x\n",
                (unsigned int) options.xdata_loc & 0xff);
     }
 
@@ -1178,7 +1178,7 @@ static const char *_asmCmd[] =
   "sdas390", "$l", "$3", "$2", "$1.asm", NULL
 };
 
-static const char * const _libs_ds390[] = { "ds390", NULL, };
+static const char *const _libs[] = { "libsdcc", "libsdccf", "libc", "libm", NULL };
 
 /* Globals */
 PORT ds390_port =
@@ -1210,7 +1210,7 @@ PORT ds390_port =
     ".rel",
     1,
     NULL,                       /* crt */
-    _libs_ds390,                /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _defaultRules,
@@ -1571,7 +1571,7 @@ PORT tininative_port =
     ".tlib",
     1,
     NULL,                       /* crt */
-    _libs_ds390,                /* libs */
+    _libs,                      /* libs */
   },
   {
     _defaultRules,
@@ -1800,8 +1800,6 @@ static void _ds400_linkRomDataArea(FILE *fp)
   fprintf(fp, "-b ROMSEG = 0x0068\n");
 }
 
-static const char * const _libs_ds400[] = { "ds400", NULL, };
-
 PORT ds400_port =
 {
   TARGET_ID_DS400,
@@ -1831,7 +1829,7 @@ PORT ds400_port =
     ".rel",
     1,
     NULL,                       /* crt */
-    _libs_ds400,                /* libs */
+    _libs,                      /* libs */
   },
   {                             /* Peephole optimizer */
     _defaultRules,

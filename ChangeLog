@@ -1,3 +1,355 @@
+2026-11-17 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/pic14/Makefile.common,
+	  device/lib/pic14/Makefile.in,
+	  device/lib/pic14/libc/Makefile.in,
+	  device/lib/pic14/libm/Makefile.in,
+	  device/lib/pic14/libsdcc/enhanced/Makefile.in,
+	  device/lib/pic14/libsdcc/enhanced-no-xinst/Makefile.in,
+	  device/lib/pic14/libsdcc/regular/Makefile.in,
+	  support/regression/ports/pic14/spec.mk:
+	  Fix pic14 build.
+	* src/ds390/main.c,
+	  src/f8/main.c,
+	  src/hc08/port_hc08.c,
+	  src/hc08/port_s08.c,
+	  src/mcs51/main.c,
+	  src/mos6502/port_huc6280.c,
+	  src/mos6502/port_mos6502.c,
+	  src/mos6502/port_mos65c02.c,
+	  src/pdk/main.c,
+	  src/stm8/main.c,
+	  src/z80/main.c:
+	  Make all supported ports use the split libraries (libsdcc, libsdccf, libc, libm).
+
+2026-11-16 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/SDCCgen.c,
+	  src/SDCCgen.h,
+	  src/mos6502/gen.c,
+	  src/mos6502/gen.h,
+	  src/mos6502/genand.c,
+	  src/mos6502/genbuiltin.c,
+	  src/mos6502/genlshift.c,
+	  src/mos6502/genminus.c,
+	  src/mos6502/genor.c,
+	  src/mos6502/genplus.c,
+	  src/mos6502/genrot.c,
+	  src/mos6502/genrshift.c,
+	  src/mos6502/genxor.c,
+	  src/mos6502/main.c,
+	  src/mos6502/port_huc6280.c,
+	  src/mos6502/port_mos6502.c,
+	  src/mos6502/port_mos65c02.c,
+	  src/mos6502/ralloc.h,
+	  src/mos6502/stackops.c,
+	  src/mos6502/tempops.c:
+	  Moved emitComment to SDCCgen.c.
+	  Corrected a bug in cycles calculation.
+	* device/lib/huc6280/crt0.s,
+	  device/lib/mos6502/crt0.s,
+	  device/lib/mos6502-stack-auto/crt0.s,
+	  device/lib/mos65c02/crt0.s,
+	  device/lib/mos65c02-stack-auto/crt0.s:
+	  Remove unnecessay area modifiers from crt0.
+	* device/lib/Makefile.in:
+	  Fix bug #4259.
+	* src/mos6502/gen.c,
+	  src/mos6502/gen.h,
+	  src/mos6502/genand.c,
+	  src/mos6502/genbuiltin.c,
+	  src/mos6502/genlshift.c,
+	  src/mos6502/genminus.c,
+	  src/mos6502/genor.c,
+	  src/mos6502/genplus.c,
+	  src/mos6502/genrshift.c,
+	  src/mos6502/genxor.c:
+	  Add probability in the branch cycle calculations.
+
+2026-11-15 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (isIncompleteAggregateType): New helper.
+	  (decorateType): Diagnose invalid pointer addition and subtraction,
+	  including operations on pointers to incomplete aggregate types and
+	  subtraction of pointers to incompatible types. Preserve existing
+	  void-pointer and function-pointer arithmetic extensions (bug #4085).
+	* support/valdiag/tests/bug-4085.c: Add diagnostic tests for invalid
+	  pointer arithmetic, including array operands, and check continued
+	  support for void-pointer arithmetic.
+
+2026-11-15 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/pic16/gen.c,
+	  src/pic16/glue.c:
+	  pic16 struct parameter support, patch #520 by zeynelsagcan.
+
+2026-11-15 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/hc08/gen.c,
+	  src/hc08/gen.h,
+	  src/hc08/main.c,
+	  src/mos6502/gen.c,
+	  src/mos6502/gen.h,
+	  src/mos6502/genand.c,
+	  src/mos6502/genbuiltin.c,
+	  src/mos6502/genlshift.c,
+	  src/mos6502/genminus.c,
+	  src/mos6502/genor.c,
+	  src/mos6502/genplus.c,
+	  src/mos6502/genrot.c,
+	  src/mos6502/genrshift.c,
+	  src/mos6502/genxor.c,
+	  src/mos6502/main.c,
+	  src/mos6502/port_huc6280.c,
+	  src/mos6502/port_mos6502.c,
+	  src/mos6502/port_mos65c02.c,
+	  src/mos6502/pragma.c,
+	  src/mos6502/stackops.c,
+	  src/mos6502/tempops.c,
+	  src/port.h,
+	  src/hc08/port_hc08.c,
+	  src/hc08/port_s08.c,
+	  src/hc08/subport.h,
+	  src/mos6502/subport.h:
+	  Reduce the diff between mos6502 and hc08 ports.
+	* hc08/Makefile.in,
+	  mos-common/setjmp.s,
+	  mos6502-stack-auto/setjmp.s,
+	  s08/Makefile.in,
+	  hc08/_mulint.s,
+	  hc08/atomic_flag_test_and_set.s,
+	  hc08/config.inc,
+	  hc08/setjmp.s,
+	  s08/_mulint.s,
+	  s08/atomic_flag_test_and_set.s,
+	  s08/config.inc,
+	  s08/setjmp.s,
+	  s08-stack-auto/_mulint.s,
+	  s08-stack-auto/atomic_flag_test_and_set.s,
+	  s08-stack-auto/config.inc:
+	  HC08 library cleanup.
+	* device/lib/mos6502/Makefile.in,
+	  device/lib/mos6502-stack-auto/Makefile.in,
+	  device/lib/mos6502-stack-auto/_muluchar.s,
+	  device/lib/mos6502-stack-auto/setjmp.s,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/mos65c02-stack-auto/Makefile.in,
+	  device/lib/mos65c02-stack-auto/_muluchar.s,
+	  device/lib/mos65c02-stack-auto/setjmp.s,
+	  device/lib/mos-common/_divsint.s,
+	  device/lib/mos-common/_divslong.s,
+	  device/lib/mos-common/_divuint.s,
+	  device/lib/mos-common/_divulong.s,
+	  device/lib/mos-common/_floatlib.s,
+	  device/lib/mos-common/_fsadd.s,
+	  device/lib/mos-common/_fsmul.s,
+	  device/lib/mos-common/_modsint.s,
+	  device/lib/mos-common/_modslong.s,
+	  device/lib/mos-common/_moduint.s,
+	  device/lib/mos-common/_modulong.s,
+	  device/lib/mos-common/_mulint.s,
+	  device/lib/mos-common/_mullong.s,
+	  device/lib/mos-common/_mulschar.s,
+	  device/lib/mos-common/_muluchar.s,
+	  device/lib/mos-common/cosf.s,
+	  device/lib/mos-common/div.s,
+	  device/lib/mos-common/fabsf.s,
+	  device/lib/mos-common/labs.s,
+	  device/lib/mos-common/ldiv.s,
+	  device/lib/mos-common/memcpy.s,
+	  device/lib/mos-common/setjmp.s,
+	  device/lib/mos-common/sinf.s,
+	  device/lib/mos6502-stack-auto/sdcc_indirect_jsr.s,
+	  device/lib/mos6502-stack-auto/sdcc_regs.s,
+	  device/lib/mos65c02-stack-auto/sdcc_indirect_jsr.s,
+	  device/lib/mos65c02-stack-auto/sdcc_regs.s,
+	  device/lib/mos-common/sdcc_indirect_jsr.s,
+	  device/lib/mos-common/sdcc_regs.s,
+	  src/mos6502/gen.c,
+	  src/mos6502/ralloc.c:
+	  Hide sdcc_vregX and floatlib internal symbols from C.
+	* device/lib/hc08/_mulint.s,
+	  device/lib/hc08/atomic_flag_test_and_set.s,
+	  device/lib/hc08/config.inc,
+	  device/lib/hc08/setjmp.s,
+	  device/lib/s08/_mulint.s,
+	  device/lib/s08/atomic_flag_test_and_set.s,
+	  device/lib/s08/config.inc,
+	  device/lib/s08/setjmp.s,
+	  device/lib/s08-stack-auto/_mulint.s,
+	  device/lib/s08-stack-auto/atomic_flag_test_and_set.s,
+	  device/lib/s08-stack-auto/config.inc:
+	  Convert setjmp, _mulint and atomic_flag_test_and_set to assembly.
+	* device/lib/common_files.mk,
+	  device/lib/*/Makefile.in,
+	  device/lib/__sdcc_external_startup.c:
+	  Rename _startup.c to __sdcc_external_startup.c
+	* device/lib/common_files.mk,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/__fs2schar.c,
+	  device/lib/__fs2sint.c,
+	  device/lib/__fs2slong.c,
+	  device/lib/__fs2slonglong.c,
+	  device/lib/__fs2uchar.c,
+	  device/lib/__fs2uint.c,
+	  device/lib/__fs2ulong.c,
+	  device/lib/__fs2ulonglong.c,
+	  device/lib/__fsadd.c,
+	  device/lib/__fsdiv.c,
+	  device/lib/__fseq.c,
+	  device/lib/__fslt.c,
+	  device/lib/__fsmul.c,
+	  device/lib/__fsneq.c,
+	  device/lib/__fssub.c,
+	  device/lib/__schar2fs.c,
+	  device/lib/__sint2fs.c,
+	  device/lib/__slong2fs.c,
+	  device/lib/__slonglong2fs.c,
+	  device/lib/__uchar2fs.c,
+	  device/lib/__uint2fs.c,
+	  device/lib/__ulong2fs.c,
+	  device/lib/__ulonglong2fs.c,
+	  device/lib/mcs51-common/asmfloat/__fs2schar.s,
+	  device/lib/mcs51-common/asmfloat/__fs2sint.s,
+	  device/lib/mcs51-common/asmfloat/__fs2slong.s,
+	  device/lib/mcs51-common/asmfloat/__fs2uchar.s,
+	  device/lib/mcs51-common/asmfloat/__fs2uint.s,
+	  device/lib/mcs51-common/asmfloat/__fs2ulong.s,
+	  device/lib/mcs51-common/asmfloat/__fsadd.s,
+	  device/lib/mcs51-common/asmfloat/__fsdiv.s,
+	  device/lib/mcs51-common/asmfloat/__fseq.s,
+	  device/lib/mcs51-common/asmfloat/__fslt.s,
+	  device/lib/mcs51-common/asmfloat/__fsmul.s,
+	  device/lib/mcs51-common/asmfloat/__fsneq.s,
+	  device/lib/mcs51-common/asmfloat/__fssub.s,
+	  device/lib/mcs51-common/asmfloat/__schar2fs.s,
+	  device/lib/mcs51-common/asmfloat/__sint2fs.s,
+	  device/lib/mcs51-common/asmfloat/__slong2fs.s,
+	  device/lib/mcs51-common/asmfloat/__uchar2fs.s,
+	  device/lib/mcs51-common/asmfloat/__uint2fs.s,
+	  device/lib/mcs51-common/asmfloat/__ulong2fs.s,
+	  device/lib/mcs51-common/asmfloat/fsget1arg.s,
+	  device/lib/mcs51-common/asmfloat/fsget2args.s,
+	  device/lib/mcs51-common/asmfloat/fsnormalize.s,
+	  device/lib/mos-common/__fsadd.s,
+	  device/lib/mos-common/__fseq.s,
+	  device/lib/mos-common/__fslt.s,
+	  device/lib/mos-common/__fsmul.s,
+	  device/lib/mos-common/__fsneq.s,
+	  device/lib/mos-common/__fssub.s,
+	  device/lib/mos-common/sdcc_float.s:
+	  Rename FP library files.
+	* device/lib/Makefile.in,
+	  device/lib/common_files.mk,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mcs51-small-xstack-auto/Makefile.in:
+	  Group mcs51 common files in common_files.mk
+	  Add probability in the branch cycle calculations.
+	* doc/sdccman.lyx:
+	  Improve library documentation.
+	* device/lib/common_files.mk,
+	  src/ds390/gen.c,
+	  src/ds390/main.c,
+	  src/ds390/peeph.def,
+	  src/mcs51/gen.c,
+	  src/mcs51/peeph.def,
+	  device/lib/mcs51-common/spx.s:
+	  Hide spx from C namespace.
+	* device/lib/ds390/Makefile.in,
+	  device/lib/ds400/Makefile.in:
+	  Fix DSxxx build.
+
+2026-11-15 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* support/regression/tests/feature-request-1043.c: Omit the three
+	  global-object cases on PDK14 so the test fits its 2 KiW ROM.
+	  Retain the automatic-object and aliasing cases (RFE #1043).
+
+2026-11-15 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCcse.c (findCheaperOp): Reject pointer substitutions that
+	  change the bit-field access representation (bug #4255).
+	* support/regression/tests/bug-4255.c: Test whole-object stores after
+	  bit-field stores, runtime values, storage durations, volatile unions,
+	  nested unions, field widths and preservation of neighbouring fields.
+
+2026-11-15 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* device/lib/common_files.mk,
+	  device/lib/*/Makefile.in:
+	  Unify --max-allocs-per-node handling for library build.
+	* src/z80/gen.c:
+	  Improve pointer read codegen.
+	* device/lib/z80-common/strcmp.s:
+	  Assembler strcmp implementation for z80.
+	* src/z80/main.c:
+	  Preparations for medium and large Rabbit memory models.
+
+2026-11-14 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/Makefile.in,
+	  support/scripts/sdcc.nsi:
+	  Fix library source install (bug #4252)
+
+2026-11-14 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/blake2s.c:
+	  Disable a test for sm83, where the failure is a known bug.
+
+2026-11-13 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/pdk15-stack-auto/__gptrget.s,
+	  device/lib/pdk15-stack-auto/__gptrget2.s,
+	  device/lib/pdk15-stack-auto/heap.s,
+	  device/lib/pdk15-stack-auto/setjmp.s,
+	  device/lib/pdk15-stack-auto/Makefile.in:
+	  Fix pdk15-stack-auto regression failures.
+	* src/mcs51/main.c:
+	  Apply patch from bug #4252
+
+2026-11-12 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCgenconstprop.cc (recomputeValinfos): Preserve value information
+	  for non-volatile const objects across function calls and indirect
+	  writes, even when their addresses escape (RFE #1043). Use the
+	  declared object's type to distinguish a const pointer object from
+	  a mutable object accessed through a pointer to const.
+	* support/regression/tests/feature-request-1043.c: Test preservation of
+	  const-qualified object values across calls and indirect writes,
+	  including pointer objects and objects with static or automatic storage
+	  duration. Test runtime and repeated initialisation, indirect calls,
+	  and changes to objects accessed through const-qualified lvalues.
+	* support/valdiag/tests/feature-request-1043.c: Test preservation of
+	  constant values and non-null information across calls and indirect
+	  writes. Check invalidation of information about objects also accessible
+	  through non-const-qualified lvalues. Test objects with internal and
+	  external linkage, volatile-qualified objects, and indirect calls.
+
+2026-11-12 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCval.c, src/SDCCval.h (checkConstexprBoolInitialiser):
+	  Diagnose constexpr boolean initialisers whose original integer
+	  values are not zero or one (bug #4230).
+	* src/SDCCast.c (createIval, gatherAutoInit): Check explicit constexpr
+	  initialisers of automatic scalars and aggregate subobjects.
+	* src/SDCCglue.c (printIvalType, printIvalBitFields): Check static
+	  scalars and aggregate subobjects, including boolean bit-fields.
+	* support/valdiag/tests/bug-4230.c: Test invalid boolean initialisers.
+	* support/regression/tests/bug-4230.c: Test valid boolean initialisers.
+
 2026-11-12 Gabriele Gorla <gorlik@yahoo.com>
 
 	  device/lib/_divschar.c,
@@ -78,6 +430,12 @@
 	  device/lib/z80-common/_moduint.s,
 	  device/lib/z80n/_mulint.s:
 	  Split div and mod for z80 like all other ports.
+	* device/lib/_mullong.c,
+	  device/lib/mcs51-large/_mullong.s,
+	  device/lib/mcs51-medium/_mullong.s,
+	  device/lib/mcs51-small/_mullong.s,
+	  device/lib/mcs51-small-stack-auto/_mullong.s:
+	  Complete RFE #327
 
 2026-11-12 Christopher Bazley <chris.bazley.wg14@gmail.com>
 

@@ -25,28 +25,6 @@
 // keep this in sync with __sdcc_regs.s in the library
 #define NUM_TEMP_REGS 6
 
-enum debug_messages
-  {
-    ALWAYS=0x01,
-    VASM=0x02,
-    TRACEGEN=0x04,
-    DEEPTRACE=0x08,
-    COST=0x10,
-    REGALLOC=0x20,
-    REGOPS=0x40,
-    TRACE_AOP=0x80,
-    TRACE_STACK=0x100,
-    VVDBG=0x80000000,
-    DEBUG_ALL=0x7fffffff
-  };
-
-//#define DBG_MSG (REGALLOC)
-#define DBG_MSG (REGALLOC|TRACEGEN/*|COST*/)
-//#define DBG_MSG (REGALLOC|TRACEGEN|REGOPS/*|COST*/)
-//#define DBG_MSG (REGALLOC|TRACEGEN|TRACE_STACK/*|COST*/)
-//#define DBG_MSG (DEBUG_ALL/*|VVDBG*/)
-//#define DBG_MSG ((DEBUG_ALL|VVDBG)&~COST)
-
 #define DEBUG_UNIMPLEMENTED
 
 #define LSB     0
@@ -70,6 +48,8 @@ enum debug_messages
 #define IS_AOP_WITH_X(x) (((x)->regmask & M6502MASK_X) != 0)
 #define IS_AOP_WITH_Y(x) (((x)->regmask & M6502MASK_Y) != 0)
 
+#define BR_DEFAULT 0.5
+
 typedef enum
   {
     AOP_INVALID,
@@ -87,15 +67,15 @@ typedef enum
   }
   AOP_TYPE;
 
-/* asmop: A homogenised type for all the different
+/* asmop: a homogenised type for all the different
    spaces an operand can be in */
 typedef struct asmop
 {
   AOP_TYPE type;		
   short coff;			/* current offset */
   short size;			/* total size */    	
-  short regmask;              /* register mask if AOP_REG */
-  operand *op;		/* originating operand */
+  short regmask;                /* register mask if AOP_REG */
+  operand *op;		        /* originating operand */
   unsigned freed:1;		/* already freed    */
   unsigned stacked:1;		/* partial results stored on stack */
   struct asmop *stk_aop[4];	/* asmops for the results on the stack */
@@ -104,7 +84,7 @@ typedef struct asmop
     value *aop_lit;		/* if literal */
     reg_info *aop_reg[4];	/* array of registers */
     char *aop_dir;		/* if direct/ext  */
-    char *aop_immd;         /* if immediate */
+    char *aop_immd;             /* if immediate */
     int aop_stk;		/* stack offset when AOP_STK */
   } aopu;
 }
@@ -182,9 +162,8 @@ bool m6502_tsxUseful();
 // code emit
 void m6502_emitDebuggerSymbol (const char *);
 void m6502_emitOp (const char *inst, const char *fmt, ...);
-void m6502_emitComment (unsigned int level, const char *fmt, ...);
 bool m6502_emitCmp (reg_info *reg, unsigned char v);
-void m6502_emitBranch (const char *branchop, symbol * tlbl);
+void m6502_emitBranch (const char *branchop, symbol * tlbl, float probability);
 void m6502_emitTSX(void);
 void m6502_emitSetCarry(int c);
 

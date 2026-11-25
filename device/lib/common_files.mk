@@ -7,9 +7,11 @@ SDAR 		= ${abs_top_builddir}/bin/sdar
 
 ASFLAGS 	= -plosgff -I$(srcdir)
 CPPFLAGS 	= -I$(INCDIR) -I$(INCDIR)/$(PORT) -I.
-CFLAGS 		= $(MODELFLAGS) --std-c23
 
-std_lib_dirs	= $(srcdir):$(srcdir)/..
+# --max-allocs-per-node 32768 looks give a good compromise between compilation time nad code quality for now. Since the library is compiled relatively rarely a higher default than for user code makes sense.
+CFLAGS 		= $(MODELFLAGS) --std-c23 --max-allocs-per-node 32768
+
+std_lib_dirs	= $(srcdir)/..
 
 # override PORTDIR defined by super (parent) makefile
 override PORTDIR = ../build/$(PORT)
@@ -41,6 +43,27 @@ COMMON_LIBC_STRUCT_RET = \
   lldiv \
   imaxdiv
 
+# common files for MCS-51
+COMMON_SDCC_MCS51 = \
+  bp \
+  bpx \
+  crtbank \
+  crtcall \
+  crtclear \
+  crtpagesfr \
+  crtstart \
+  crtxclear \
+  crtxinit \
+  crtxpop \
+  crtxpush \
+  crtxstack \
+  _decdptr \
+  gptr_cmp \
+  _gptrget \
+  _gptrgetc \
+  _gptrput \
+  spx
+
 COMMON_SDCC = \
   _divmixchar \
   _divschar \
@@ -57,33 +80,44 @@ COMMON_SDCC = \
   _divulong \
   _modslong \
   _modulong \
-  _mullong
+  _mullong \
+  __sdcc_external_startup
+
+COMMON_FLOAT_MCS51 = \
+  _fscmp \
+  fsget1arg \
+  fsget2args \
+  fsnormalize \
+  _fsreturnval \
+  _fsrshift \
+  _fsswapargs \
+  _logexpf
 
 COMMON_FLOAT = \
   atof \
-  _fs2schar \
-  _fs2sint \
-  _fs2slong \
-  _fs2slonglong \
-  _fs2uchar \
-  _fs2uint \
-  _fs2ulong \
-  _fs2ulonglong \
-  _fsadd \
-  _fsdiv \
-  _fseq \
-  _fslt \
-  _fsmul \
-  _fsneq \
-  _fssub \
-  _schar2fs \
-  _sint2fs \
-  _slong2fs \
-  _slonglong2fs \
-  _uchar2fs \
-  _uint2fs \
-  _ulong2fs \
-  _ulonglong2fs
+  __fs2schar \
+  __fs2sint \
+  __fs2slong \
+  __fs2slonglong \
+  __fs2uchar \
+  __fs2uint \
+  __fs2ulong \
+  __fs2ulonglong \
+  __fsadd \
+  __fsdiv \
+  __fseq \
+  __fslt \
+  __fsmul \
+  __fsneq \
+  __fssub \
+  __schar2fs \
+  __sint2fs \
+  __slong2fs \
+  __slonglong2fs \
+  __uchar2fs \
+  __uint2fs \
+  __ulong2fs \
+  __ulonglong2fs
 
 COMMON_LIBC = \
   abs \

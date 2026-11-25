@@ -18,7 +18,7 @@
   Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
   -------------------------------------------------------------------------*/
 
-#include "m6502.h"
+#include "subport.h"
 #include "ralloc.h"
 #include "gen.h"
 
@@ -35,7 +35,7 @@ genBuiltInFabs(const iCode *ic, int nparams, operand **pparams)
   operand *src, *result;
   int offset;
 
-  m6502_emitComment (TRACEGEN, "  %s", __func__);
+  emitComment (TRACEGEN, "  %s", __func__);
 
   src = pparams[0];
   result = IC_RESULT (ic);
@@ -69,7 +69,7 @@ genBuiltInMemset(const iCode *ic, int nparams, operand **pparams)
   bool use_dptr = false;
   //  int offset;
 
-  m6502_emitComment (TRACEGEN, "  %s - nparm:%d", __func__, nparams);
+  emitComment (TRACEGEN, "  %s - nparm:%d", __func__, nparams);
 
   dst = pparams[1]; // weird
   val = pparams[2];
@@ -102,7 +102,7 @@ genBuiltInMemset(const iCode *ic, int nparams, operand **pparams)
   else
     m6502_emitOp ("sta", INDFMT_IY, AOP(dst)->aopu.aop_dir);
 
-  m6502_emitBranch ("bne", loop_label);
+  m6502_emitBranch ("bne", loop_label, 0.8 );
 
   m6502_loadOrFreeRegTemp(m6502_reg_y, needpully);
   m6502_loadOrFreeRegTemp(m6502_reg_a, needpulla);
@@ -124,7 +124,7 @@ m6502_genBuiltIn (iCode *ic)
   iCode *bi_iCode;
   symbol *bif;
 
-  m6502_emitComment (TRACEGEN, "  %s", __func__);
+  emitComment (TRACEGEN, "  %s", __func__);
 
   /* get all the arguments for a built in function */
   //  if(!regalloc_dry_run)
@@ -145,7 +145,7 @@ m6502_genBuiltIn (iCode *ic)
     }
   else
     {
-      m6502_emitComment (ALWAYS, "ERROR: %s - unknowns builtin %s", __func__, bif->name);
+      emitComment (ALWAYS, "ERROR: %s - unknowns builtin %s", __func__, bif->name);
       //      wassertl (0, "Unknown builtin function encountered");
     }
 }

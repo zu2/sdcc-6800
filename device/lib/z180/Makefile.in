@@ -10,7 +10,6 @@ include $(srcdir)/../common_files.mk
 # user configuration
 VPATH  		= $(srcdir):$(srcdir)/../z80-common:$(std_lib_dirs)
 AS = $(top_builddir)/bin/sdasz80
-EXTRA_CFLAGS 	= --max-allocs-per-node 25000
 PORT_CRT	= crt0.rel
 LIB_TYPE	= @LIB_TYPE@
 LIB		= z180.lib
@@ -24,8 +23,7 @@ PORT_SDCC = $(COMMON_SDCC) \
   __muluint2ulong \
   __sdcc_bcall \
   __sdcc_call_hl \
-  __sdcc_call_iy \
-  _startup
+  __sdcc_call_iy
 
 PORT_FLOAT = $(COMMON_FLOAT)
 

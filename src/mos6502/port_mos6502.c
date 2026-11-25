@@ -23,16 +23,10 @@
   -------------------------------------------------------------------------*/
 
 #include "common.h"
-#include "m6502.h"
+#include "subport.h"
 #include "peep.h"
 
-static const char *const _crt[]  = { "crt0.rel", NULL };
-static const char *const _libs[] = { "mos6502",  NULL };
-
-static char _defaultRules[] =
-  {
-#include "peeph.rul"
-  };
+static const char *const _libs[] = { "libsdcc", "libsdccf", "libc", "libm", NULL };
 
 static void
 _init (void)
@@ -53,8 +47,8 @@ _get_model (void)
 static void
 _genAssemblerStart (FILE * of)
 {
-  fprintf(of, "\t.r6500\n");
   m6502_commonAssemblerStart (of);
+  fprintf(of, "\t.r6500\n\n");
 }
 
 /* Globals */
@@ -81,16 +75,16 @@ PORT mos6502_port =
       NULL                      /* If non-null will be used to execute the assembler. */
     },
     {                           /* Linker */
-      m6502_linkCmd,            /** Command to run (eg link-z80) */
-      NULL,                     /** Alternate macro based form. */
-      NULL,                     /** If non-null will be used to execute the link. */
+      m6502_linkCmd,            /* Command to run (eg link-z80) */
+      NULL,                     /* Alternate macro based form. */
+      NULL,                     /* If non-null will be used to execute the link. */
       ".rel",                   /* object file extension */
       1,                        /* need linker script */
-      _crt,                     /* crt */
+      m6502_crt,                /* crt */
       _libs                     /* libs */
     },
     {                           /* Peephole optimizer */
-      _defaultRules,
+      m6502_peepRules,
       m6502_getInstructionSize,
       NULL,
       NULL,
@@ -125,15 +119,15 @@ PORT mos6502_port =
       "XSEG",                   /* xstack_name */
       "STACK",                  /* istack_name */
       "CODE",                   /* code */
-      "ZP      (PAG)",          /* data */
+      "ZP",                     /* zero page (data) */
       NULL,                     /* idata */
       NULL,                     /* pdata */
-      "BSS",                    /* xdata */
+      "BSS",                    /* uninitialized xdata */
       NULL,                     /* xconst_name */
       NULL,                     /* bit */
       "RSEG    (ABS)",          /* reg */
       "GSINIT",                 /* static initialization */
-      "OSEG    (PAG, OVR)",     /* overlay */
+      "OSEG    (OVR)",          /* overlay */
       "GSFINAL",                /* gsfinal */
       "_CODE",                  /* home */
       "DATA",                   /* initialized xdata */
@@ -150,7 +144,10 @@ PORT mos6502_port =
       false,                    /* doesn't matter, as port has no __sfr anyway */
       1                         /* No fancy alignments supported. */
     },
-    { NULL, NULL },             /* No extra areas */
+    {                           /* No extra areas */
+      NULL, 
+      NULL 
+    },
     0,                          /* default ABI revision */
     {                           /* stack information */
       -1,                       /* stack grows down */
