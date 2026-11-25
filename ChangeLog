@@ -1,3 +1,109 @@
+2026-09-25 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/f8/gen.c:
+	  Fix an issue in f8l generation affecting a regression test on big-endian power9 host.
+
+2026-09-23 Felix Salfelder <felix AT salfelder.org>
+
+	* support/cpp:
+	  Upgrade gcc 13.4.1 -> 13.5.0
+
+2026-09-23 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdas/asf8/f8.h,
+	  sdas/asf8/f8mch.c,
+	  sdas/asf8/f8pst.c,
+	  sdas/asf8/tst8.asm:
+	  sdas f8l support.
+
+2026-09-23 Felix Salfelder <felix AT salfelder.org>
+
+	* configure:
+	  Adjust sdcpp --version output
+	* support/cpp/gcc/BASE-VER:
+	  Fix gcc version
+
+2026-09-22 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sim/ucsim/src/core/utils.src/globals.cc,
+	  sim/ucsim/src/core/utils.src/stypes.h,
+	  sim/ucsim/src/sims/f8.src/disass.cc,
+	  sim/ucsim/src/sims/f8.src/f8.cc,
+	  sim/ucsim/src/sims/f8.src/f8cl.h,
+	  sim/ucsim/src/sims/f8.src/glob.cc,
+	  sim/ucsim/src/sims/f8.src/glob.h,
+	  sim/ucsim/src/sims/f8.src/inst.cc,
+	  sim/ucsim/src/sims/f8.src/simf8.cc,
+	  src/f8/gen.c,
+	  support/regression/ports/f8/spec.mk,
+	  support/regression/ports/f8l/spec.mk:
+	  Support f8l variant of f8 in uCsim.
+	* support/regression/MakeList:
+	  Fix exclusion of __sfr tests for stm8-large target.
+
+2026-09-21 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* .version,
+	  doc/sdccman.lyx,
+	  sdas/asf8/f8.h,
+	  sdas/asf8/f8adr.c,
+	  sdas/asf8/f8mch.c,
+	  sdas/asf8/f8pst.c,
+	  sdas/asf8/st8err.asm,
+	  sdas/asf8/tst8.asm,
+	  sim/ucsim/src/sims/f8.src/decode.h,
+	  sim/ucsim/src/sims/f8.src/glob.cc,
+	  src/f8/gen.c:
+	  Switch f8(l) opcode map.
+
+2026-09-21 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/SDCCast.h,
+	* src/SDCCast.c,
+	* src/SDCCsymt.h,
+	* src/SDCCsymt.c: moved removeQualifiers() from SDCCast to SDCCsymt as
+	  it is all about sym_link
+	* device/include/stdlib.h: bugfix once_flag, cannot use bool & false
+	  without including stdbool.h
+	* device/lib/call_once.c: remove unused include stdbool.h
+	* src/SDCCsystem.c,
+	* src/SDCCutil.c: removed undef TRUE/FALSE
+	* src/SDCCsymt.h: added N_PRESREGS for number of preserved registers
+	* src/SDCCsymt.c: use N_PRESREGS,
+	  no need for dbuf2, dbuf_printf() already prints at the end
+	* src/mcs51/gen.c (genNot): always use the nosidechannels variant
+	* src/SDCCast.c,
+	* src/SDCCcflow.c,
+	* src/SDCCcse.c,
+	* src/SDCCdflow.c,
+	* src/SDCCdwarf2.c,
+	* src/SDCCgen.c,
+	* src/SDCCglue.c,
+	* src/SDCChasht.c,
+	* src/SDCChasht.h,
+	* src/SDCCicode.c,
+	* src/SDCCicode.h,
+	* src/SDCCloop.c,
+	* src/SDCClospre.hpp,
+	* src/SDCClrange.c,
+	* src/SDCCmacro.c,
+	* src/SDCCmain.c,
+	* src/SDCCmem.c,
+	* src/SDCCopt.c,
+	* src/SDCCpeeph.c,
+	* src/SDCCptropt.c,
+	* src/SDCCsymt.c,
+	* src/SDCCsymt.h,
+	* src/SDCCutil.c,
+	* src/SDCCval.c,
+	* src/cdbFile.c: made boolean functions return bool,
+	  replace all TRUE/FALSE or 1/0 by true/false
+
+2026-09-21 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/fwk/include/testfwk.h:
+	  Fix for host compilers not supporting __critical.
+
 2026-09-20 Gabriele Gorla <gorlik@yahoo.com>
 
 	* support/regression/tests/bug-3381.c:
