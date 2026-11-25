@@ -1,3 +1,160 @@
+2026-11-23 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/include/float.h,
+	  device/include/pic14/stdarg.h,
+	  device/include/pic14/stdlib.h,
+	  device/include/pic16/stdlib.h,
+	  device/include/sdcc-lib.h,
+	  device/include/setjmp.h,
+	  device/include/time.h,
+	  device/lib/_divslong.c,
+	  device/lib/pic16/Makefile.in,
+	  device/lib/pic16/isgraph.c,
+	  device/lib/rand.c,
+	  device/lib/strcat.c,
+	  device/lib/strncmp.c,
+	  device/lib/strncpy.c,
+	  device/lib/strrchr.c:
+	  Use generic lib implementation for PIC14 and PIC16.
+
+2026-11-22 Gabriele Gorla <gorlik@yahoo.com>
+
+	* configure,
+	  configure.ac,
+	  device/include/pic14/stdlib.h,
+	  device/include/pic16/ctype.h,
+	  device/include/pic16/stdio.h,
+	  device/include/pic16/stdlib.h,
+	  device/include/pic16/string.h,
+	  device/include/signal.h,
+	  device/include/stdint.h,
+	  device/include/stdio.h,
+	  device/include/string.h,
+	  device/lib/Makefile.in,
+	  device/lib/_mulint.c,
+	  device/lib/atoi.c,
+	  device/lib/atol.c,
+	  device/lib/common_files.mk,
+	  device/lib/memchr.c,
+	  device/lib/memcmp.c,
+	  device/lib/memcpy.c,
+	  device/lib/memmove.c,
+	  device/lib/pic16/Makefile.in,
+	  device/lib/strchr.c,
+	  device/lib/strcpy.c,
+	  device/lib/strcspn.c,
+	  device/lib/strlen.c,
+	  device/lib/strncat.c,
+	  device/lib/strpbrk.c,
+	  device/lib/strrchr.c,
+	  device/lib/strspn.c,
+	  device/lib/strstr.c,
+	  device/lib/strtok.c,
+	  src/pic16/main.c,
+	  support/regression/MakeList,
+	  support/regression/ports/pic16/spec.mk,
+	  device/examples/pic16,
+	  device/examples/pic16/crc16.c,
+	  device/examples/pic16/delay,
+	  device/examples/pic16/libio,
+	  device/lib/pic14/*,
+	  device/lib/pic16/*:
+	  Convert pic libraries to new build infrastructure.
+	* device/lib/pic14/regular/shadowregs.c:
+	  Add missing file.
+	* device/lib/pic16/Makefile.in:
+	  Add non-free include path.
+	* device/lib/pic14/enhanced/Makefile.in,
+	  device/lib/pic14/regular/Makefile.in:
+	  Fix makefiles for snapshot build.
+	* device/lib/memset.c,
+	  device/lib/pic16/memset.c:
+	  Fix pic16 memset.
+	* device/lib/pic16/Makefile.in:
+	  Enable long long mul/div/mod for PIC16.
+
+2026-11-22 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* support/regression/tests/bug-4171.c: disabled test for mcs51 as it
+	  has several 0xFF10 and the test decided not to choose which memory
+	  to work with
+
+2026-11-20 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (createIvalArray): Zero omitted elements
+	  of automatic arrays when the initialiser list contains
+	  designators (bug #4266).
+	* support/regression/tests/bug-4266.c: Cover gaps, out-of-order
+	  designators, inferred bounds and aggregate elements.
+
+2026-11-19 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/include/asm/pic14/features.h,
+	  device/include/pic14/stdlib.h,
+	  support/regression/ports/pic14/spec.mk,
+	  support/regression/tests/uabs.c,
+	  device/include/pic14/stdbit.h:
+	  Enable uabs and ulabs. Disable unimplemented long long in pic14 headers.
+	* device/lib/pic14/Makefile.common,
+	  device/lib/pic14/Makefile.in,
+	  device/lib/pic14/aclocal.m4,
+	  device/lib/pic14/libc/Makefile.am,
+	  device/lib/pic14/libc/Makefile.in,
+	  device/lib/pic14/libm/Makefile.in,
+	  device/lib/pic14/libsdcc/enhanced/Makefile.in,
+	  device/lib/pic14/libsdcc/enhanced-no-xinst/Makefile.in,
+	  device/lib/pic14/libsdcc/regular/Makefile.in:
+	  Add divmixchar and modmixchar to the pic14 build.
+
+2026-11-19 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* device/lib/_mullong.c:
+	  Improve 32x32->32 multiplication for targets where we have efficient 16x16->32 multiplication.
+	* device/include/string.h,
+	  device/lib/z80-common/strcmp.s,
+	  device/lib/rabbit-common/strcmp.s:
+	  Improve strcmp for some z80-related ports.
+
+2026-11-19 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* device/lib/_mulint.c,
+	  device/lib/_mullong.c:
+	  Fix missing stdbit.h include in multiplication support routines.
+
+2026-11-18 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/include/asm/pic14/features.h,
+	  device/include/pic14/stdlib.h,
+	  support/regression/ports/pic14/spec.mk,
+	  support/regression/tests/uabs.c,
+	  device/include/pic14/stdbit.h:
+	  Enable uabs and ulabs. Disable unimplemented long long in pic14 headers.
+
+2026-11-19 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* device/lib/_mullong.c:
+	  Improve 32x32->32 multiplication for targets where we have efficient 16x16->32 multiplication.
+	* device/include/string.h,
+	  device/lib/z80-common/strcmp.s,
+	  device/lib/rabbit-common/strcmp.s:
+	  Improve strcmp for some z80-related ports.
+
+2026-11-19 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* device/lib/_mulint.c,
+	  device/lib/_mullong.c:
+	  Fix missing stdbit.h include in multiplication support routines.
+
+2026-11-18 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/_mulint.c,
+	  device/lib/_mullong.c,
+	  device/lib/common_files.mk,
+	  device/lib/library_build.mk,
+	  device/lib/pic16/libsdcc/Makefile.in,
+	  device/lib/pic14/libsdcc/__fsadd.c:
+	  Correct pic library build.
+
 2026-11-17 Gabriele Gorla <gorlik@yahoo.com>
 
 	* device/lib/pic14/Makefile.common,
@@ -178,7 +335,7 @@
 	  src/pic16/gen.c,
 	  support/regression/tests/libmullong.c.in:
 	  Prepend double underscores to all sdcc helper functions with C ABI (bug #4257).
-	
+
 2026-11-16 Gabriele Gorla <gorlik@yahoo.com>
 
 	* src/SDCCgen.c,
@@ -509,7 +666,7 @@
 
 2026-11-12 Gabriele Gorla <gorlik@yahoo.com>
 
-	  device/lib/_divschar.c,
+	* device/lib/_divschar.c,
 	  device/lib/_divuchar.c,
 	  device/lib/_modschar.c,
 	  device/lib/_moduchar.c,

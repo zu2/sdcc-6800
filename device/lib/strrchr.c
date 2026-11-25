@@ -1,7 +1,7 @@
 /*-------------------------------------------------------------------------
-   _strrchr.c - part of string library functions
+   strrchr.c - part of string library functions
 
-   Copyright (C) 1999, Sandeep Dutta . sandeep.dutta@usa.net
+   Copyright (C) 1999, Sandeep Dutta <sandeep.dutta at usa.net>
 
    This library is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -36,16 +36,16 @@ char * strrchr ( const char * string, _NEAR char ch )
 char * strrchr ( const char * string, int ch )
 #endif
 {
-        const char * start = string;
+  const char * start = string;
 
-        while (*string++)                       /* find end of string */
-                ;
+  while (*string++)                       /* find end of string */
+    ;
                                                 /* search towards front */
-        while (--string != start && *string != ch)
-                ;
+  while (--string != start && *string != ch)
+    ;
 
-        if (*string == ch)                      /* char found ? */
-                return( (char *)string );
+  if (*string == ch)                      /* char found ? */
+    return( (char *)string );
 
-        return (NULL) ;
+  return NULL;
 }
