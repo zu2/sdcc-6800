@@ -1,40 +1,451 @@
+2026-11-12 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.c (prepareDeclarationSymbol),
+	  src/SDCC.y (postfix_expression): Inspect a copy of the initialiser
+	  when checking whether it is constant.
+	* src/SDCCast.c (constExprValue): Evaluate a copy of a constexpr
+	  object's initialiser. Preserve stored initialisers when decoration
+	  replaces their root, fixing bug #4228.
+	* support/valdiag/tests/bug-4228.c,
+	  support/regression/tests/bug-4228.c: Add valdiag and regression
+	  tests for generic-selection initialisers at file and block scope,
+	  including checks for representability and unselected associations.
+
+2026-11-12 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCval.h, src/SDCCval.c (checkConstexprIntegerInitialiser):
+	  Check the source expression's integer type before implicit conversion.
+	* src/SDCCast.c (createIval, gatherAutoInit): Check explicit constexpr
+	  initialisers, including automatic objects (bug #4178).
+	  (constExprValue): Copy the initialiser value before recasting it, so
+	  reading a constexpr cannot change its source initialiser's type.
+	* src/SDCCglue.c (printIvalType, printIvalBitFields): Check static
+	  scalar and aggregate members, including bit-fields.
+	* src/SDCCerr.h, src/SDCCerr.c: Add E_CONSTEXPR_INTEGER.
+	* support/valdiag/tests/bug-4178.c: Check scalar, local, aggregate,
+	  bit-field and named initialisers, preserving explicit integer casts.
+	* support/regression/tests/bug-4178.c: Check valid constexpr values.
+
+2026-11-12 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4171.c,
+	  src/z80/peeph-sm83.def:
+	  Fix bug #4171.
+
+2026-11-11 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/common_files.mk,
+	  device/lib/ds390/Makefile.in,
+	  device/lib/ds400/Makefile.in,
+	  device/lib/ez80/Makefile.in,
+	  device/lib/f8/Makefile.in,
+	  device/lib/f8l/Makefile.in,
+	  device/lib/hc08/Makefile.in,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mcs51-small-xstack-auto/Makefile.in,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos6502-stack-auto/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/mos65c02-stack-auto/Makefile.in,
+	  device/lib/pdk13/Makefile.in,
+	  device/lib/pdk14/Makefile.in,
+	  device/lib/pdk15/Makefile.in,
+	  device/lib/pdk15-stack-auto/Makefile.in,
+	  device/lib/r2k/Makefile.in,
+	  device/lib/r2ka/Makefile.in,
+	  device/lib/r3ka/Makefile.in,
+	  device/lib/r4k/Makefile.in,
+	  device/lib/r5k/Makefile.in,
+	  device/lib/r6k/Makefile.in,
+	  device/lib/r800/Makefile.in,
+	  device/lib/s08/Makefile.in,
+	  device/lib/s08-stack-auto/Makefile.in,
+	  device/lib/sm83/Makefile.in,
+	  device/lib/stm8/Makefile.in,
+	  device/lib/stm8-large/Makefile.in,
+	  device/lib/tlcs90/Makefile.in,
+	  device/lib/z180/Makefile.in,
+	  device/lib/z80/Makefile.in,
+	  device/lib/z80n/Makefile.in:
+	  Group files that are not supported by all ports.
+	* device/lib/clean.mk:
+	  Fix library clean script.
+	* device/lib/common_files.mk,
+	  device/lib/ds390/Makefile.in,
+	  device/lib/ds400/Makefile.in,
+	  device/lib/ez80/Makefile.in,
+	  device/lib/f8/Makefile.in,
+	  device/lib/f8l/Makefile.in,
+	  device/lib/hc08/Makefile.in,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mcs51-small-xstack-auto/Makefile.in,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos6502-stack-auto/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/mos65c02-stack-auto/Makefile.in,
+	  device/lib/pdk13/Makefile.in,
+	  device/lib/pdk14/Makefile.in,
+	  device/lib/pdk15/Makefile.in,
+	  device/lib/pdk15-stack-auto/Makefile.in,
+	  device/lib/r2k/Makefile.in,
+	  device/lib/r2ka/Makefile.in,
+	  device/lib/r3ka/Makefile.in,
+	  device/lib/r4k/Makefile.in,
+	  device/lib/r5k/Makefile.in,
+	  device/lib/r6k/Makefile.in,
+	  device/lib/r800/Makefile.in,
+	  device/lib/s08/Makefile.in,
+	  device/lib/s08-stack-auto/Makefile.in,
+	  device/lib/sm83/Makefile.in,
+	  device/lib/stm8/Makefile.in,
+	  device/lib/stm8-large/Makefile.in,
+	  device/lib/tlcs90/Makefile.in,
+	  device/lib/z180/Makefile.in,
+	  device/lib/z80/Makefile.in,
+	  device/lib/z80n/Makefile.in,
+	  device/lib/heap.c,
+	  device/lib/pdk-common/setjmp.s:
+	  Add __itoa, __ltoa, setjmp and heap to common_files.mk
+
+2026-11-11 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.c (compStructSize): Propagate flexible-array containment
+	  through unions. Diagnose prohibited array members of unions (bug #4197).
+	* src/SDCCsymt.h (structdef): Document the containment flag.
+	* support/valdiag/tests/bug-4197.c: Check nested unions, array types,
+	  members, anonymous aggregates and valid pointer/fixed-array controls.
+	* support/regression/tests/bug-4197.c: Check valid union objects and pointers.
+
+2026-11-11 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCC.y (checkTagKind, struct_or_union_specifier,
+	  enum_specifier): Check the shared tag namespace for conflicting
+	  structure, union and enumeration definitions in the same scope.
+	  Preserve inner-scope shadowing and matching C23 redefinitions.
+	  Avoid a second compatibility diagnostic after a tag-kind error
+	  (bug #4201).
+	* support/valdiag/tests/bug-4201.c: Cover all six pairs of tag
+	  kinds, fixed underlying enumeration types, forward declarations,
+	  shadowing and matching repeated definitions.
+
+2026-11-11 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/_divulong.c,
+	  device/lib/_modslong.c,
+	  device/lib/_modulong.c,
+	  device/lib/mcs51-small/_mulint.s,
+	  device/lib/mcs51-small/_divulong.s,
+	  device/lib/mcs51-small/_modslong.s,
+	  device/lib/mcs51-small/_modulong.s,
+	  device/lib/mcs51-small-stack-auto/_divulong.s,
+	  device/lib/mcs51-small-stack-auto/_modslong.s,
+	  device/lib/mcs51-small-stack-auto/_modulong.s:
+	  Move 8051 assembly out of common C files for divulong, modulong and modslong (RFE #327).
+
+2026-11-11 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCsymt.c (compStructSize): Reject incomplete array members
+	  of unions. Require a preceding named member for a flexible array
+	  member, excluding unnamed bit-fields but counting named members
+	  of anonymous aggregates (bug #4221).
+	* src/SDCCerr.c (E_FLEXARRAY_INEMPTYSTRCT): Describe the missing
+	  named member rather than an empty structure.
+	* support/valdiag/tests/bug-4221.c: Add invalid union and unnamed
+	  bit-field cases, valid named and anonymous members, typedefs,
+	  and controls for existing diagnostics and extensions.
+
+2026-11-11 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCmain.c (main): Exclude typedef names when completing
+	  file-scope arrays of unknown bound at the end of translation (bug #4246).
+	* support/valdiag/tests/bug-4246.c: Check incomplete-array typedefs,
+	  aliases, flexible array members, initialised objects and genuine
+	  tentative definitions.
+	* support/regression/tests/bug-4246.c: Check independent object bounds
+	  and values when reusing an incomplete-array typedef.
+
+2026-11-11 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCCast.c (decorateType): Diagnose sizeof
+	  misapplied to a function (bug #4090).
+	* src/SDCCerr.c, src/SDCCerr.h:
+	  Define new error code, E_SIZEOF_FUNCTION.
+	* support/valdiag/tests/bug-4090.c: Add tests for
+	  the constraint violation.
+
+2026-11-11 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/common_files.mk,
+	  device/lib/ds390/Makefile.in,
+	  device/lib/ds400/Makefile.in,
+	  device/lib/hc08/Makefile.in,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mcs51-small-xstack-auto/Makefile.in,
+	  device/lib/pdk13/Makefile.in,
+	  device/lib/pdk14/Makefile.in,
+	  device/lib/pdk15/Makefile.in,
+	  device/lib/pdk15-stack-auto/Makefile.in,
+	  device/lib/r2k/Makefile.in,
+	  device/lib/r2ka/Makefile.in,
+	  device/lib/r3ka/Makefile.in,
+	  device/lib/r4k/Makefile.in,
+	  device/lib/r5k/Makefile.in,
+	  device/lib/r6k/Makefile.in,
+	  device/lib/r800/Makefile.in,
+	  device/lib/s08/Makefile.in,
+	  device/lib/s08-stack-auto/Makefile.in,
+	  device/lib/stm8/Makefile.in,
+	  device/lib/stm8-large/Makefile.in,
+	  device/lib/z180/Makefile.in,
+	  device/lib/z80/Makefile.in,
+	  device/lib/z80n/Makefile.in:
+	  Move vprintf to common_files.mk
+	* device/lib/_moduint.c,
+	  device/lib/_mulint.c,
+	  device/lib/mcs51-small/_modsint.s,
+	  device/lib/ds390/_mulint.s,
+	  device/lib/mcs51-large/_mulint.s,
+	  device/lib/mcs51-small/_moduint.s,
+	  device/lib/mcs51-small/_mulint.s,
+	  device/lib/mcs51-small-stack-auto/_moduint.s,
+	  device/lib/mcs51-small-stack-auto/_mulint.s:
+	  Move 8051 assembly out of common C files for mulint, moduint and modsint (RFE #327).
+	* device/lib/mcs51-common/printf_fast.c,
+	  device/lib/mcs51-common/printf_fast_f.c,
+	  device/lib/mcs51-common/printf_tiny.s,
+	  device/lib/mcs51-common/printfl.c:
+	  Move 8051 specific files to the mcs51-common directory.
+	* device/lib/mcs51-small-xstack-auto/config.inc,
+	  device/lib/mcs51-small-xstack-auto/setjmp.c,
+	  support/regression/ports/mcs51-xstack-auto/spec.mk:
+	  Fix mcs51-small-xstack-auto regression infrastructure.
+	* device/lib/mcs51-large-stack-auto/_mulint.s:
+	  Add assembly implementation of mulint to mcs51-large-stack-auto.
+	* device/lib/s08-stack-auto/Makefile.in:
+	  Correct typo in s08-stack-auto makefile.
+
+2026-11-11 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/peeph-r2k.def,
+	  src/z80/peeph.def:
+	  Reorganise rab vs. z80 common peephole optimiser rules.
+
+2026-11-10 Christopher Bazley <chris.bazley.wg14@gmail.com>
+
+	* src/SDCC.y (postfix_expression, unary_expression):
+	  Fix inconsistent diagnostic messages when constraint
+	  on unary & operator is violated (bug #3960).
+	  A new member of struct ast records the origin of
+	  an address: DOT (from the . operator), EXPLICIT
+	  (from unary &), or INTERNAL (everything else).
+	  DOT is needed so that the result of member
+	  access inherits the non-lvalue status of the
+	  original structure expression; INTERNAL is required
+	  because a.b is represented internally as (&a)->b
+	  so not every address-of node represents use of &.
+	* src/SDCCast.c (copyAst, copyAstNode, decorateType):
+	  E_LVALUE_REQUIRED is now reported only for
+	  explicit unary &. Assignments and calls are marked
+	  as non-lvalues, and the left operand of assignment
+	  is checked before any structure-assignment rewriting.
+	* src/SDCCast.h: Add the addressOrigin member to struct
+	  ast and defined its values in an enum.
+	* support/valdiag/tests/bug-3960.c:
+	  Add new tests to verify that function calls and
+	  assignments do not produce lvalues.
+
+2026-11-10 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/tests/bug-4170.c.in,
+	  src/z80/peeph-tlcs90.def,
+	  src/z80/peeph.def:
+	  Fix bug #4170.
+	* src/z80/peep.c:
+	  z80CanAssign fixes for issues found by zlfn (https://github.com/zlfn/alive-sdcc/blob/main/FINDINGS.md).
+	* support/regression/tests/bug-4172.c,
+	  src/z80/peeph-r2k.def:
+	  Fix bug #4172.
+
+2026-11-10 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/ds390/Makefile.in,
+	  device/lib/ds400/Makefile.in,
+	  device/lib/ds390/tinibios.c,
+	  device/lib/ds400/tinibios.c:
+	  Fix ds390 regression broken by [r17163]
+	* device/lib/expf.c,
+	  device/lib/logf.c,
+	  device/lib/mcs51-huge/config.inc,
+	  device/lib/mcs51-large/config.inc,
+	  device/lib/mcs51-large-stack-auto/config.inc,
+	  device/lib/mcs51-medium/config.inc,
+	  device/lib/mcs51-small/config.inc,
+	  device/lib/mcs51-small-stack-auto/config.inc,
+	  device/lib/mcs51-small-xstack-auto/config.inc,
+	  device/lib/mcs51-common/asmfloat/_fsrshift.s,
+	  device/lib/mcs51-common/asmfloat/_logexpf.s,
+	  device/lib/mcs51-common/asmfloat/expf.s,
+	  device/lib/mcs51-common/asmfloat/logf.s:
+	  Move 8051 assembly out of common C files for logf and expf (RFE #327).
+	* device/lib/_srulonglong.c:
+	  Fix warning.
+	* device/lib/mcs51-common/asmfloat/_logexpf.s,
+	  device/lib/mcs51-common/asmfloat/expf.s,
+	  device/lib/mcs51-common/asmfloat/logf.s:
+	  Share temp between logf and expf.
+	* src/SDCCsymt.c:
+	  Enable FP functions parameter passing in ZP for mos65c02 and huc6280.
+	* support/regression/ports/pic14/spec.mk:
+	  Fix bug #4241
+
+2026-11-10 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdas/linksrc/lkmain.c:
+	  Fix a comment that had been reverted to its outdated upstream version earlier.
+
+2026-11-10 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/ds390/Makefile.in,
+	  device/lib/ds400/Makefile.in,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mcs51-small-xstack-auto/Makefile.in,
+	  device/examples,
+	  device/examples/ds390,
+	  device/examples/ds390/i2c390.c,
+	  device/examples/ds390/putchar.c,
+	  device/examples/ds390/rtc390.c,
+	  device/examples/ds390/tinibios.c,
+	  device/examples/ds400,
+	  device/examples/ds400/ds400rom.c,
+	  device/examples/ds400/tinibios.c,
+	  device/examples/mcs51,
+	  device/examples/mcs51/_autobaud.c,
+	  device/examples/mcs51/_ser.c,
+	  device/examples/mcs51/ser_ir.c,
+	  device/examples/mcs51/ser_ir_cts_rts.c,
+	  device/examples/mcs51/serial.c:
+	  Move non standard library files to devices/examples directory.
+
 2026-11-09 Gabriele Gorla <gorlik@yahoo.com>
 
-	* r2k/config.inc,
-	  r2ka/config.inc,
-	  r3ka/config.inc,
-	  r4k/config.inc,
-	  r5k/config.inc,
-	  r6k/config.inc:
+	* device/lib/r2k/config.inc,
+	  device/lib/r2ka/config.inc,
+	  device/lib/r3ka/config.inc,
+	  device/lib/r4k/config.inc,
+	  device/lib/r5k/config.inc,
+	  device/lib/r6k/config.inc:
 	  Add missing files for the rabbit-common changes.
-	* Makefile.in,
-	  clean.mk,
-	  library_build.mk,
-	  pdk13/Makefile.in,
-	  pdk14/Makefile.in,
-	  pdk15/Makefile.in,
-	  pdk15-stack-auto/Makefile.in,
-	  pdk-common,
-	  pdk-common/__gptrget.s,
-	  pdk-common/__gptrget2.s,
-	  pdk-common/__setjmp.s,
-	  pdk-common/_muluchar.s,
-	  pdk-common/heap.s,
-	  pdk13/config.inc,
-	  pdk14/config.inc,
-	  pdk15/config.inc,
-	  pdk15-stack-auto/config.inc,
-	  ports.mk:
+	* device/lib/Makefile.in,
+	  device/lib/clean.mk,
+	  device/lib/library_build.mk,
+	  device/lib/pdk13/Makefile.in,
+	  device/lib/pdk14/Makefile.in,
+	  device/lib/pdk15/Makefile.in,
+	  device/lib/pdk15-stack-auto/Makefile.in,
+	  device/lib/pdk-common,
+	  device/lib/pdk-common/__gptrget.s,
+	  device/lib/pdk-common/__gptrget2.s,
+	  device/lib/pdk-common/__setjmp.s,
+	  device/lib/pdk-common/_muluchar.s,
+	  device/lib/pdk-common/heap.s,
+	  device/lib/pdk13/config.inc,
+	  device/lib/pdk14/config.inc,
+	  device/lib/pdk15/config.inc,
+	  device/lib/pdk15-stack-auto/config.inc,
+	  device/lib/ports.mk:
 	  Move pdk common library files into pdk-common.
-	* ez80/Makefile.in,
-	  f8/Makefile.in,
-	  f8l/Makefile.in,
-	  ports.mk,
-	  tlcs90/Makefile.in,
-	  tlcs90/memmove.s,
-	  ez80/config.inc,
-	  tlcs90/config.inc:
+	* device/lib/ez80/Makefile.in,
+	  device/lib/f8/Makefile.in,
+	  device/lib/f8l/Makefile.in,
+	  device/lib/ports.mk,
+	  device/lib/tlcs90/Makefile.in,
+	  device/lib/tlcs90/memmove.s,
+	  device/lib/ez80/config.inc,
+	  device/lib/tlcs90/config.inc:
 	  Move tcls90, ez80, f8 and f8l to new library build infrastructure.
+	* device/lib/f8/Makefile.in,
+	  device/lib/f8l/Makefile.in:
+	  Correct typos in f8 Makefiles.
+	* device/lib/_fsadd.c,
+	  device/lib/_fsdiv.c,
+	  device/lib/_fsmul.c,
+	  device/lib/_fssub.c,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-huge/config.inc,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large/config.inc,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/config.inc,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-medium/config.inc,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small/config.inc,
+	  device/lib/mcs51-small-stack-auto/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/config.inc,
+	  device/lib/mcs51-small-xstack-auto/Makefile.in,
+	  device/lib/mcs51-small-xstack-auto/config.inc,
+	  device/lib/tlcs90/Makefile.in,
+	  device/lib/mcs51-common/_fsadd.s,
+	  device/lib/mcs51-common/_fsdiv.s,
+	  device/lib/mcs51-common/_fsmul.s,
+	  device/lib/mcs51-common/_fsreturnval.s,
+	  device/lib/mcs51-common/_fssub.s:
+	  Move 8051 assembly out of common C files for _fsadd, _fssub, _fsmul and _fsdiv (RFE #327).
+	* device/lib/_fseq.c,
+	  device/lib/_fslt.c,
+	  device/lib/_fsneq.c:
+	  Move 8051 assembly out of common C files for _fseq, _fsneq, and _fslt (RFE #327).
+	* device/lib/_fs2schar.c,
+	  device/lib/_fs2sint.c,
+	  device/lib/_fs2slong.c,
+	  device/lib/_fs2uchar.c,
+	  device/lib/_fs2uint.c,
+	  device/lib/_fs2ulong.c,
+	  device/lib/mcs51-common/asmfloat/_fseq.s,
+	  device/lib/mcs51-common/asmfloat/_fs2schar.s,
+	  device/lib/mcs51-common/asmfloat/_fs2sint.s,
+	  device/lib/mcs51-common/asmfloat/_fs2slong.s,
+	  device/lib/mcs51-common/asmfloat/_fs2uchar.s,
+	  device/lib/mcs51-common/asmfloat/_fs2uint.s,
+	  device/lib/mcs51-common/asmfloat/_fs2ulong.s:
+	  Move 8051 assembly out of common C files for _f2Xchar, _f2Xint, and _f2Xlong (RFE #327).
+	* device/lib/_schar2fs.c,
+	  device/lib/_sint2fs.c,
+	  device/lib/_slong2fs.c,
+	  device/lib/_srulonglong.c,
+	  device/lib/_uchar2fs.c,
+	  device/lib/_uint2fs.c,
+	  device/lib/_ulong2fs.c,
+	  device/lib/mcs51-common/asmfloat/_schar2fs.s,
+	  device/lib/mcs51-common/asmfloat/_sint2fs.s,
+	  device/lib/mcs51-common/asmfloat/_slong2fs.s,
+	  device/lib/mcs51-common/asmfloat/_uchar2fs.s,
+	  device/lib/mcs51-common/asmfloat/_uint2fs.s,
+	  device/lib/mcs51-common/asmfloat/_ulong2fs.s:
+	  Move 8051 assembly out of common C files for _Xchar2fs, _Xint2fs, and _Xlong2fs (RFE #327).
 
 2026-11-08 Gabriele Gorla <gorlik@yahoo.com>
 
@@ -275,21 +686,21 @@
 	  device/lib/strspn.c,
 	  device/lib/strstr.c:
 	  Rename atof, memchr, memcmp, memmove, memset and all string functions.
-	* Makefile.in,
-	  _divsint.c,
-	  _divslong.c,
-	  _divuint.c,
-	  memset.c,
-	  mcs51-large/memset.c,
-	  mcs51-small/_divsint.c,
-	  mcs51-small/_divslong.c,
-	  mcs51-small/_divuint.c,
-	  mcs51-small/memset.c,
-	  mcs51-small-stack-auto/_divsint.c,
-	  mcs51-small-stack-auto/_divslong.c,
-	  mcs51-small-stack-auto/_divuint.c,
-	  sm83/memset.c,
-	  z80-common/memset.c:
+	* device/lib/Makefile.in,
+	  device/lib/_divsint.c,
+	  device/lib/_divslong.c,
+	  device/lib/_divuint.c,
+	  device/lib/memset.c,
+	  device/lib/mcs51-large/memset.c,
+	  device/lib/mcs51-small/_divsint.c,
+	  device/lib/mcs51-small/_divslong.c,
+	  device/lib/mcs51-small/_divuint.c,
+	  device/lib/mcs51-small/memset.c,
+	  device/lib/mcs51-small-stack-auto/_divsint.c,
+	  device/lib/mcs51-small-stack-auto/_divslong.c,
+	  device/lib/mcs51-small-stack-auto/_divuint.c,
+	  device/lib/sm83/memset.c,
+	  device/lib/z80-common/memset.c:
 	  Move assembly to port specific directories for memset, divsint, divuint, divslong.
 
 2026-11-03 Philipp Klaus Krause <philipp@colecovision.eu>
@@ -348,93 +759,93 @@
 	  device/lib/mcs51-small-xstack-auto,
 	  device/lib/mcs51-small-xstack-auto/Makefile.in:
 	  Merge mcs51 libraries into single file. First step of RFE #327
-	* mos6502/Makefile.in,
-	  r800/Makefile.in,
-	  z180/Makefile.in,
-	  z80/Makefile.in,
-	  z80n/Makefile.in,
-	  r800/config.inc,
-	  z180/config.inc,
-	  z80/config.inc,
-	  z80n/config.inc,
-	  z80-common,
-	  z80-common/README,
-	  z80-common/__itoa.s,
-	  z80-common/__ltoa.s,
-	  z80-common/__sdcc_bcall.s,
-	  z80-common/__sdcc_call_hl.s,
-	  z80-common/__sdcc_call_iy.s,
-	  z80-common/__strreverse.s,
-	  z80-common/__uitobcd.s,
-	  z80-common/__ultobcd.s,
-	  z80-common/abs.s,
-	  z80-common/atomic_flag_test_and_set.s,
-	  z80-common/crtenter.s,
-	  z80-common/divmixed.s,
-	  z80-common/divsigned.s,
-	  z80-common/divunsigned.s,
-	  z80-common/heap.s,
-	  z80-common/memcpy.s,
-	  z80-common/memmove.s,
-	  z80-common/modmixed.s,
-	  z80-common/modsigned.s,
-	  z80-common/modunsigned.s,
-	  z80-common/setjmp.s,
-	  z80-common/strcpy.s,
-	  z80-common/strlen.s:
+	* device/lib/mos6502/Makefile.in,
+	  device/lib/r800/Makefile.in,
+	  device/lib/z180/Makefile.in,
+	  device/lib/z80/Makefile.in,
+	  device/lib/z80n/Makefile.in,
+	  device/lib/r800/config.inc,
+	  device/lib/z180/config.inc,
+	  device/lib/z80/config.inc,
+	  device/lib/z80n/config.inc,
+	  device/lib/z80-common,
+	  device/lib/z80-common/README,
+	  device/lib/z80-common/__itoa.s,
+	  device/lib/z80-common/__ltoa.s,
+	  device/lib/z80-common/__sdcc_bcall.s,
+	  device/lib/z80-common/__sdcc_call_hl.s,
+	  device/lib/z80-common/__sdcc_call_iy.s,
+	  device/lib/z80-common/__strreverse.s,
+	  device/lib/z80-common/__uitobcd.s,
+	  device/lib/z80-common/__ultobcd.s,
+	  device/lib/z80-common/abs.s,
+	  device/lib/z80-common/atomic_flag_test_and_set.s,
+	  device/lib/z80-common/crtenter.s,
+	  device/lib/z80-common/divmixed.s,
+	  device/lib/z80-common/divsigned.s,
+	  device/lib/z80-common/divunsigned.s,
+	  device/lib/z80-common/heap.s,
+	  device/lib/z80-common/memcpy.s,
+	  device/lib/z80-common/memmove.s,
+	  device/lib/z80-common/modmixed.s,
+	  device/lib/z80-common/modsigned.s,
+	  device/lib/z80-common/modunsigned.s,
+	  device/lib/z80-common/setjmp.s,
+	  device/lib/z80-common/strcpy.s,
+	  device/lib/z80-common/strlen.s:
 	  Move all z80 common library files into z80-common. Step 2 of RFE #327
-	* mcs51-common/_autobaud.c,
-	  mcs51-common/_bp.c,
-	  mcs51-common/_bpx.c,
-	  mcs51-common/_decdptr.c,
-	  mcs51-common/_gptrget.c,
-	  mcs51-common/_gptrgetc.c,
-	  mcs51-common/_gptrput.c,
-	  mcs51-common/_ser.c,
-	  mcs51-common/_spx.c,
-	  mcs51-common/serial.c,
-	  mcs51-huge/Makefile.in,
-	  mcs51-large/Makefile.in,
-	  mcs51-large-stack-auto/Makefile.in,
-	  mcs51-medium/Makefile.in,
-	  mcs51-small/Makefile.in,
-	  mcs51-small-stack-auto/Makefile.in:
+	* device/lib/mcs51-common/_autobaud.c,
+	  device/lib/mcs51-common/_bp.c,
+	  device/lib/mcs51-common/_bpx.c,
+	  device/lib/mcs51-common/_decdptr.c,
+	  device/lib/mcs51-common/_gptrget.c,
+	  device/lib/mcs51-common/_gptrgetc.c,
+	  device/lib/mcs51-common/_gptrput.c,
+	  device/lib/mcs51-common/_ser.c,
+	  device/lib/mcs51-common/_spx.c,
+	  device/lib/mcs51-common/serial.c,
+	  device/lib/mcs51-huge/Makefile.in,
+	  device/lib/mcs51-large/Makefile.in,
+	  device/lib/mcs51-large-stack-auto/Makefile.in,
+	  device/lib/mcs51-medium/Makefile.in,
+	  device/lib/mcs51-small/Makefile.in,
+	  device/lib/mcs51-small-stack-auto/Makefile.in:
 	  Move more files to mcs51-common.
-	* Makefile.in,
-	  _modsint.c,
-	  abs.c,
-	  labs.c,
-	  strlen.c,
-	  mcs51-common/abs.s,
-	  mcs51-common/labs.s,
-	  mcs51-common/strlen.s,
-	  mcs51-small/_modsint.s,
-	  mcs51-small-stack-auto/_modsint.s,
-	  mcs51-huge/config.inc,
-	  mcs51-large/config.inc,
-	  mcs51-large-stack-auto/config.inc,
-	  mcs51-medium/config.inc,
-	  mcs51-small/config.inc,
-	  mcs51-small-stack-auto/config.inc,
-	  mcs51-small-xstack-auto/config.inc:
+	* device/lib/Makefile.in,
+	  device/lib/_modsint.c,
+	  device/lib/abs.c,
+	  device/lib/labs.c,
+	  device/lib/strlen.c,
+	  device/lib/mcs51-common/abs.s,
+	  device/lib/mcs51-common/labs.s,
+	  device/lib/mcs51-common/strlen.s,
+	  device/lib/mcs51-small/_modsint.s,
+	  device/lib/mcs51-small-stack-auto/_modsint.s,
+	  device/lib/mcs51-huge/config.inc,
+	  device/lib/mcs51-large/config.inc,
+	  device/lib/mcs51-large-stack-auto/config.inc,
+	  device/lib/mcs51-medium/config.inc,
+	  device/lib/mcs51-small/config.inc,
+	  device/lib/mcs51-small-stack-auto/config.inc,
+	  device/lib/mcs51-small-xstack-auto/config.inc:
 	  Remove inline assembly from abs, labs, strlen and _modsint.
-	* ds390/Makefile.in,
-	  ds400/Makefile.in,
-	  hc08/Makefile.in,
-	  huc6280/Makefile.in,
-	  mos6502/Makefile.in,
-	  mos6502-stack-auto/Makefile.in,
-	  mos65c02/Makefile.in,
-	  mos65c02-stack-auto/Makefile.in,
-	  s08/Makefile.in,
-	  s08-stack-auto/Makefile.in,
-	  hc08/setjmp.c,
-	  mcs51-common/setjmp.c,
-	  mos-common/setjmp.s,
-	  mos6502-stack-auto/setjmp.s,
-	  mos65c02-stack-auto/setjmp.s,
-	  s08/setjmp.c,
-	  s08-stack-auto/setjmp.c:
+	* device/lib/ds390/Makefile.in,
+	  device/lib/ds400/Makefile.in,
+	  device/lib/hc08/Makefile.in,
+	  device/lib/huc6280/Makefile.in,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos6502-stack-auto/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  device/lib/mos65c02-stack-auto/Makefile.in,
+	  device/lib/s08/Makefile.in,
+	  device/lib/s08-stack-auto/Makefile.in,
+	  device/lib/hc08/setjmp.c,
+	  device/lib/mcs51-common/setjmp.c,
+	  device/lib/mos-common/setjmp.s,
+	  device/lib/mos6502-stack-auto/setjmp.s,
+	  device/lib/mos65c02-stack-auto/setjmp.s,
+	  device/lib/s08/setjmp.c,
+	  device/lib/s08-stack-auto/setjmp.c:
 	  Cleanup setjmp naming across ports.
 
 2026-11-02 Christopher Bazley <chris.bazley.wg14@gmail.com>

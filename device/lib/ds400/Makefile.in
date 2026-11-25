@@ -17,53 +17,34 @@ LIB		= ds400.lib
 
 
 PORT_SDCC = $(COMMON_SDCC) \
+  $(COMMON_SDCC_LL) \
+  $(COMMON_SDCC_LL_SHIFT) \
+  bp \
+  bpx \
+  _decdptr \
   _divsint \
   _divuint \
+  gptr_cmp \
+  _gptrget \
+  _gptrgetc \
+  _gptrput \
   _modsint \
   _moduint \
   _mulint \
-  _srulonglong \
-  _srslonglong \
-  _slulonglong \
-  _slslonglong \
-  _mullonglong \
-  _divslonglong \
-  _divulonglong \
-  _modslonglong \
-  _modulonglong \
-  gptr_cmp
+  _spx \
+  _startup
 
 PORT_FLOAT = $(COMMON_FLOAT)
 
 PORT_LIBC = $(COMMON_LIBC) \
-  _autobaud \
-  bp \
-  bpx \
-  _decdptr \
-  _gptrget \
-  _gptrgetc \
-  _gptrput \
-  _ser \
-  setjmp \
-  serial \
-  __itoa \
-  __ltoa \
+  $(COMMON_LIBC_STRUCT_RET) \
   __memcpy \
-  _heap \
-  _spx \
-  _startup \
-  div \
-  ldiv \
-  lldiv \
-  imaxdiv \
-  vprintf \
   printf_fast \
   printf_fast_f \
-  printf_tiny \
   printfl \
-  tinibios \
+  printf_tiny \
   memcpyx \
-  ds400rom
+  tinibios
 
 PORT_LIBM = $(COMMON_LIBM)
 

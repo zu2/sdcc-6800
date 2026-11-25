@@ -441,7 +441,7 @@ struct
   { E_FLEXARRAY_NOTATEND, ERROR_LEVEL_ERROR,
      "flexible array member '%s' not at end of struct", 0 },
   { E_FLEXARRAY_INEMPTYSTRCT, ERROR_LEVEL_ERROR,
-     "flexible array '%s' in otherwise empty struct", 0 },
+     "flexible array member '%s' in struct with no other named member", 0 },
   { W_EMPTY_TRANSLATION_UNIT, ERROR_LEVEL_PEDANTIC,
      "ISO C forbids an empty translation unit", 0 },
   { W_BAD_PRAGMA_ARGUMENTS, ERROR_LEVEL_WARNING,
@@ -815,6 +815,10 @@ struct
      "operand of cast to non-void type must be scalar", 0},
   {E_ENUM_REDECL, ERROR_LEVEL_ERROR,
      "enumeration %s redeclared with incompatible underlying type or fixedness", 0},
+  {E_SIZEOF_FUNCTION, ERROR_LEVEL_ERROR,
+     "sizeof applied to a function type", 0 },
+  {E_CONSTEXPR_INTEGER, ERROR_LEVEL_ERROR,
+     "initialiser for constexpr integer object is not an integer constant expression", 0},
 };
 
 /* -------------------------------------------------------------------------------

@@ -17,6 +17,7 @@ LIB		= mos65c02.lib
 
 
 PORT_SDCC = $(COMMON_SDCC) \
+  $(COMMON_SDCC_LL) \
   _divschar \
   _divsint \
   _divuchar \
@@ -28,28 +29,18 @@ PORT_SDCC = $(COMMON_SDCC) \
   _mulint \
   _muluchar \
   _mulschar \
-  _mullonglong \
-  _divslonglong \
-  _divulonglong \
-  _modslonglong \
-  _modulonglong \
   __sdcc_regs \
-  __sdcc_indirect_jsr
+  __sdcc_indirect_jsr \
+  _startup
 
 PORT_FLOAT = $(COMMON_FLOAT)
 
 PORT_LIBC = $(COMMON_LIBC) \
-  __itoa \
-  __ltoa \
-  __memcpy \
-  _heap \
-  _startup \
-  setjmp \
-  div \
-  ldiv \
-  vprintf \
   atomic_flag_clear \
-  atomic_flag_test_and_set
+  atomic_flag_test_and_set \
+  __memcpy \
+  div \
+  ldiv
 
 PORT_LIBM = $(COMMON_LIBM)
 

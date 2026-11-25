@@ -11,42 +11,30 @@ include $(srcdir)/../common_files.mk
 VPATH  		= $(std_lib_dirs)
 AS		= $(top_builddir)/bin/sdas6808
 EXTRA_CFLAGS	= --max-allocs-per-node 25000
-PORT_CRT	= 
+PORT_CRT	=
 LIB_TYPE	= @LIB_TYPE@
 LIB 		= s08.lib
 
 
 PORT_SDCC = $(COMMON_SDCC) \
+  $(COMMON_SDCC_LL) \
+  $(COMMON_SDCC_LL_SHIFT) \
   _mulint \
   _divsint \
   _divuint \
   _modsint \
   _moduint \
-  _srulonglong \
-  _srslonglong \
-  _slulonglong \
-  _slslonglong \
-  _mullonglong \
-  _divslonglong \
-  _divulonglong \
-  _modslonglong \
-  _modulonglong \
-  _ret
+  _ret \
+  _startup
 
 PORT_FLOAT = $(COMMON_FLOAT)
 
 PORT_LIBC = $(COMMON_LIBC) \
-  __itoa \
-  __ltoa \
-  __memcpy \
-  _heap \
-  _startup \
-  setjmp \
-  div \
-  ldiv \
-  vprintf \
   atomic_flag_clear \
-  atomic_flag_test_and_set
+  atomic_flag_test_and_set \
+  __memcpy \
+  div \
+  ldiv
 
 PORT_LIBM = $(COMMON_LIBM)
 

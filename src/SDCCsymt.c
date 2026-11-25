@@ -1862,6 +1862,7 @@ compStructSize (structdef * sdef)
 {
   int sum = 0, usum = 0;
   int bitOffset = 0;
+  bool hasNamedMember = false;
   symbol *loop;
   const int oldlineno = lineno;
 
@@ -1998,6 +1999,20 @@ compStructSize (structdef * sdef)
           checkDecl (loop, 1);
           sum += getSize (loop->type);
 
+          /* A union containing a flexible-array structure inherits its
+             restrictions on use as a structure member or array element. */
+          if (sdef->type == UNION && IS_STRUCT (loop->type) &&
+              SPEC_STRUCT (loop->type)->b_flexArrayMember)
+            sdef->b_flexArrayMember = true;
+
+          /* Array members of unions have the same element-type restriction
+             as other arrays. Direct flexible array members are separate. */
+          if (sdef->type == UNION)
+            for (sym_link *type = loop->type; type && type->next; type = type->next)
+              if (IS_ARRAY (type) && IS_STRUCT (type->next) &&
+                  SPEC_STRUCT (type->next)->b_flexArrayMember)
+                werror (W_INVALID_FLEXARRAY);
+
           /* search for "flexible array members" */
           /* and do some syntax checks */
           if (sdef->type == STRUCT)
@@ -2010,8 +2025,8 @@ compStructSize (structdef * sdef)
                   /* is another struct-member following? */
                   if (loop->next)
                     werror (E_FLEXARRAY_NOTATEND, loop->name);
-                  /* is it the first struct-member? */
-                  else if (loop == sdef->fields)
+                  /* Unnamed bit-fields do not supply another named member. */
+                  else if (!hasNamedMember)
                     werror (E_FLEXARRAY_INEMPTYSTRCT, loop->name);
                 }
               else if (ret == INCOMPLETE)
@@ -2019,6 +2034,19 @@ compStructSize (structdef * sdef)
                   werror (E_INCOMPLETE_FIELD, loop->name);
                 }
             }
+          else if (IS_ARRAY (loop->type) &&
+                   DCL_ARRAY_LENGTH_TYPE (loop->type) == ARRAY_LENGTH_UNKNOWN)
+            werror (E_INCOMPLETE_FIELD, loop->name);
+        }
+
+      if (!loop->bitUnnamed && *loop->name)
+        hasNamedMember = true;
+      else if (!*loop->name && IS_STRUCT (loop->type))
+        {
+          /* Promoted members of an anonymous aggregate count as members. */
+          for (symbol *field = SPEC_STRUCT (loop->type)->fields; field; field = field->next)
+            if (!field->bitUnnamed && *field->name)
+              hasNamedMember = true;
         }
 
       loop = loop->next;
@@ -5363,7 +5391,7 @@ initCSupport (void)
   floatTypeNear = newFloatLink ();
   floatTypeNear->select.s.sclass=S_DATA;
 
-  if(!(TARGET_IS_MOS6502 && !options.stackAuto))
+  if(!(TARGET_MOS6502_LIKE && !options.stackAuto))
     {
       floatTypeNear=floatType;
     }
@@ -6138,8 +6166,8 @@ prepareDeclarationSymbol (attribute *attr, sym_link *declSpecs, symbol *initDecl
       for (l0 = sym->type; l0 != NULL; l0 = l0->next)
         if (IS_PTR (l0))
           break;
-      /* perform sanity checks concerning constexpr initialization */
-      if (IS_CONSTEXPR (declSpecs) && (sym->ival == NULL || !constExprTree (list2expr (sym->ival))))
+      /* Inspect a copy: decoration may replace the initialiser root. */
+      if (IS_CONSTEXPR (declSpecs) && (sym->ival == NULL || !constExprTree (copyAst (list2expr (sym->ival)))))
         {
           /* constexpr must be initialized with a constant expression (duh!) */
           werror (sym->ival ? E_CONST_EXPECTED : E_CONSTEXPR_WITHOUT_INIT);

@@ -71,6 +71,8 @@ STACK_DCL(blockNum,int,MAX_NEST_LEVEL*3)
 value *cenum = NULL;        /* current enumeration  type chain*/
 bool uselessDecl = true;
 
+static void checkTagKind (symbol *tag, int kind);
+
 #define YYDEBUG 1
 
 %}
@@ -223,10 +225,13 @@ postfix_expression
           }
    | postfix_expression '.' { ignoreTypedefType = 1; } identifier
                       {
+                        ast *address;
                         ignoreTypedefType = 0;
                         $4 = newSymbol($4->name,NestLevel);
                         $4->implicit = 1;
-                        $$ = newNode(PTR_OP,newNode('&',$1,NULL),newAst_VALUE(symbolVal($4)));
+                        address = newNode('&',$1,NULL);
+                        address->addressOrigin = ADDRESS_DOT;
+                        $$ = newNode(PTR_OP,address,newAst_VALUE(symbolVal($4)));
                       }
    | postfix_expression PTR_OP { ignoreTypedefType = 1; } identifier
                       {
@@ -259,7 +264,8 @@ postfix_expression
                            6.7.2p6), while a compound literal without a storage class has the
                            type written in it and nothing more (C11 6.5.2.5p4). */
                         sym1->etype = getSpec(sym1->type);
-                        if (constExprTree(list2expr(sym1->ival)))
+                        /* Preserve the initialiser when decoration replaces its root. */
+                        if (constExprTree(copyAst(list2expr(sym1->ival))))
                           {
                             SPEC_CONSTEXPR(sym1->etype) = 1;
                             SPEC_IMPLICIT_CONSTEXPR(sym1->etype) = 1;
@@ -332,7 +338,11 @@ unary_expression
          else if ($1 == '*' && IS_AST_OP ($2) && $2->opval.op == '&' && $2->right == NULL)
            $$ = $2->left;
          else
-           $$ = newNode ($1, $2, NULL);
+           {
+             $$ = newNode ($1, $2, NULL);
+             if ($1 == '&')
+               $$->addressOrigin = ADDRESS_EXPLICIT;
+           }
        }
    | SIZEOF unary_expression        { $$ = newNode (SIZEOF, NULL, $2); }
    | SIZEOF '(' type_name ')'       { $$ = newAst_VALUE (sizeofOp ($3)); }
@@ -849,6 +859,9 @@ struct_or_union_specifier
         {
           structdef *sdef;
 
+          if ($3->tagsym)
+            checkTagKind ($3->tagsym, $1);
+
           if (!$3->tagsym)
             {
               /* no tag given, so new struct def for current scope */
@@ -893,11 +906,6 @@ struct_or_union_specifier
           if (!$3->type)
             {
               $3->type = $1;
-            }
-          else
-            {
-              if ($3->type != $1)
-                  werror(E_BAD_TAG, $3->tag, $1==STRUCT ? "struct" : "union");
             }
           $3->being_defined = true;
         }
@@ -956,7 +964,7 @@ struct_or_union_specifier
                   else if (compareTypeExact (fieldsym1->type, fieldsym2->type, -1, true) <= 0)
                     compatible = false;
                }
-              if (!compatible)
+              if (!compatible && sdef->type == $1)
                 {
                   werror(E_STRUCT_REDEF_INCOMPATIBLE, $3->tag);
                   werrorfl(sdef->tagsym->fileDef, sdef->tagsym->lineDef, E_PREVIOUS_DEF);
@@ -1128,6 +1136,7 @@ enum_specifier
           symbol *csym;
           sym_link *enumtype;
 
+          checkTagKind ($2, ENUM);
           enumtype = newEnumType ($4, NULL);
           SPEC_SCLS(getSpec(enumtype)) = 0;
           $2->type = enumtype;
@@ -1155,6 +1164,7 @@ enum_specifier
           symbol *csym;
           sym_link *enumtype;
 
+          checkTagKind ($2, ENUM);
           enumtype = newEnumType ($5, $3);
           SPEC_SCLS(getSpec(enumtype)) = 0;
           $2->type = enumtype;
@@ -3386,3 +3396,16 @@ identifier
    : IDENTIFIER   { $$ = newSymbol ($1, NestLevel); }
    ;
 %%
+
+/* Definitions may shadow outer tags, but all three tag kinds share a scope. */
+static void
+checkTagKind (symbol *tag, int kind)
+{
+  structdef *sdef = findSymWithBlock (StructTab, tag, currBlockno, NestLevel);
+  symbol *edef = findSymWithLevel (enumTab, tag);
+
+  if (sdef && sdef->block == currBlockno && sdef->type != kind ||
+      edef && edef->block == currBlockno && kind != ENUM)
+    werrorfl (tag->fileDef, tag->lineDef, E_BAD_TAG, tag->name,
+              kind == STRUCT ? "struct" : kind == UNION ? "union" : "enum");
+}

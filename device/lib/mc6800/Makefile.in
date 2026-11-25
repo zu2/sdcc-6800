@@ -20,32 +20,23 @@ LIB_TYPE = @LIB_TYPE@
 override LIB_TYPE := $(LIB_TYPE)
 
 PORT_SDCC = $(filter-out _divslong _divulong _modslong _modulong,$(COMMON_SDCC)) \
+  $(COMMON_SDCC_LL) \
+  $(COMMON_SDCC_LL_SHIFT) \
   __sdcc_regs \
   _divmodchar \
   _divmodint \
   _divmodlong \
-  _divslonglong \
-  _divulonglong \
-  _modslonglong \
-  _modulonglong \
   _mulint \
-  _mullonglong \
   _mulschar \
   _muluchar \
   _ret \
-  _slslonglong \
-  _slulonglong \
-  _srslonglong \
-  _srulonglong \
   _startup
 
 PORT_FLOAT = $(COMMON_FLOAT)
 
 PORT_LIBC = $(filter-out memchr memcmp memmove memset strcat strchr strcmp strcpy \
-  strlen strncat strncmp strncpy strrchr strstr strtok,$(COMMON_LIBC)) \
-  __itoa \
-  __ltoa \
-  _heap \
+  strlen strncat strncmp strncpy strrchr strstr strtok setjmp,$(COMMON_LIBC)) \
+  $(COMMON_LIBC_STRUCT_RET) \
   _mc6800_memchr \
   _mc6800_memcmp \
   _mc6800_memcpy \
@@ -64,12 +55,7 @@ PORT_LIBC = $(filter-out memchr memcmp memmove memset strcat strchr strcmp strcp
   _mc6800_strtok \
   _setjmp \
   atomic_flag_clear \
-  atomic_flag_test_and_set \
-  div \
-  imaxdiv \
-  ldiv \
-  lldiv \
-  vprintf
+  atomic_flag_test_and_set
 
 PORT_LIBM = $(COMMON_LIBM)
 

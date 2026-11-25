@@ -68,6 +68,7 @@ static struct
 
 int noLineno = 0;
 int noAlloc = 0;
+static int inSizeof = 0;
 symbol *currFunc = NULL;
 static ast *createIval (ast *, sym_link *, initList *, ast *, ast *, int);
 static ast *createIvalCharPtr (ast *, sym_link *, ast *, ast *);
@@ -256,6 +257,7 @@ copyAst (ast * src)
   dest->reversed = src->reversed;
   dest->inlined = src->inlined;
   dest->initMode = src->initMode;
+  dest->addressOrigin = src->addressOrigin;
 
   if (src->ftype)
     dest->etype = getSpec (dest->ftype = copyLinkChain (src->ftype));
@@ -1793,6 +1795,10 @@ createIval (ast * sym, sym_link * type, initList * ilist, ast * wid, ast * rootV
   if (!ilist && (!AST_SYMBOL (rootValue)->islocal || (omitStatic && SPEC_STAT (getSpec (type)))))
     return NULL;
 
+  if (IS_CONSTEXPR (AST_SYMBOL (rootValue)->etype) &&
+      !SPEC_IMPLICIT_CONSTEXPR (AST_SYMBOL (rootValue)->etype))
+    checkConstexprIntegerInitialiser (type, ilist);
+
   /* if structure then    */
   if (IS_STRUCT (type))
     rast = createIvalStruct (sym, type, ilist, rootValue);
@@ -1852,6 +1858,8 @@ gatherAutoInit (symbol * autoChain, ast * block, int *stack)
 
       /* resolve the symbols in the ival */
       resolveIvalSym (sym->ival, sym->type);
+      if (IS_CONSTEXPR (sym->etype) && !SPEC_IMPLICIT_CONSTEXPR (sym->etype))
+        checkConstexprIntegerInitialiser (sym->type, sym->ival);
 
 #if 1
       /* if we are PIC14 or PIC16 port,
@@ -2226,8 +2234,9 @@ constExprValue (ast * cexpr, int check)
       /* if this is a C23 constexpr, use its value */
       if (IS_CONSTEXPR (cexpr->ftype))
         {
-          value *ivalAsVal = list2val (AST_SYMBOL (cexpr)->ival, check);
-          value *val = valRecastLitVal (cexpr->etype, ivalAsVal);
+          /* Evaluation may replace the initialiser root (e.g. _Generic). */
+          value *ivalAsVal = list2val (copyIlist (AST_SYMBOL (cexpr)->ival), check);
+          value *val = valRecastLitVal (cexpr->etype, copyValue (ivalAsVal));
           // TODO: find a way to properly check for loss of range or precisioin
           // /* initializer must not exceed target type's range or precision */
           // if (check && isEqualVal (valCompare (val, ivalAsVal, 0, true), 0))
@@ -3530,6 +3539,7 @@ copyAstNode (ast *tree)
   newtree->funcName = tree->funcName;
   newtree->reversed = tree->reversed;
   newtree->decorated = tree->decorated;
+  newtree->addressOrigin = tree->addressOrigin;
 
   if (tree->ftype)
     newtree->etype = getSpec (newtree->ftype = copyLinkChain (tree->ftype));
@@ -4062,6 +4072,14 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
         dtr = tree->right;
         break;
       case SIZEOF:
+        ++inSizeof;
+        ++noAlloc;
+        resultTypeProp = RESULT_TYPE_OTHER;
+        reduceTypeAllowed = false;
+        dtr = decorateType (tree->right, resultTypeProp, reduceTypeAllowed);
+        --noAlloc;
+        --inSizeof;
+        break;
       case COUNTOF:
       case TYPEOF:
       case TYPEOF_UNQUAL:
@@ -4233,6 +4251,9 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
         }
 #endif
 
+      if (IS_ADDRESS_OF_OP (tree->left) && tree->left->addressOrigin == ADDRESS_DOT)
+        TRVAL (tree) = LRVAL (tree->left);
+
       return tree;
 
       /*------------------------------------------------------------------*/
@@ -4362,7 +4383,7 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
       /*----------------------------*/
       /*  address of                */
       /*----------------------------*/
-      if (IS_FUNC (LTYPE (tree)))
+      if (IS_FUNC (LTYPE (tree)) && !inSizeof)
         {
           // this ought to be ignored
           return (tree->left);
@@ -4380,7 +4401,7 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
           werror (E_SFR_POINTER);
         }
 
-      if (LRVAL (tree))
+      if (LRVAL (tree) && tree->addressOrigin == ADDRESS_EXPLICIT)
         {
           werrorfl (tree->filename, tree->lineno, E_LVALUE_REQUIRED, "address of");
           goto errorTreeReturn;
@@ -5916,7 +5937,9 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
 
         dbuf_init (&dbuf, 128);
         dbuf_printf (&dbuf, "%d", size);
-        if (!size && !IS_VOID (tree->right->ftype))
+        if (IS_FUNC (tree->right->ftype))
+          werrorfl (tree->filename, tree->lineno, E_SIZEOF_FUNCTION);
+        else if (!size && !IS_VOID (tree->right->ftype))
           werrorfl (tree->filename, tree->lineno, E_SIZEOF_INCOMPLETE_TYPE);
         if (IS_BITFIELD (tree->right->ftype))
           werror (E_SIZEOF_BITFLD);
@@ -6359,19 +6382,27 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
           printFromToType (RTYPE (tree), LTYPE (tree));
         }
 
+      if (LRVAL (tree))
+        {
+          werrorfl (tree->filename, tree->lineno, E_LVALUE_REQUIRED, "=");
+          goto errorTreeReturn;
+        }
+
       TETYPE (tree) = getSpec (TTYPE (tree) = LTYPE (tree));
       if (!tree->initMode && IS_STRUCT (LTYPE (tree)) && hasConstMember (LTYPE (tree)))
         {
           werrorfl (tree->filename, tree->lineno, E_CODE_WRITE, "=");
           goto errorTreeReturn;
         }
+
       if (IS_STRUCT (LTYPE (tree)))
         tree = rewriteStructAssignment (tree);
       else
         {
-          TRVAL(tree) = RRVAL (tree) = 1;
+          RRVAL (tree) = 1;
           LLVAL (tree) = 1;
         }
+      TRVAL (tree) = 1;
       if (!tree->initMode)
         {
           if (IS_CONSTANT (LTYPE (tree)))
@@ -6379,12 +6410,6 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
         }
       if (tree->initMode && SPEC_STAT (getSpec (LTYPE (tree))) && !constExprTree (tree->right))
         werrorfl (tree->filename, tree->lineno, E_CONST_EXPECTED, "=");
-      if (TRVAL(tree) = LRVAL (tree))
-        {
-          werrorfl (tree->filename, tree->lineno, E_LVALUE_REQUIRED, "=");
-          goto errorTreeReturn;
-        }
-
       if (IS_PTR (LTYPE (tree)) && !isConst (LTYPE (tree)->next) && IS_AST_SYM_VALUE (tree->right) && AST_SYMBOL (tree->right)->isstrlit)
         werrorfl (tree->filename, tree->lineno, W_NONCONST_STRINGLIT);
 
@@ -6472,6 +6497,7 @@ decorateType (ast *tree, RESULT_TYPE resultType, bool reduceTypeAllowed)
           TETYPE (tree) = getSpec (TTYPE (tree));
           SPEC_SCLS (TETYPE (tree)) = S_FIXED;
         }
+      TRVAL (tree) = 1;
       return tree;
 
       /*------------------------------------------------------------------*/
@@ -6649,7 +6675,9 @@ sizeofOp (sym_link *type)
   /* get the size and convert it to character  */
   dbuf_init (&dbuf, 128);
   dbuf_printf (&dbuf, "%d", size = getSize (type));
-  if (!size && !IS_VOID (type))
+  if (IS_FUNC (type))
+    werror (E_SIZEOF_FUNCTION);
+  else if (!size && !IS_VOID (type))
     werror (E_SIZEOF_INCOMPLETE_TYPE);
   if (IS_BITFIELD (type))
     werror (E_SIZEOF_BITFLD);
