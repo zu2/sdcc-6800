@@ -1,3 +1,25 @@
+2026-09-20 Gabriele Gorla <gorlik@yahoo.com>
+
+	* support/regression/tests/bug-3381.c:
+	  Add regression test for bug #3381.
+	* src/mos6502/gen.c,
+	  support/regression/MakeList:
+	  Partial implementation of RFE #1019 (structreturn of size>8).
+	* src/hc08/gen.c:
+	  Implement struct return (size<=8) for hc08.
+	* device/lib/huc6280/Makefile.in,
+	  device/lib/lldiv.c,
+	  device/lib/mos6502/Makefile.in,
+	  device/lib/mos65c02/Makefile.in,
+	  src/mos6502/gen.c:
+	  Enable lldiv for mos6502 non stack-auto.
+	* device/include/stdlib.h,
+	  device/lib/div.c,
+	  device/lib/ldiv.c,
+	  support/regression/MakeList,
+	  support/regression/tests/div.c:
+	  Add div and ldiv to hc08.
+
 2026-09-19 Gabriele Gorla <gorlik@yahoo.com>
 
 	* support/regression/MakeList,
@@ -51,6 +73,8 @@
 	  support/regression/tests/gcc-torture-execute-va-arg-9.c,
 	  support/regression/tests/malloc.c:
 	  Enabled many working tests. Moved exclusions to MakeList.
+	* src/mos6502/gen.c:
+	  Merge genCall() and genPcall().
 
 2026-09-18 Philipp Klaus Krause <philipp@colecovision.eu>
 
