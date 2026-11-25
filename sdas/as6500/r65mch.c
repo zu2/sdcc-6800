@@ -1,7 +1,7 @@
 /* r65mch.c */
 
 /*
- *  Copyright (C) 1995-2025  Alan R. Baldwin
+ *  Copyright (C) 1995-2026  Alan R. Baldwin
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -43,6 +43,7 @@ int r6500;
 int r65f11;
 int r65c00;
 int r65c02;
+int huc6280;
 
 /*
  * Opcode Cycle Definitions
@@ -149,7 +150,6 @@ static char c02pg1[256] = {
 /*F0*/   4, 7, 6,UN,UN, 5, 6, 5, 2, 6, 4,UN,UN, 6, 7, 7
 };
 
-int mchtyp;
 struct area *zpg;
 
 int autodpcnst;
@@ -163,6 +163,7 @@ machine(struct mne *mp)
 {
 	int op, t1;
 	struct expr e1,e2;
+	struct sym *sp;
 	char id[NCPS];
 	int c, v1, v2;
 
@@ -178,6 +179,7 @@ machine(struct mne *mp)
 			expr(&e1, 0);
 			if (e1.e_flag == 0 && e1.e_base.e_ap == NULL) {
 				if (e1.e_addr) {
+					e1.e_addr = 0;
 					xerr('b', "Only Page 0 Allowed.");
 				}
 			}
@@ -185,6 +187,7 @@ machine(struct mne *mp)
 				getid(id, -1);
 				zpg = alookup(id);
 				if (zpg == NULL) {
+					zpg = dot.s_area;
 					xerr('u', "Undefined Area.");
 				}
 			} else {
@@ -194,14 +197,26 @@ machine(struct mne *mp)
 		outdp(zpg, &e1, 0);
 		lmode = SLIST;
 		break;
+
+	case S_PGD:
+		do {
+			getid(id, -1);
+			sp = lookup(id);
+			sp->s_flag &= ~S_LCL;
+			sp->s_flag |=  S_GBL;
+			sp->s_area = (zpg != NULL) ? zpg : dot.s_area;
+ 		} while (comma(0));
+		lmode = SLIST;
+		break;
+
 	case S_CPU:
-		mchtyp = op;
-		switch(mchtyp) {
+		switch(op) {
 		case X_R6500:
 			opcycles = OPCY_6500;
 			r65f11 = 0;
 			r65c00 = 0;
 			r65c02 = 0;
+			huc6280 = 0;
 			break;
 
 		case X_R65F11:
@@ -209,6 +224,7 @@ machine(struct mne *mp)
 			r65f11 = 1;
 			r65c00 = 0;
 			r65c02 = 0;
+			huc6280 = 0;
 			break;
 
 		case X_R65C00:
@@ -216,19 +232,36 @@ machine(struct mne *mp)
 			r65f11 = 1;
 			r65c00 = 1;
 			r65c02 = 0;
+			huc6280 = 0;
 			break;
 
 		case X_R65C02:
-		opcycles = OPCY_65C02;
-		r65f11 = 1;
-		r65c00 = 1;
-		r65c02 = 1;
-		break;
+			opcycles = OPCY_65C02;
+			r65f11 = 1;
+			r65c00 = 1;
+			r65c02 = 1;
+			huc6280 = 0;
+			break;
+
+		case X_HUC6280:
+			opcycles = OPCY_65C02; // FIXME - shoube be HUC
+			r65f11 = 1;
+			r65c00 = 1;
+			r65c02 = 1;
+			huc6280 = 1;
+			break;
 		}
 		break;
 
+	case S_INH4:
+		if (!huc6280) {
+			while(more()) getnb();
+			xerr('o', "Invalid Huc6280 Instruction");
+			break;
+		}
+
 	case S_INH3:
-		if (r65c02) {
+		if (!r65c02) {
 			while(more()) getnb();
 			xerr('o', "Invalid 65C02 Instruction");
 			break;
@@ -245,6 +278,28 @@ machine(struct mne *mp)
 		outab(op);
 		break;
 
+	case S_TAM:
+	case S_TMA:
+		if (!huc6280) {
+			while(more()) getnb();
+			xerr('o', "Valid Only For The Huc6280");
+			break;
+		}
+                if(mp->m_type==S_TAM)
+			outab(0x53);
+		else
+			outab(0x43);
+
+		outab(op);
+		break;
+
+	case S_BRA3:
+		if (!huc6280) {
+			while(more()) getnb();
+			xerr('o', "Invalid Huc6820 Instruction");
+			break;
+		}
+
 	case S_BRA2:
 		if (!r65c00) {
 			while(more()) getnb();
@@ -255,8 +310,7 @@ machine(struct mne *mp)
 	case S_BRA1:
 		expr(&e1, 0);
 		outab(op);
-		if (mchpcr(&e1)) {
-			v1 = (int) (e1.e_addr - dot.s_addr - 1);
+		if (mchpcr(&e1, &v1, 1)) {
 			if ((v1 < -128) || (v1 > 127))
 				aerr();
 			outab(v1);
@@ -311,6 +365,7 @@ machine(struct mne *mp)
 
 	case S_DOP:
 		t1 = addr(&e1);
+		//v1 = (int) e1.e_addr;
 		switch (t1) {
 		case S_IPREX:
 			outab(op + 0x01);
@@ -496,8 +551,13 @@ machine(struct mne *mp)
 			outrb(&e1, R_PAG0);
 			break;
 		case S_INDY:
-			outab(op + 0x1E);
-			outrw(&e1, 0);
+			if (op == 0x80) {
+				outab(op + 0x16);
+				outrb(&e1, R_PAG0);
+			} else {
+				outab(op + 0x1E);
+				outrw(&e1, 0);
+			}
 			break;
 		default:
 			outab(op + 0x06);
@@ -529,8 +589,13 @@ machine(struct mne *mp)
 			outrb(&e1, R_PAG0);
 			break;
 		case S_INDX:
-			outab(op + 0x1C);
-			outrw(&e1, 0);
+			if (op == 0x80) {
+				outab(op + 0x14);
+				outrb(&e1, R_PAG0);
+			} else {
+				outab(op + 0x1C);
+				outrw(&e1, 0);
+			}
 			break;
 		default:
 			outab(op + 0x04);
@@ -553,8 +618,7 @@ machine(struct mne *mp)
 		expr(&e2, 0);
 		outab(op);
 		outrb(&e1, R_PAG0);
-		if (mchpcr(&e2)) {
-			v2 = (int) (e2.e_addr - dot.s_addr - 1);
+		if (mchpcr(&e2, &v2, 1)) {
 			if ((v2 < -128) || (v2 > 127))
 				aerr();
 			outab(v2);
@@ -632,6 +696,47 @@ machine(struct mne *mp)
 		}
 		break;
 
+	case S_ST:
+		if (!huc6280) {
+			while(more()) getnb();
+			xerr('o', "Invalid Huc6820 Instruction");
+			break;
+		}
+
+		if(addr(&e1)==S_IMMED) {
+			outab(op);
+			outrb(&e1, 0);
+		} else {
+			aerr();
+                }
+		break;
+
+	case S_MT:
+		if (!huc6280) {
+			while(more()) getnb();
+			xerr('o', "Invalid Huc6820 Instruction");
+			break;
+		}
+		outab(op);
+		expr(&e2, 0);
+		outrw(&e2, 0);
+		comma(1);
+		expr(&e2, 0);
+		outrw(&e2, 0);
+		comma(1);
+		expr(&e2, 0);
+		outrw(&e2, 0);
+		break;
+
+	case S_TST:
+		if (!huc6280) {
+			while(more()) getnb();
+			xerr('o', "Invalid Huc6820 Instruction");
+			break;
+		}
+		xerr('o', "Unimplemented opcode TST");
+		break;
+
 	default:
 		opcycles = OPCY_ERR;
 		err('o');
@@ -660,9 +765,25 @@ machine(struct mne *mp)
  * Branch/Jump PCR Mode Check
  */
 int
-mchpcr(struct expr *esp)
+mchpcr(struct expr *esp, int *v, int n)
 {
 	if (esp->e_base.e_ap == dot.s_area) {
+		if (v != NULL) {
+#if 1
+			/* Allows branching from top-to-bottom and bottom-to-top */
+ 			*v = (int) (esp->e_addr - dot.s_addr - n);
+			/* only bits 'a_mask' are significant, make circular */
+			if (*v & s_mask) {
+				*v |= (int) ~a_mask;
+			}
+			else {
+				*v &= (int) a_mask;
+			}
+#else
+			/* Disallows branching from top-to-bottom and bottom-to-top */
+			*v = (int) ((esp->e_addr & a_mask) - (dot.s_addr & a_mask) - n);
+#endif
+		}
 		return(1);
 	}
 	if (esp->e_flag==0 && esp->e_base.e_ap==NULL) {
@@ -678,6 +799,21 @@ mchpcr(struct expr *esp)
 		esp->e_base.e_sp = &sym[1];
 	}
 	return(0);
+}
+
+/*
+ * Machine specific .enable/.dsable terms.
+ */
+int
+mchoptn(char *id, int v)
+{
+	/* Automatic Direct Page (Constants) */
+	if (symeq(id, "autodpcnst", 1)) { autodpcnst = v; } else
+	/* Automatic Direct Page (Symbols) */
+	if (symeq(id, "autodpsmbl", 1)) { autodpsmbl = v; } else {
+		return(0);
+	}
+	return(1);
 }
 
 /*
@@ -704,9 +840,9 @@ minit(void)
 	/*
 	 * Default Machine
 	 */
-	mchtyp = X_R6500;
 	r6500  = 1;
 	r65f11 = 0;
 	r65c00 = 0;
 	r65c02 = 0;
+	huc6280 = 0;
 }

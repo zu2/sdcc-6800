@@ -177,6 +177,9 @@ m6502_finaliseOptions (void)
       port->mem.default_globl_map = data;
     }
 
+  if(options.data_loc > 240)
+    werror (W_DATA_LOC_RANGE);
+
   istack->ptrType = FPOINTER;
 }
 
@@ -211,6 +214,25 @@ m6502_getRegName (const struct reg_info *reg)
 static void
 m6502_genAssemblerStart (FILE * of)
 {
+  fprintf(of, ";; Ordering of segments for the linker.\n");
+  tfprintf (of, "\t!area\n", DATA_NAME);
+  tfprintf (of, "\t!area\n", OVERLAY_NAME);
+  //  if (options.xdata_overlay==0)
+  //      tfprintf (of, "\t!area    (PAG, OVR)\n", OVERLAY_NAME);
+
+  tfprintf (of, "\t!area\n", HOME_NAME);
+  tfprintf (of, "\t!area\n", STATIC_NAME);
+  tfprintf (of, "\t!area\n", "GSFINAL");
+  tfprintf (of, "\t!area\n", CODE_NAME);
+  tfprintf (of, "\t!area\n", CONST_NAME);
+  tfprintf (of, "\t!area\n", XINIT_NAME);
+
+  tfprintf (of, "\t!area\n", "_DATA");
+  tfprintf (of, "\t!area\n", XIDATA_NAME);
+  //  if(options.xdata_overlay)
+  //      tfprintf (of, "\t!area    (OVR)\n", OVERLAY_NAME);
+  tfprintf (of, "\t!area\n", XDATA_NAME);
+
   if (!options.noOptsdccInAsm)
     {
       fprintf (of, "\t.optsdcc -m%s\n", port->target);
@@ -776,12 +798,12 @@ PORT mos6502_port =
     m6502_keywords,
     m6502_genAssemblerStart,    /* genAssemblerStart */
     m6502_genAssemblerEnd,      /* genAssemblerEnd */
-    m6502_genIVT,
+    m6502_genIVT,               /* local IVT generation code */
     m6502_genXINIT,             /* genXINIT code */
-    0,                          /* genInitStartup */
+    NULL,                       /* genInitStartup */
     m6502_reset_regparm,
     m6502_regparm,
-    NULL,                       /* process_pragma */
+    m6502_process_pragma,       /* process_pragma */
     NULL,                       /* getMangledFunctionName */
     _hasNativeMulFor,           /* hasNativeMulFor */
     hasExtBitOp,                /* hasExtBitOp */
@@ -795,7 +817,7 @@ PORT mos6502_port =
     1,                          /* transform != to !(a == b) */
     0,                          /* leave == */
     false,                      /* No array initializer support. */
-    NULL,          		/* CSE cost estimation */
+    NULL,                       /* CSE cost estimation */
     m6502_builtins,             /* builtin functions */
     GPOINTER,                   /* treat unqualified pointers as "generic" pointers */
     true,
@@ -948,12 +970,12 @@ PORT mos65c02_port =
     m6502_keywords,
     m65c02_genAssemblerStart,   /* genAssemblerStart */
     m6502_genAssemblerEnd,      /* genAssemblerEnd */
-    m6502_genIVT,
-    m6502_genXINIT,
-    0,                          /* genInitStartup */
+    m6502_genIVT,               /* local IVT generation code */
+    m6502_genXINIT,             /* genXINIT code */
+    NULL,                       /* genInitStartup */
     m6502_reset_regparm,
     m6502_regparm,
-    0,                          /* process_pragma */
+    m6502_process_pragma,       /* process_pragma */
     NULL,                       /* getMangledFunctionName */
     _hasNativeMulFor,           /* hasNativeMulFor */
     hasExtBitOp,                /* hasExtBitOp */
@@ -967,7 +989,7 @@ PORT mos65c02_port =
     1,                          /* transform != to !(a == b) */
     0,                          /* leave == */
     false,                      /* No array initializer support. */
-    NULL,		        /* CSE cost estimation */
+    NULL,                       /* CSE cost estimation */
     m6502_builtins,             /* builtin functions */
     GPOINTER,                   /* treat unqualified pointers as "generic" pointers */
     true,

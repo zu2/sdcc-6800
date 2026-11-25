@@ -990,6 +990,46 @@ regsInCommon (operand * op1, operand * op2)
 }
 
 /*-----------------------------------------------------------------*/
+/* findOpRegInOtherOp - Check if an operand register overlaps with */
+/* a register in another operand.                                  */
+/* Return offset in other operand or -1 if not found.              */
+/*-----------------------------------------------------------------*/
+static int
+findOpRegInOtherOp (operand * op, int offset, operand * otherOp)
+{
+  if (!IS_SYMOP (op) || !IS_SYMOP (otherOp))
+    return -1;
+
+  if (AOP (op)->type != AOP_REG || AOP (otherOp)->type != AOP_REG)
+    return -1;
+
+  symbol *opSym = OP_SYMBOL (op);
+  symbol *otherSym = OP_SYMBOL (otherOp);
+
+  if (opSym->nRegs == 0 || otherSym->nRegs == 0)
+    return -1;
+
+  int nRegs = (opSym->nRegs > otherSym->nRegs) ? opSym->nRegs : otherSym->nRegs;
+  for (int i = 0; i < nRegs; i++)
+    {
+      if (opSym->regs[offset] == otherSym->regs[i])
+        {
+#if 0
+          fprintf(stderr, "Overlapping regs %s [ ", OP_SYMBOL(op)->name);
+          for (int r=0; r<opSym->nRegs; r++)
+            fprintf(stderr, "%s ", opSym->regs[r]->name);
+          fprintf(stderr, "] := %s [ ", OP_SYMBOL(otherOp)->name);
+          for (int r=0; r<otherSym->nRegs; r++)
+            fprintf(stderr, "%s ", otherSym->regs[r]->name);
+          fprintf(stderr, "] op %d := other %d\n", offset, i);
+#endif
+          return i;
+        }
+    }
+  return -1;
+}
+
+/*-----------------------------------------------------------------*/
 /* operandsEqu - equivalent                                        */
 /*-----------------------------------------------------------------*/
 static bool
@@ -1142,7 +1182,7 @@ aopOp (operand *op, iCode *ic, bool result)
     {
       sym->aop = op->aop = aop = newAsmop (AOP_CRY);
       aop->aopu.aop_dir = "c";
-      aop->size = sym->ruonly ? 1 : 0;
+      aop->size = (sym->ruonly || POINTER_SET (ic)) ? 1 : 0;
       return;
     }
 
@@ -2359,15 +2399,21 @@ static void
 cheapMove (asmop *to, int to_offset, asmop *from, int from_offset, bool a_dead)
 {
   if (aopInReg (to, to_offset, A_IDX))
-    a_dead = true;
+    {
+      a_dead = true;
+    }
 
   if ((to->type == AOP_REG || to->type == AOP_ACC) && (from->type == AOP_REG || from->type == AOP_ACC) &&
-    to->aopu.aop_reg[to_offset] == from->aopu.aop_reg[from_offset])
-    return;
+      to->aopu.aop_reg[to_offset] == from->aopu.aop_reg[from_offset])
+    {
+      return;
+    }
 
   if (to->type == AOP_STR && from->type == AOP_REG &&
-    EQ (to->aopu.aop_str[to_offset], from->aopu.aop_reg[from_offset]->name))
-    return;
+      EQ (to->aopu.aop_str[to_offset], from->aopu.aop_reg[from_offset]->name))
+    {
+      return;
+    }
 
   if (aopInReg (to, to_offset, A_IDX) && aopIsLitVal (from, from_offset, 1, 0))
     {
@@ -2393,7 +2439,9 @@ cheapMove (asmop *to, int to_offset, asmop *from, int from_offset, bool a_dead)
     }
   else if (aopInReg (to, to_offset, A_IDX))
     {
-      emitcode ("mov", "a, %s", aopGet (from, from_offset, false, false));
+      const char * src = aopGet (from, from_offset, false, false);
+      if (!EQ (src, "a"))
+        emitcode ("mov", "a, %s", src);
     }
   else if (aopDir (to, to_offset) && aopInRn (from, from_offset))
     {
@@ -2403,7 +2451,7 @@ cheapMove (asmop *to, int to_offset, asmop *from, int from_offset, bool a_dead)
     {
       aopPut (to, "a", to_offset);
     }
-  else if (aopInRn (to, to_offset) && (from->type == AOP_R0 || from->type == AOP_R1))
+  else if (aopInRn (to, to_offset) && (from->type == AOP_R0 || from->type == AOP_R1) && !from->paged)
     {
       emitcode ("mov", "%s, %s", to->aopu.aop_reg[to_offset]->dname, aopGet (from, from_offset, false, true));
     }
@@ -2450,7 +2498,9 @@ cheapMove (asmop *to, int to_offset, asmop *from, int from_offset, bool a_dead)
       emitpop ("acc");
     }
   else
-    wassert (0);
+    {
+      wassert (0);
+    }
 }
 
 /*-----------------------------------------------------------------*/
@@ -2504,11 +2554,12 @@ genCopy (asmop *result, int roffset, asmop *source, int soffset, int sizex, bool
         if (assigned[i] || assigned[j])
           continue;
         if (!(aopInReg (source, soffset + i, A_IDX) || aopInRn (source, soffset + i)) ||
-          !(aopInReg (result, roffset + i, A_IDX) || aopInRn (result, roffset + i)) ||
-          !(aopInReg (source, soffset + j, A_IDX) || aopInRn (source, soffset + j)) ||
-          !(aopInReg (result, roffset + j, A_IDX) || aopInRn (result, roffset + j)))
+            !(aopInReg (result, roffset + i, A_IDX) || aopInRn (result, roffset + i)) ||
+            !(aopInReg (source, soffset + j, A_IDX) || aopInRn (source, soffset + j)) ||
+            !(aopInReg (result, roffset + j, A_IDX) || aopInRn (result, roffset + j)))
           continue;
-        if (source->aopu.aop_reg[soffset + i] != result->aopu.aop_reg[roffset + j] || source->aopu.aop_reg[soffset + j] != result->aopu.aop_reg[roffset + i])
+        if (source->aopu.aop_reg[soffset + i] != result->aopu.aop_reg[roffset + j] ||
+            source->aopu.aop_reg[soffset + j] != result->aopu.aop_reg[roffset + i])
           continue;
         if (aopInReg (source, soffset + i, A_IDX))
           {
@@ -4541,7 +4592,7 @@ genFunction (iCode * ic)
                    * the caller's R0 isn't trashed.
                    */
                   emitpush ("psw");
-                  emitcode ("mov", "psw,#!constbyte", (FUNC_REGBANK (sym->type) << 3) & 0x00ffu);
+                  emitcode ("mov", "psw,#!constbyte", (FUNC_REGBANK (ftype) << 3) & 0x00ffu);
                   switchedPSW = TRUE;
                 }
 
@@ -5431,11 +5482,13 @@ genPlusIncr (iCode * ic)
 
   /* if increment >=16 bits in register or direct space */
   if (!optimize.nosidechannels &&
-    (AOP_TYPE (IC_LEFT (ic)) == AOP_REG ||
-       AOP_TYPE (IC_LEFT (ic)) == AOP_DIR || AOP_TYPE (IC_LEFT (ic)) == AOP_SFR ||
-       (IS_AOP_PREG (IC_LEFT (ic)) && !AOP_NEEDSACC (IC_LEFT (ic)))) &&
+      ( AOP_TYPE (IC_LEFT (ic)) == AOP_REG ||
+        AOP_TYPE (IC_LEFT (ic)) == AOP_DIR ||
+        AOP_TYPE (IC_LEFT (ic)) == AOP_SFR ||
+        (IS_AOP_PREG (IC_LEFT (ic)) && !AOP_NEEDSACC (IC_LEFT (ic)))) &&
       sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))) &&
-      !isOperandVolatile (IC_RESULT (ic), FALSE) && (size > 1) && (icount == 1))
+      !isOperandVolatile (IC_RESULT (ic), FALSE) &&
+      (size > 1) && (icount == 1))
     {
       symbol *tlbl;
       const char *l;
@@ -5482,7 +5535,8 @@ genPlusIncr (iCode * ic)
   /* if result is dptr */
   if ((AOP_TYPE (IC_RESULT (ic)) == AOP_STR) &&
       (AOP_SIZE (IC_RESULT (ic)) == 2) &&
-      !strncmp (AOP (IC_RESULT (ic))->aopu.aop_str[0], "dpl", 4) && !strncmp (AOP (IC_RESULT (ic))->aopu.aop_str[1], "dph", 4))
+      !strncmp (AOP (IC_RESULT (ic))->aopu.aop_str[0], "dpl", 4) &&
+      !strncmp (AOP (IC_RESULT (ic))->aopu.aop_str[1], "dph", 4))
     {
       if (aopGetUsesAcc (ic->left->aop, 0))
         return FALSE;
@@ -5511,14 +5565,13 @@ genPlusIncr (iCode * ic)
     return FALSE;
 
   /* we can if the aops of the left & result match or
-     if they are in registers and the registers are the
-     same */
+     if they are in registers and the registers are the same */
   if (sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))))
     {
       if (icount > 3)
         {
           MOVA (opGet (IC_LEFT (ic), 0, FALSE, FALSE));
-          emitcode ("add", "a,#!constbyte", ((char) icount) & 0xffu);
+          emitcode ("add", "a,#!constbyte", icount & 0xffu);
           opPut (IC_RESULT (ic), "a", 0);
         }
       else
@@ -5823,10 +5876,12 @@ genMinusDec (iCode * ic)
 
   /* if decrement >=16 bits in register or direct space */
   if (!optimize.nosidechannels &&
-    (AOP_TYPE (IC_LEFT (ic)) == AOP_REG ||
-       AOP_TYPE (IC_LEFT (ic)) == AOP_DIR || AOP_TYPE (IC_LEFT (ic)) == AOP_SFR ||
-       (IS_AOP_PREG (IC_LEFT (ic)) && !AOP_NEEDSACC (IC_LEFT (ic)))) &&
-      sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))) && (size > 1) && (icount == 1))
+      ( AOP_TYPE (IC_LEFT (ic)) == AOP_REG ||
+        AOP_TYPE (IC_LEFT (ic)) == AOP_DIR ||
+        AOP_TYPE (IC_LEFT (ic)) == AOP_SFR ||
+        (IS_AOP_PREG (IC_LEFT (ic)) && !AOP_NEEDSACC (IC_LEFT (ic)))) &&
+      sameRegs (AOP (IC_LEFT (ic)), AOP (IC_RESULT (ic))) &&
+      (size > 1) && (icount == 1))
     {
       symbol *tlbl;
       const char *l;
@@ -9201,8 +9256,8 @@ genGetWord (iCode * ic)
       // the left operand has two or more regs.
       wassert (AOP (result)->size == 2 && (AOP (left)->size - offset) >= 2);
 
-      if (AOP (result)->aopu.aop_reg[0]->rIdx == AOP (left)->aopu.aop_reg[offset + 1]->rIdx
-            && AOP (result)->aopu.aop_reg[1]->rIdx == AOP (left)->aopu.aop_reg[offset]->rIdx)
+      if (AOP (result)->aopu.aop_reg[0]->rIdx == AOP (left)->aopu.aop_reg[offset + 1]->rIdx &&
+          AOP (result)->aopu.aop_reg[1]->rIdx == AOP (left)->aopu.aop_reg[offset + 0]->rIdx)
         {
           D (emitcode (";", "overlapping regs (1)"));
 
@@ -9210,9 +9265,9 @@ genGetWord (iCode * ic)
           // swap registers by ferrying them through the accumulator
           //
           //                 a    r0    r1
-          // xch  a,r0      r0    a
+          // xch  a,r0      r0     a
           // xch  a,r1      r1          r0
-          // xch  a,r0      a     r1
+          // xch  a,r0       a    r1
 
           emitcode ("xch", "a,%s", opGet (left, offset, false, false));
           emitcode ("xch", "a,%s", opGet (left, offset + 1, false, false));
@@ -12780,34 +12835,68 @@ genCast (iCode * ic)
       goto release;
     }
 
-  /* if they are the same size : or less */
+  /* if they are the same size or less */
   if (AOP_SIZE (result) <= AOP_SIZE (right))
     {
       bool masktopbyte = IS_BITINT (ctype) && (SPEC_BITINTWIDTH (ctype) % 8) && bitsForType (ctype) < bitsForType (rtype);
 
-      /* if they are in the same place */
-      if (!masktopbyte && sameRegs (AOP (right), AOP (result)))
-        goto release;
-
-      /* if they are in different places then copy */
       size = AOP_SIZE (result);
-      offset = 0;
-      while (size--)
+      /* for all but the last top byte check for overlapping registers */
+      for (offset = size - 2; offset >= 0; offset--)
         {
-          if (!size && masktopbyte)
+          int reg = findOpRegInOtherOp (result, offset, right);
+          if (reg > offset)
             {
-              MOVA (opGet (right, offset, FALSE, FALSE));
-              genMaskExtendSign (!SPEC_USIGN (ctype), SPEC_BITINTWIDTH (ctype) % 8);
-              opPut(result, "a", offset);
+              D (emitcode (";", "overlapping regs (3)"));
+              emitpush (opGet (right, reg, FALSE, TRUE));
+            }
+        }
+      for (offset = 0; offset <= size - 2; offset++)
+        {
+          int reg = findOpRegInOtherOp (right, offset, result);
+          if (reg >= 0 && reg < offset)
+            {
+              D (emitcode (";", "overlapping regs (4)"));
+              emitpop (opGet (result, offset, FALSE, TRUE));
+            }
+          else if (!sameByte (AOP (result), offset, AOP (right), offset))
+            {
+              opPut (result, opGet (right, offset, FALSE, FALSE), offset);
+            }
+        }
+
+      int reg = findOpRegInOtherOp (right, offset, result);
+      if (masktopbyte)
+        {
+          if (reg >= 0 && reg < offset)
+            {
+              D (emitcode (";", "overlapping regs (5)"));
+              emitpop ("acc");
             }
           else
-            opPut(result, opGet (right, offset, FALSE, FALSE), offset);
-          offset++;
+            {
+              MOVA (opGet (right, offset, FALSE, FALSE));
+            }
+          genMaskExtendSign (!SPEC_USIGN (ctype), SPEC_BITINTWIDTH (ctype) % 8);
+          opPut(result, "a", offset);
         }
+      else
+        {
+          if (reg >= 0 && reg < offset)
+            {
+              D (emitcode (";", "overlapping regs (6)"));
+              emitpop (opGet (result, offset, FALSE, TRUE));
+            }
+          else if (!sameByte (AOP (result), offset, AOP (right), offset))
+            {
+              opPut (result, opGet (right, offset, FALSE, FALSE), offset);
+            }
+        }
+
       goto release;
     }
 
-  /* if the either is of type pointer */
+  /* if either is of type pointer */
   if ((IS_PTR (ctype) || IS_PTR (rtype)) && !IS_INTEGRAL (rtype))
     {
       int p_type;
@@ -12908,7 +12997,13 @@ genCast (iCode * ic)
   /* if unsigned or not an integral type */
   if (!IS_SPEC (rtype) || SPEC_USIGN (rtype) || AOP_TYPE (right) == AOP_CRY)
     {
-      while (size--)
+      if (size > 1)
+        {
+          emitcode ("clr", "a");
+          while (size--)
+            opPut(result, "a", offset++);
+        }
+      else
         {
           opPut(result, zero, offset++);
         }

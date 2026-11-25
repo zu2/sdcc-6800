@@ -1,3 +1,268 @@
+2026-08-27 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sim/ucsim/src/sims/f8.src/decode.h,
+	  sim/ucsim/src/sims/f8.src/f8cl.h,
+	  sim/ucsim/src/sims/f8.src/glob.cc,
+	  sim/ucsim/src/sims/f8.src/imove.cc:
+	  Use generated tables instead of hand-written ones for f8 opcodes.
+	* sdas/asf8/f8.h,
+	  sdas/asf8/f8mch.c,
+	  sdas/asf8/f8pst.c,
+	  src/f8/main.c,
+	  src/f8/main.c:
+	  Basic sdas f8l support.
+
+2026-08-15 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/mos6502/genlshift.c:
+	  Fix bug #4065
+    * support/regression/tests/falcon-ntt.c
+      Enable falcon-ntt for mos6502-stack-auto.
+
+2026-08-26 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* support/regression/tests/bug-3845.c: new, added
+	* src/mcs51/gen.c (aopOp): applied patch #513 to fix bug #3845, Thanks
+	  Li-Hsin Chien
+
+2026-08-25 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/lib/_muluchar.c: applied patch #448, Thanks Konstantin Kim
+	* device/lib/_mullong.c: use xstack asm code for medium as well
+	* device/lib/_mullonglong.c: replaced byte-by-byte mult with bit mult
+	  which is shorter and uses less memory for almost all targets/models
+	  exceptions: hc08, s08, s08-stack-auto
+	  also optimized byte-by-byte with zero-checking and much less shifts
+
+2026-08-24 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/as6500/r6500.h,
+	  sdas/as6500/r65mch.c,
+	  sdas/as6500/r65pst.c:
+	  Initial sdas support for Huc6280.
+
+2026-08-23 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/SDCCerr.c,
+	  src/SDCCerr.h,
+	  src/mos6502/main.c:
+	  Add warning for out of range ZP location (feature request #1021).
+
+2026-08-22 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/as6500/r65pst.c,
+	  sdas/as6808/m08mch.c,
+	  sdas/as6808/m08pst.c,
+	  sdas/as8051/i51mch.c,
+	  sdas/as8051/i51pst.c,
+	  sdas/as8xcxxx/ds8pst.c,
+	  sdas/asf8/f8pst.c,
+	  sdas/asgb/gbpst.c,
+	  sdas/aspdk13/pdk13pst.c,
+	  sdas/aspdk14/pdk14pst.c,
+	  sdas/aspdk15/pdk15pst.c,
+	  sdas/aspdk16/pdk16pst.c,
+	  sdas/asrab/rab.h,
+	  sdas/asrab/rabmch.c,
+	  sdas/asrab/rabpst.c,
+	  sdas/asstm8/stm8pst.c,
+	  sdas/astlcs90/t90pst.c,
+	  sdas/asz80/z80pst.c:
+	  Merge more asxxxx upstream changes.
+	* src/SDCCglue.c:
+	  Remove dead code.
+	* src/f8/gen.c:
+	  Fix gcc warning.
+	* sdas/as6808/m08adr.c,
+	  sdas/as6808/m08mch.c,
+	  sdas/as6808/m6808.h,
+	  sdas/as8051/i51mch.c,
+	  sdas/as8051/i8051.h,
+	  sdas/as8xcxxx/ds8.h,
+	  sdas/as8xcxxx/ds8mch.c,
+	  sdas/asf8/f8mch.c,
+	  sdas/asf8/f8pst.c,
+	  sdas/asgb/gb.h,
+	  sdas/asgb/gbmch.c,
+	  sdas/asrab/rabpst.c,
+	  sdas/asz80/z80.h,
+	  sdas/asz80/z80mch.c,
+	  sdas/asz80/z80pst.c:
+	  Merge more asxxxx upstream changes.
+	* src/SDCCicode.c,
+	  src/mos6502/gen.c:
+	  Correctly mark builtin as generated.
+	* src/mos6502/m6502.h,
+	  src/mos6502/main.c,
+	  src/mos6502/pragma.c:
+	  Initial pragma implementation for mos6502.
+
+2026-08-21 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/as6500/r6500.h,
+	  sdas/as6500/r65mch.c,
+	  sdas/as6500/r65pst.c:
+	  Merge some asxxxx upstream changes.
+
+2026-08-21 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/lib/atoi.c,
+	* device/lib/atol.c,
+	* device/lib/atoll.c: optimized for generated code on most targets/models
+	* src/SDCCpeeph.c (notSame, same): check for ARn == Rn
+	* src/mcs51/gen.c (genCast): use acc for clearing msb's
+	* src/mcs51/peeph.def: added rules 104.x and 116.x
+
+2026-08-18 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* debugger/mcs51/cmd.c: applied patch #452, Thanks Mark Symonds,
+	  also fixed asm mode and corrected lineno
+	* debugger/mcs51/sdcdb.c: documented "show version", "set confirm" & "set prompt"
+	  and put them in completionCmdShow()
+	  (readCdb) fix reading module name
+	  (usage, parseCmdLine): added many models, renamed ucsim_xx executables
+
+2026-08-17 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* debugger/mcs51/simi.c: applied patch #445, Thanks Mark Symonds
+
+	* debugger/mcs51/cmd.c,
+	* debugger/mcs51/cmd.h,
+	* debugger/mcs51/sdcdb.c: applied slightly modified patch #269
+	  Thanks Peter Dons Tychsen
+
+2026-08-16 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/mos6502/peep.c:
+	  Fix handling of jsr and rti.
+	* src/mos6502/peeph.def:
+	  Check for register overwrite first.
+	  Add BITNOT rule.
+	  Rename several peephole rules.
+
+2026-08-15 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/mos6502/peep.c:
+	  Fix bug #4036
+	* src/mos6502/gen.c:
+	  Fix regression failure in gcc-torture-execute-20030714-1 with --nogenconstprop
+
+2026-08-15 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/mcs51/peeph.def: removed unused rule 131
+
+2026-08-15 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/mos6502/gen.c,
+	  support/regression/test/bug-4053.c:
+	  Fix bug #4053.
+
+2026-08-14 Gabriele Gorla <gorlik@yahoo.com>
+
+	* src/mos6502/gen.c:
+	  Use ZP pointer instead of DPTR when possible in genPackbits and genUnpackBits.
+	* src/mos6502/gen.c:
+	  Use absolute addressing instead of DPTR when possible in genPointerPush.
+
+2026-08-14 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* Merge fuzzing branch.
+
+2026-08-13 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/gen.c,
+	  support/regression/tests/bug-4053.c:
+	  Fix bug #4053.
+
+2026-08-13 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/mos6502/gen.c (genPackBits): bugfix uninitialized use of mask,
+	  lots of coding standard changes like space before '(' and no use of TAB
+	* src/mos6502/genlshift.c (genlsh16): silence warning for unused xloc,
+	  lots of coding standard changes like space before '(' and no use of TAB
+
+2026-08-13 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* support/regression/Makefile.in:
+	  Fix fuzzing for out-of-tree regression testing.
+
+2026-08-10 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* Merge fuzzing branch.
+
+2026-08-09 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/mcs51/gen.c (cheapMove): fixed "mov a,a" & "movx ARn,@Ri"
+	  (findOpRegInOtherOp): added helper for finding register overlap
+	  (genCast): fixed bug 3554 cast with overlapping registers
+	* support/regression/tests/bug-3554.c.in: new, added
+	* support/regression/tests/reentrant.c.in: prevent div2n stack overflow
+
+2026-08-09 Benedikt Freisen <b.freisen AT gmx.net>
+
+	* src/SDCCutil.c:
+	  Rename "Mac OS X" to "macOS" (except for PPC) via patch #503 by John Brandwood.
+
+2026-08-09 Benedikt Freisen <b.freisen AT gmx.net>
+
+	* src/SDCC.y,
+	  src/SDCCsymt.c,
+	  src/SDCCsymt.h,
+	  support/regression/tests/bug-4044.c:
+	  Fix compound literal const-ness bug #4044 via patch #511 by Howard M. Harte.
+
+2026-08-09 Benedikt Freisen <b.freisen AT gmx.net>
+
+	* src/SDCCast.c,
+	  src/SDCCglue.c,
+	  src/SDCCsymt.c,
+	  src/SDCCsymt.h,
+	  src/SDCCval.c,
+	  src/SDCCval.h,
+	  support/regression/MakeList,
+	  support/regression/tests/bug-2840.c,
+	  support/regression/tests/bug-3393-designated.c,
+	  support/regression/tests/bug-3393.c,
+	  support/regression/tests/compound-literal.c:
+	  Fix bug #3393 and bug #2840 in anonymous union initialization via patch #508 by Howard M. Harte.
+
+2026-08-09 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/lib/ds390/setjmp.c: synchronize with device/lib/_setjmp.c
+	* device/lib/mcs51/Makefile.in,
+	* device/lib/mcs51/__sdcc_atomic_maybe_rollback.asm: removed double underscore
+	    to move out of C name space
+	* device/lib/ds390/atomic_flag_clear.c,
+	* device/lib/mcs51/atomic_flag_clear.asm: bugfix: accepts a generic pointer
+	* support/regression/tests/atomic.c: test non-inlined versions through
+	    function pointers, NB: host may have them as macros
+	* device/lib/pic16/configure,
+	* device/non-free/lib/pic14/configure,
+	* device/non-free/lib/pic16/configure: removed 3 second sleep
+	* src/ds390/main.h (ds390newAsmLineNode): removed prototype
+	* src/f8/ralloc.c (noOverLap): fix unused warning
+	* src/mcs51/peeph.def (rule 257.b): changed replacement to ljmp to also
+	    catch sjmp->ljmp, let rule 112.b handle the rest
+	* src/mos6502/main.c (m6502_genAssemblerStart): added initial .area list
+
+2026-08-09 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/lib/ds390/Makefile.in: removed atomic_flag_test_and_set
+	* device/lib/ds390/atomic_flag_test_and_set.c: deleted, is generated
+	* device/lib/ds390/__sdcc_atomic_maybe_rollback.c: removed double underscore
+	    to move out of C name space
+	* src/ds390/gen.c (genEndFunction): added call to sdcc_atomic_maybe_rollback,
+	    do not generate epilogue for noreturn function
+	* src/ds390/main.c: generate _atomic_flag_test_and_set
+	* support/regression/tests/bug-3997.c: fixed warning 322
+	* support/regression/tests/gcc-torture-execute-loop-2c.c,
+	* support/regression/tests/gcc-torture-execute-loop-2d.c: suppress warning 322
+
+2026-08-08 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdcc/support/regression/Makefile.in:
+	  Fuzzing infrastructure fix.
+
 2026-08-08 Maarten Brock <sourceforge.brock AT dse.nl>
 
 	* device/lib/mcs51/atomic_flag_test_and_set.asm: deleted, is generated
@@ -39,6 +304,11 @@
 	* src/SDCCsymt.h,
 	* src/SDCCsymt.c (compStructSize, promoteAnonStructs): removed parameter su,
 	  use sdef->type instead
+
+2026-08-06 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* sdcc/support/regression/Makefile.in:
+	  Fuzzing infrastructure fix.
 
 2026-08-06 Philipp Klaus Krause <philipp@colecovision.eu>
 

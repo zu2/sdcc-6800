@@ -1,7 +1,7 @@
-/* stm8mch.c */
+/* f8mch.c */
 
 /*
- *  Copyright (C) 2010  Alan R. Baldwin
+ *  Copyright (C) 2012-2026  Alan R. Baldwin
  *  Copyright (C) 2022-2023  Philipp K. Krause
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -21,14 +21,15 @@
  * Alan R. Baldwin
  * 721 Berkeley St.
  * Kent, Ohio  44240
- * 
  */
 
 #include "asxxxx.h"
 #include "f8.h"
 
-char	*cpu	= "f8";
+char	*cpu	= "f8 / f8l";
 char	*dsft	= "asm";
+
+int	mchtyp;
 
 #define	NB	512
 
@@ -183,6 +184,9 @@ machine(struct mne *mp)
 	rf = mp->m_type;
 
 	switch(rf) {
+	case S_CPU:
+		mchtyp = op;
+		break;
 	case S_2OP:
 	case S_2OPSUB:
 		t1 = addr(&e1);
@@ -268,8 +272,10 @@ machine(struct mne *mp)
 			outab(op + 0x00);
 			outrw(&e1, R_USGN);
 			break;
-		case S_SPREL:
 		case S_YREL:
+			if (mchtyp == X_F8L)
+				aerr();
+		case S_SPREL:
 			outab(op + (t1 == S_SPREL ? 0x01 : 0x03));
 			if(ls_mode(&e1))
 				aerr();
@@ -317,6 +323,9 @@ machine(struct mne *mp)
 			break;
 		}
 
+		if (mchtyp == X_F8L)
+			aerr();
+		
 		if(t2 == S_REG && r1 == X && r2 == Y || t1 == S_SPREL || t1 == S_DIR) { // swapped operands.
 			int tr = r1;
 			r1 = r2;
@@ -436,6 +445,8 @@ opw:
 					aerr();
 				break;
 			case S_YREL:
+				if (mchtyp == X_F8L)
+					aerr();
 				outab(op | 0x05);
 				if(ls_mode(&e2))
 					aerr();
@@ -504,6 +515,8 @@ opw:
 					aerr();
 				break;
 			case S_YREL:
+				if (mchtyp == X_F8L)
+					aerr();
 				outab(op | 0x0f);
 				if(ls_mode(&e1))
 					aerr();
@@ -520,6 +533,9 @@ opw:
 		break;
 
 	case S_LDI:
+		if (mchtyp == X_F8L)
+			aerr();
+
 		t1 = addr(&e1);
 		r1 = rcode;
 		comma(1);
@@ -611,6 +627,8 @@ opw:
 				outrw(&e2, R_USGN);
 				break;
 			case S_YREL:
+				if (mchtyp == X_F8L)
+					aerr();
 				outab(op | 0x04);
 				if(ls_mode(&e2))
 					aerr();
@@ -642,6 +660,8 @@ opw:
 			break;
 		}
 		else if(t1 == S_YREL && t2 == S_REG && (r2 == X || r2 == Z)) {
+			if (mchtyp == X_F8L)
+					aerr();
 			if (r2 == Z)
 				outab (OPCODE_ALTACC3);
 			if(!ls_mode(&e2)) {
@@ -719,6 +739,9 @@ opw:
 			aerr();
 		switch(t2) {
 		case S_SPREL:
+			if (mchtyp == X_F8L)
+				aerr();
+
 			altacc(r1);
 			outab(0x91);
 			if(ls_mode(&e1))
@@ -733,6 +756,9 @@ opw:
 			outab(0x92);
 			break;
 		case S_REG:
+			if (mchtyp == X_F8L)
+				aerr();
+
 			if (r1 == YL && r2 == YH)
 				outab(0x93);
 			else if (r1 == XL && r2 == XH) {
@@ -752,6 +778,9 @@ opw:
 		break;
 
 	case S_0OPROT:
+		if (mchtyp == X_F8L)
+			aerr();
+
 		t1 = addr(&e1);
 		r1 = rcode;
 		comma(1);
@@ -768,6 +797,9 @@ opw:
 		break;
 
 	case S_0OPMAD:
+		if (mchtyp == X_F8L)
+			aerr();
+
 		t1 = addr(&e1);
 		r1 = rcode;
 		comma(1);
@@ -823,7 +855,7 @@ opw:
 			outab(OPCODE_ALTACC5);
 			outab(0xf4);
 		}
-		else if(t2 != S_SPREL || ls_mode(&e2))
+		else if(t2 != S_SPREL || ls_mode(&e2) /*|| mchtyp == X_F8L todo: fix codegen for critical sections first! */)
 			aerr();
 		else {
 			altaccw(r1);
@@ -880,6 +912,9 @@ opw:
 		break;
 		
 	case S_0OPWSEX:
+		if (mchtyp == X_F8L)
+			aerr();
+
 		t1 = addr(&e1);
 		r1 = rcode;
 		comma(1);
@@ -929,6 +964,9 @@ sex:
 		break;
 
 	case S_DNJNZ:
+		if (mchtyp == X_F8L)
+			aerr();
+
 		t1 = addr(&e1);
 		r1 = rcode;
 		comma(1);
@@ -1204,6 +1242,9 @@ minit()
 	 */
 	bp = bb;
 	bm = 1;
+
+	if (pass == 0) // Default to full f8 instruction set.
+                mchtyp = X_F8;
 }
 
 /*
