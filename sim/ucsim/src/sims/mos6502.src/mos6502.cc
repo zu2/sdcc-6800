@@ -136,11 +136,16 @@ cl_mos6502::init(void)
   RCV(Y);
   RCV(SP);
   RCV(P);
+  reg_cell_var(&cSPh, &SPh, "SPh", "High half of SP");
 #undef RCV
   ci8.decode(&i8d);
 
   class cl_memory_operator *op= new cl_cc_operator(&cCC);
   cCC.append_operator(op);
+
+  NMI_AT	= 0xfffa;
+  RESET_AT	= 0xfffc;
+  IRQ_AT	= 0xfffe;
 
   for (int i= 0; i<=0xffff; i++) rom->set(i,0);
   

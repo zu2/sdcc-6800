@@ -1,3 +1,245 @@
+2026-09-12 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/as6500/r6500.h,
+	  sdas/as6500/r65adr.c:
+	  More changes from upstream asxxxx.
+	* sim/ucsim/src/sims/mos6502.src/dechuc.h,
+	  sim/ucsim/src/sims/mos6502.src/glob.cc,
+	  sim/ucsim/src/sims/mos6502.src/huc6280.cc,
+	  sim/ucsim/src/sims/mos6502.src/huc6280cl.h,
+	  sim/ucsim/src/sims/mos6502.src/huc6502.cc,
+	  sim/ucsim/src/sims/mos6502.src/huc6502cl.h:
+	  Fix bug #4076.
+
+2026-09-11 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/lib/mc51/Makefile.in:
+      remove crtxpushr0 and crtxpopr0 from build dependencies.
+
+2026-09-08 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/include/ctype.h,
+	* device/lib/iscntrl.c,
+	* device/lib/isgraph.c,
+	* device/lib/isprint.c,
+	* device/lib/isspace.c,
+	* device/lib/isxdigit.c: also check msb, for all targets
+	* device/lib/mcs51/crtxpushr0.asm,
+	* device/lib/mcs51/crtxpopr0.asm: removed
+	* device/lib/mcs51/crtxpop.asm,
+	* device/lib/mcs51/crtxpush.asm: use acc[4-7] also as mask,
+	  add dpl & dph support,
+	  made register bank independent
+	* device/lib/mcs51/crtcall.asm,
+	* device/lib/mcs51/gptr_cmp.asm: moved out of C namespace
+	* src/SDCCglue.c: gave the register banks a label rbank<n>
+	* src/mcs51/main.c (updateOpRW): added push/pop register bank 0 check,
+	  inspired by part of 0013 in patch #466 by Oleg Endo
+	* src/mcs51/gen.c (xstackRegisters): removed unsued parameters,
+	  reordered bitmask, added R0 support
+	  (saveRegisters, unsaveRegisters): use larger bitmask,
+	  support all register banks,
+	  call renamed sdcc_xpush_regs / sdcc_xpop_regs,
+	  no longer need ___sdcc_xpush_regs_r0 / ___sdcc_xpop_regs_r0
+	  (saveRBank, unsaveRBank): added parameters to support switching
+	  register bank and saving psw, bits, dpl, dph & b, also on xstack
+	  (genSendBits): factored out of genSend(),
+	  optimize literal assignments, already in place bits & try not to use B
+	  (genPcall): use renamed sdcc_call_dptr
+	  (genFunction): use rbank<n> labels for equ's
+	  let saveRBank() push psw, bits, dpl, dph & b, possibly on xstack
+	  (genEndFunction): let unsaveRBank() pop psw, bits, dpl, dph & b,
+	  possibly from xstack
+	  (genCmp, gencjneshort): used renamed sdcc_gptr_cmp
+
+2026-09-08 Gabriele Gorla <gorlik@yahoo.com>
+
+	* support/regression/Makefile.in,
+	  support/regression/ports/mos6502:
+	  Removed unmantained support for sim65.
+	* support/regression/ports/uc65c02/uCsim.cmd,
+	  support/regression/ports/uc65c02/spec.mk,
+	  support/regression/ports/uc6502/spec.mk,
+	  support/regression/ports/uc6502-stack-auto/spec.mk,
+	  support/regression/ports/uc6280/spec.mk:
+	  Spec files cleanup.
+	* src/mos6502/gen.c,
+	  src/mos6502/m6502.h,
+	  src/mos6502/main.c,
+	  src/mos6502/port_huc6280.c,
+	  src/mos6502/port_mos6502.c,
+	  src/mos6502/port_mos65c02.c,
+	  src/mos6502/stackops.c,
+	  src/mos6502/tempops.c:
+	  Improve handling of enhanced instructions.
+	* configure,
+	  configure.ac,
+	  device/lib/Makefile.in,
+	  device/lib/clean.mk,
+	  device/lib/mos65c02/_muluchar.s,
+	  device/lib/mos65c02/_setjmp.s,
+	  support/regression/MakeList,
+	  support/regression/ports/uc65c02/spec.mk,
+	  device/lib/mos65c02-stack-auto,
+	  device/lib/mos65c02-stack-auto/Makefile.in,
+	  device/lib/mos65c02-stack-auto/__sdcc_indirect_jsr.s,
+	  device/lib/mos65c02-stack-auto/__sdcc_regs.s,
+	  device/lib/mos65c02-stack-auto/_muluchar.s,
+	  device/lib/mos65c02-stack-auto/_setjmp.s,
+	  device/lib/mos65c02-stack-auto/atomic_flag_test_and_set.c,
+	  device/lib/mos65c02-stack-auto/crt0.s,
+	  support/regression/ports/uc65c02-stack-auto,
+	  support/regression/ports/uc65c02-stack-auto/support.c,
+	  support/regression/ports/uc65c02-stack-auto/spec.mk,
+	  support/regression/ports/uc65c02-stack-auto/uCsim.cmd:
+	  Add mos65c02-stack-auto target and regression.
+	* device/lib/mos6502-stack-auto/Makefile.in,
+	  device/lib/mos6502-stack-auto/_muluchar.s,
+	  device/lib/mos6502-stack-auto/_setjmp.s,
+	  device/lib/mos65c02/_muluchar.s,
+	  device/lib/mos65c02/_setjmp.s,
+	  src/mos6502/port_huc6280.c,
+	  src/mos6502/port_mos6502.c,
+	  src/mos6502/port_mos65c02.c:
+	  Small cleanups.
+
+2026-09-08 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/SDCCmem.c (printAllocInfo): print bit and pdata info
+	* src/SDCCpeeph.c (operandBaseName): not everything starting with 'a' is acc
+	  (notUsed): mark regs from ic SEND and RET as used
+	* src/mcs51/gen.c (cheapMove): optimize indirect copies to self
+	  (mcs51IsReturned, mcs51IsRegArg): bugfix also check dname
+	* src/mcs51/main.c (updateOpRW): track bits
+	* src/mcs51/peep.c (scan4op): check bits
+	  (mcs51notUsed): check all 8 regs and also the bits
+
+2026-09-06 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/linksrc/lklist.c:
+	  Remove double printing of header.
+
+2026-09-05 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* device/lib/_divslonglong.c: optimized
+	* device/lib/mcs51/crtxpopr0.asm,
+	* device/lib/mcs51/crtxpop.asm: made register bank independent
+	* src/mcs51/gen.c (genUminusFloat): optimized in-place uminus,
+	  (genAnd, genOr, genXor): optimized IMMEDIATE
+	* src/mcs51/main.c (mcs51opcodeDataTable): fixed jc/jnc reads psw
+	* src/mcs51/peeph.def: swapped rules 302 & 303,
+	  fixed volatile, more general dead mov removal
+	* support/regression/collate-results.py: print in fixed columns for easier
+	  comparison by a human
+
+2026-09-02 Gabriele Gorla <gorlik@yahoo.com>
+
+	* sdas/asxxsrc/aslist.c: Apply patch from bug #4049, Thanks Jan Andersen.
+	* support/regression/bug-2326.c: Add regression for bug #2326.
+
+2026-09-01 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* sdas/asxxsrc/asexpr.c (term),
+	* sdas/as8051/i51adr.c (addr): moved handling of bit-addressable [n] from
+	  term() to addr()
+	* sdas/linksrc/lklist.c: fixed warning
+	* sdas/linksrc/lkmem.c: fixed warning
+	* src/SDCCglue.c (glue): removed equates for b0-b7
+	* src/mcs51/ralloc.c,
+	* src/ds390/ralloc.c: renamed b0 - b7 to bits[0] - bits[7]
+	* src/mcs51/gen.c (genMinusBits): replaced conditional jump with addition
+	  same #bytes, allows optimization if some Rn==0
+	  (genLeftShift, genSignedRightShift, genRightShift): removed redundant code
+	* src/mcs51/main.c: made mcs51opcodeDataTable const
+	* support/util/NewAlloc.c (Safe_strndup): fixed warning
+
+2026-08-31 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/SDCCsymt.c (checkSClass): Put the volatile from __at on the
+	  function pointer itself, not on the function return type.
+	  Fixed bugs #4013 & #4041 by applying patch #515, Thanks Li-Hsin Chien
+	* support/regression/tests/bug-4013.c: New regression test.
+
+2026-08-31 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* sdas/as6500/r65mch.c: fixed unused variable warning
+	* sdas/linksrc/lkarea.c: fixed uninitialized variable warning
+	* src/mos6502/gen.c: fixed untested case warning
+	* src/mos6502/ralloc.c: fixed unused function warning
+	* support/regression/gte/pr17133.c,
+	* support/regression/gte/pr21173.c,
+	* support/regression/tests/bug-2710.c: suppress warning 178, W_SIZEOF_VOID
+
+2026-08-30 Maarten Brock <sourceforge.brock AT dse.nl>
+
+	* src/SDCCmain.c: cosmetics
+	* src/SDCCpeeph.c: renamed labelIsUncondJump to label5IsUncondJumpTo6,
+	  added mcs51 ajmp instruction
+	* src/f8/peeph.def,
+	* src/mcs51/peeph.def,
+	* src/mos6502/peeph.def,
+	* src/stm8/peeph.def,
+	* src/z80/peeph.def: renamed labelIsUncondJump to label5IsUncondJumpTo6
+	* src/mcs51/peeph.def: applied patch #514, Thanks Li-Hsin Chien,
+	  inserted new 257.b moving previous 257.b-i up to 257.c-j
+	* support/regression/tests/bug-4066.c: New regression test
+
+2026-08-29 Philipp Klaus Krause <philipp@colecovision.eu>
+
+	* src/z80/peep.c:
+	  Fix bug #4062.
+	* src/z80/gen.c:
+	  Fix a corner case of previous fix from yesterday.
+	* src/SDCCicode.c,
+	  support/valdiag/tests/bug-4056.c:
+	  Fix bug #4056.
+	* support/regression/tests/bug-4054.c:
+	  Test for bug #4054 (disabled for now - bug is not yet fixed).
+
+2026-08-29 Gabriele Gorla <gorlik@yahoo.com>
+
+	* device/include/float.h,
+	  device/lib/huc6280/_memcmp.s,
+	  device/lib/huc6280/_memset.s,
+	  device/lib/huc6280/abs.s,
+	  device/lib/huc6280/memcpy.s,
+	  device/lib/huc6280/strlen.s,
+	  device/lib/mos6502/__stdc_bit_width.s,
+	  device/lib/mos6502/__stdc_count_ones.s,
+	  device/lib/mos6502/_floatlib.s,
+	  device/lib/mos6502/_modsint.s,
+	  device/lib/mos6502/_moduint.s,
+	  device/lib/mos6502/_modulong.s,
+	  device/lib/mos6502/abs.s,
+	  device/lib/mos6502/div.s,
+	  device/lib/mos6502/memcpy.s,
+	  device/lib/mos6502/strlen.s,
+	  device/lib/mos65c02/_memset.s,
+	  device/lib/mos65c02/memcpy.s,
+	  device/lib/mos65c02/strlen.s,
+	  device/lib/mos6502/_fseq.s,
+	  device/lib/mos6502/_fsneq.s,
+	  src/SDCCsymt.c:
+	  MOS6502 library improvements
+	* device/lib/mos6502/_fseq.s:
+	  Improve _fseq performance.
+	* sdas/linksrc/Makefile.in,
+	  sdas/linksrc/aslink.h,
+	  sdas/linksrc/lkmain.c,
+	  sdas/linksrc/lkrloc.c,
+	  sdas/linksrc/lkrloc4.c:
+	  Add version 4 relocation engine from upstream asxxxx.
+	* sdas/linksrc/lkdata.c,
+	  sdas/linksrc/lklist.c,
+	  sdas/linksrc/lkmain.c:
+	  Add time stamp to map file from upstream asxxxx.
+	* sdas/linksrc/lkdata.c,
+	  sdas/linksrc/lkmain.c,
+	  sdas/linksrc/lksym.c:
+	  Change zflag comments to match upstream asxxxx.
+	* sdas/linksrc/lkarea.c:
+	  Bank boundary support from upstream asxxxx.
+
 2026-08-28 Maarten Brock <sourceforge.brock AT dse.nl>
 
 	* sdccconf_in.h: bugfix, added OPT_DISABLE_HUC6280
