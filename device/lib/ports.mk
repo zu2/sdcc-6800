@@ -6,6 +6,8 @@ RELPORTS = \
   f8l \
   hc08 \
   huc6280 \
+  mc6800 \
+  mc6800-stack-auto \
   mcs51-huge \
   mcs51-large \
   mcs51-medium \
