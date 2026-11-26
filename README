@@ -1,9 +1,16 @@
-### MC6800 port
+### MC6800 port of SDCC
 
-Porting to the MC6800 has started.
-The port is still in an early stage, and almost nothing works except very simple programs.
-It uses sdas6800, sdld6808, and ucsim_m6800.
+This fork adds support for the Motorola MC6800 to SDCC.
 
+In the last full regression run in uCsim, all `--stack-auto` tests passed.
+The default build failed two tests on calls through function pointers.
+CoreMark passed in both modes.
+
+### Build from Git
+
+```sh
+git clone --branch mc6800 https://github.com/zu2/sdcc-6800.git
+cd sdcc-6800
 
 ./configure \
 	--disable-mcs51-port \
@@ -31,10 +38,20 @@ It uses sdas6800, sdld6808, and ucsim_m6800.
 	--disable-pdk13-port \
 	--disable-pdk14-port \
 	--disable-pdk15-port \
+	--disable-pdk16-port \
 	--disable-mos6502-port \
 	--disable-mos65c02-port \
+	--disable-huc6280-port \
 	--disable-f8-port \
 	--disable-f8l-port
+
+make SVN_REVISION=0
+```
+
+The build also creates `sdas6800`, `sdld6800`, and `ucsim_m6800`.
+
+The build uses 0 for `__SDCC_REVISION` because a Git commit in this
+fork may have no SVN revision.
 
 ----
 Please see doc/README.txt.
