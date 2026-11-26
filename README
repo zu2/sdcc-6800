@@ -53,6 +53,23 @@ The build also creates `sdas6800`, `sdld6800`, and `ucsim_m6800`.
 The build uses 0 for `__SDCC_REVISION` because a Git commit in this
 fork may have no SVN revision.
 
+### Run the regression tests
+
+Run both test suites from the source directory after the build:
+
+```sh
+make -C support/regression test-mc6800 test-mc6800-stack-auto
+```
+
+### Install
+
+```sh
+make install SVN_REVISION=0
+```
+
+The default install directory is `/usr/local`. To install in your home
+directory, add `--prefix="$HOME/.local"` to the configure command.
+
 ----
 Please see doc/README.txt.
 
