@@ -9853,10 +9853,15 @@ genmc6800iCode (iCode *ic)
   if (IC_RESULT (ic) && IS_SYMOP (IC_RESULT (ic)) && isOperandVolatile (IC_RESULT (ic), false) &&
       ic->op != '=' && ic->op != RECEIVE && ic->op != DUMMY_READ_VOLATILE)
     fatal (1, E_INTERNAL_ERROR, __FILE__, __LINE__, "volatile result outside assignment");
-  bool volatilestore = ic->op == '=' &&
-    (POINTER_SET (ic) ?
-     !IS_BITVAR (operandType (IC_RESULT (ic))->next) && IS_VOLATILE (operandType (IC_RESULT (ic))->next) :
-     isOperandVolatile (IC_RESULT (ic), false));
+  sym_link *storetype = NULL;
+  if (POINTER_SET (ic))
+    storetype = operandType (IC_RESULT (ic))->next;
+  else if (ic->op == '=' && IS_TRUE_SYMOP (IC_RESULT (ic)))
+    storetype = operandType (IC_RESULT (ic));
+
+  bool volatilestore = false;
+  if (!POINTER_SET (ic) || !IS_BITVAR (storetype))
+    volatilestore = IS_VOLATILE (storetype) && getSize (storetype) <= 2;
 
   if (ic->op == ADDRESS_OF || ic->op == GET_VALUE_AT_ADDRESS || ic->op == DUMMY_READ_VOLATILE ||
       (ic->op == SEND && getSize (operandType (IC_LEFT (ic))) == 1))
@@ -9865,7 +9870,9 @@ genmc6800iCode (iCode *ic)
     {
       asmop *aop;
 
-      if (!vop[i] || !((i == 1 && volatilestore) || (IS_SYMOP (vop[i]) && isOperandVolatile (vop[i], false))))
+      sym_link *optype = IS_TRUE_SYMOP (vop[i]) ? operandType (vop[i]) : NULL;
+      bool volatileread = IS_VOLATILE (optype) && getSize (optype) <= 2;
+      if (!vop[i] || !(volatileread || (i == 1 && volatilestore)))
         {
           vop[i] = NULL;
           continue;
