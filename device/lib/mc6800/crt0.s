@@ -22,6 +22,7 @@ SIMIF_STOP =	0x73
 ;--------------------------------------------------------
 ;  Ordering of segments for the linker.
 ;--------------------------------------------------------
+
 	.area ZP      (PAG)
 	.area ZPISEG
 	.area HOME    (CODE)
@@ -39,6 +40,7 @@ SIMIF_STOP =	0x73
 ;--------------------------------------------------------
 ;  Reset vector
 ;--------------------------------------------------------
+
 	.area CODEIVT (ABS)
 	.org	0xfffe
 	.dw	__sdcc_gs_init_startup
@@ -46,6 +48,7 @@ SIMIF_STOP =	0x73
 ;--------------------------------------------------------
 ;  Startup code
 ;--------------------------------------------------------
+ 
 	.area GSINIT0
 __sdcc_gs_init_startup:
 	lds	#__sdcc_stack_top
@@ -54,99 +57,84 @@ __sdcc_gs_init_startup:
 	jmp	__sdcc_program_startup
 ;
 __sdcc_init_data:
-	ldab	#<l_ZP			; assume l_ZP < 256
-	beq	00002$
 	ldx	#s_ZP
-	clra
-00001$:
-	staa	0,x
-	inx
-	decb
-	bne	00001$
+	ldaa	#>l_ZP
+	ldab	#<l_ZP
+	jsr	clear_data
 ;
-00002$:
-	ldab	#<l_ZPINIT
-	beq	00019$
 	ldx	#s_ZPINIT
 	stx	*___SDCC_mc6800_tmp0
 	ldx	#s_ZPISEG
-00015$:
-	stx	*___SDCC_mc6800_tmp1
-	ldx	*___SDCC_mc6800_tmp0
-	ldaa	0,x
-	inx
-	stx	*___SDCC_mc6800_tmp0
-	ldx	*___SDCC_mc6800_tmp1
-	staa	0,x
-	inx
-	decb
-	bne	00015$
-00019$:
-
-	clra
-	ldx	#l_XSEG
-	beq	00004$
-	stx	*___SDCC_mc6800_tmp0
+	ldaa	#>l_ZPINIT
+	ldab	#<l_ZPINIT
+	jsr	copy_data
+;
 	ldx	#s_XSEG
+	ldaa	#>l_XSEG
 	ldab	#<l_XSEG
-	beq	00003$
-	inc	___SDCC_mc6800_tmp0
-;
-00003$:
-	staa	0,x
-	inx
-	decb
-	bne	00003$
-	dec	___SDCC_mc6800_tmp0
-	bne	00003$
-;
-00004$:
-	ldab	#<s_XISEG
-	addb	#<l_XINIT
-	ldaa	#>s_XISEG
-	adca	#>l_XINIT
-	stab	*___SDCC_mc6800_tmp2+1
-	staa	*___SDCC_mc6800_tmp2
+	jsr	clear_data
 ;
 	ldx	#s_XINIT
-	ldab	#<l_XINIT
-	lsrb
-	bcc	00007$
-	ldaa	0,x
-	inx
-;
-00007$:
 	stx	*___SDCC_mc6800_tmp0
 	ldx	#s_XISEG
-	bcc	00009$
-	staa	0,x
-	inx
-	bra	00009$
-;
-00005$:
-	stx	*___SDCC_mc6800_tmp1
-	ldx	*___SDCC_mc6800_tmp0
-	ldaa	0,x
-	ldab	1,x
-	inx
-	inx
-	stx	*___SDCC_mc6800_tmp0
-	ldx	*___SDCC_mc6800_tmp1
-	staa	0,x
-	stab	1,x
-	inx
-	inx
-;
-00009$:
-	cpx	*___SDCC_mc6800_tmp2
-	bne	00005$
+	ldaa	#>l_XINIT
+	ldab	#<l_XINIT
+	jsr	copy_data
+
+	.area GSINIT
+; Compiler writes initialization code into GSINIT segment.
 
 	.area GSFINAL
 	jmp	__sdcc_program_startup
 
 	.area CSEG
+;
 __sdcc_program_startup:
 	jsr	_main
 	ldaa	#SIMIF_STOP
 	staa	SIMIF
 	bra	.
+
+;
+;
+;
+clear_data:
+	tstb
+	bne	clear_data_loop
+clear_data_next_page:
+	tsta
+	beq	clear_data_done
+	deca
+clear_data_loop:
+	clr	0,x
+	inx
+	decb
+	bne	clear_data_loop
+	bra	clear_data_next_page
+clear_data_done:
+	rts
+;
+copy_data:
+	tsta
+	bne	copy_data_setup
+	tstb
+	beq	copy_data_done
+copy_data_setup:
+	stx	*___SDCC_mc6800_tmp1
+	addb	*___SDCC_mc6800_tmp1+1
+	adca	*___SDCC_mc6800_tmp1
+	stab	*___SDCC_mc6800_tmp2+1
+	staa	*___SDCC_mc6800_tmp2
+copy_data_loop:
+	stx	*___SDCC_mc6800_tmp1
+	ldx	*___SDCC_mc6800_tmp0
+	ldaa	0,x
+	inx
+	stx	*___SDCC_mc6800_tmp0
+	ldx	*___SDCC_mc6800_tmp1
+	staa	0,x
+	inx
+	cpx	*___SDCC_mc6800_tmp2
+	bne	copy_data_loop
+copy_data_done:
+	rts
